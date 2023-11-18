@@ -1,8 +1,17 @@
 import Elysia from 'elysia'
-import { Type, Static, TSchema, TArray, TObject, TProperties } from '@sinclair/typebox'
-import { parseQueryParams } from './parser'
+import { swagger } from '@elysiajs/swagger'
 
-type Method = 'get' | 'post' | 'put' | 'delete' | 'patch'
+import { Static, TSchema, TArray, TObject, TProperties } from './typebox'
+import { parseEntry, validateBody, PType } from './parser'
+import { Optional, Kind } from '@sinclair/typebox'
+
+import { OpenAPIV3 } from 'openapi-types'
+import { SwaggerUIOptions } from 'swagger-ui'
+import { RouteMetadata, defineRoutes } from './routes'
+import { Server } from 'bun'
+
+export type Method = 'get' | 'post' | 'put' | 'delete' | 'patch'
+
 type Without<T, U> = T extends any[]
   ? U extends any[]
     ? {}
@@ -16,108 +25,105 @@ type XORRecursive<T extends any[]> = T extends [infer First, infer Second, ...in
   : T extends [infer Only]
   ? Only
   : never
-
+type MaybePromise<T> = T | Promise<T>
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never
+type LastOf<T> = UnionToIntersection<T extends any ? () => T : never> extends () => infer R ? R : never
+type Push<T extends any[], V> = [...T, V]
+type TuplifyUnion<T, L = LastOf<T>, N = [T] extends [never] ? true : false> = true extends N
+  ? []
+  : Push<TuplifyUnion<Exclude<T, L>>, L>
 type ExtractedResponses<S extends { response?: unknown }> = Exclude<S['response'], undefined>
-
 type StaticPropertiesOfResponse<R> = {
   [K in keyof R]: R[K] extends TSchema ? Static<R[K]> : never
 }[keyof R]
-
-export type KadreSchema<
+export type KadreConfig = {
+  port?: number
+  basePath?: string
+  routes?: string | string[]
+  doc?: {
+    enabled?: boolean
+    documentation?: Omit<
+      Partial<OpenAPIV3.Document>,
+      'x-express-openapi-additional-middleware' | 'x-express-openapi-validation-strict'
+    >
+    version?: string
+    excludeStaticFile?: boolean
+    path?: string
+    exclude?: string | RegExp | (string | RegExp)[]
+    swaggerOptions?: Omit<
+      Partial<SwaggerUIOptions>,
+      | 'dom_id'
+      | 'dom_node'
+      | 'spec'
+      | 'url'
+      | 'urls'
+      | 'layout'
+      | 'pluginsOptions'
+      | 'plugins'
+      | 'presets'
+      | 'onComplete'
+      | 'requestInterceptor'
+      | 'responseInterceptor'
+      | 'modelPropertyMacro'
+      | 'parameterMacro'
+    >
+    theme?:
+      | string
+      | {
+          light: string
+          dark: string
+        }
+    autoDarkMode?: boolean
+  }
+}
+export type Schema<
   H extends TProperties = TProperties,
   P extends TProperties = TProperties,
   Q extends TProperties = TProperties,
-  B extends TProperties = TProperties,
+  B extends TSchema = TSchema,
   R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
 > = {
-  headers?: TObject<H>
+  headers?: H
   params?: P
   query?: Q
-  body?: TObject<B>
+  body?: B
   response?: R
 }
-
-export type KadreContext<S extends KadreSchema> = {
-  headers: Static<Exclude<S['headers'], undefined>>
+export type Context<S extends Schema = {}> = {
+  headers: Static<TObject<Exclude<S['headers'], undefined>>>
   params: Static<TObject<Exclude<S['params'], undefined>>>
   query: Static<TObject<Exclude<S['query'], undefined>>>
   body: Static<Exclude<S['body'], undefined>>
   request: Request
-}
-
-export type KadreHook<S extends KadreSchema> = (ctx: KadreContext<S>) => any | Promise<any>
-export type KadreHandler<S extends KadreSchema> = (
-  ctx: KadreContext<S>
-) => XORRecursive<TuplifyUnion<StaticPropertiesOfResponse<ExtractedResponses<S>>>>
-
-export type KadreEndpoint = <
-  H extends TProperties,
-  P extends TProperties,
-  Q extends TProperties,
-  B extends TProperties,
-  R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
->(
-  path: string,
-  schema: KadreSchema<H, P, Q, B, R>,
-  hooks: KadreHook<KadreSchema<H, P, Q, B, R>>[],
-  handler: KadreHandler<KadreSchema<H, P, Q, B, R>>
-) => void
-
-const kadreMethod = <
-  H extends TProperties,
-  P extends TProperties,
-  Q extends TProperties,
-  B extends TProperties,
-  R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
->(
-  kadre: Kadre,
-  method: Method,
-  path: string,
-  schema: KadreSchema<H, P, Q, B, R>,
-  hooks: KadreHook<KadreSchema<H, P, Q, B, R>>[],
-  handler: KadreHandler<KadreSchema<H, P, Q, B, R>>
-) => {
-  const context: KadreContext<typeof schema> = {
-    headers: {} as Static<Exclude<(typeof schema)['headers'], undefined>>,
-    params: {} as Static<TObject<Exclude<(typeof schema)['params'], undefined>>>,
-    query: {} as Static<TObject<Exclude<(typeof schema)['query'], undefined>>>,
-    body: {} as Static<Exclude<(typeof schema)['body'], undefined>>,
-    request: {} as Request
-  }
-  kadre.elysia[method](
-    path,
-    (ctx: any) => {
-      context.request = ctx.request
-      let query = ctx.query
-
-      try {
-        if (schema.query) query = parseQueryParams(ctx.query, schema.query)
-        context.query = query
-        return handler(context)
-      } catch (error) {
-        if (error instanceof RequestError) {
-          return kadre.errorHandler({ set: ctx.set, payload: error })
-        } else {
-          console.error(error)
-          return kadre.errorHandler({
-            set: ctx.set,
-            payload: new RequestError({ status: 500, error: 'Internal Server error.' })
-          })
-        }
-      }
-    },
-    {
-      // TODO setup request details (doc etc.)
-      detail: {},
-      beforeHandle: async (ctx: any) => {
-        context.request = ctx.request
-        for (const hook of hooks) await hook(context)
-      }
+  state: Record<string, any>
+  set: {
+    headers: {
+      [header: string]: string
+    } & {
+      ['Set-Cookie']?: string | string[]
     }
-  )
+    status?: number
+    redirect?: string
+  }
 }
-
-type RequestErrorHandler = {
+export type Next = () => void | Promise<void>
+export type Hook<S extends Schema> = (ctx: Context<S>, next: Next) => any | Promise<any>
+export type Handler<S extends Schema> = (
+  ctx: Context<S>
+) => MaybePromise<XORRecursive<TuplifyUnion<StaticPropertiesOfResponse<ExtractedResponses<S>>>>>
+export type Endpoint = <
+  H extends TProperties,
+  P extends TProperties,
+  Q extends TProperties,
+  B extends TSchema,
+  R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+>(
+  path: string,
+  schema: Schema<H, P, Q, B, R>,
+  hooks: Hook<Schema<H, P, Q, B, R>>[],
+  handler: Handler<Schema<H, P, Q, B, R>>
+) => void
+export type RequestErrorHandler = {
   set: {
     headers: {
       [header: string]: string
@@ -132,121 +138,305 @@ type RequestErrorHandler = {
 export class RequestError {
   status: number
   error: any
-  constructor(options: { status: number; error: any }) {
+  constructor(options: { status?: number; error?: any }) {
     this.status = options.status ?? 500
-    this.error = options.error ?? 'Internal server error.'
+    this.error = options.error ?? 'Internal server error'
   }
 }
 
-export default class Kadre {
-  elysia: Elysia
-  errorHandler: (err: RequestErrorHandler) => any
-  constructor() {
-    this.elysia = new Elysia()
-    this.errorHandler = ({ set, payload }) => {
-      set.status = payload?.status || 500
-      return payload?.error || 'Internal Server Error.'
+const DEFAULT_DOC_OPTIONS: KadreConfig['doc'] = {
+  enabled: true,
+  path: '/doc',
+  autoDarkMode: true
+}
+const PARSE_PARAM_RGX = /^\s*\{(\w+)\}\s*(\w+)\s*(@deprecated)?\s+(.*)$/
+const parseStringParam = (
+  params: string | string[]
+): { [key: string]: Record<string, { description: string; deprecated?: boolean }> } => {
+  if (!params) return {}
+  if (typeof params === 'string') {
+    const match = params.match(PARSE_PARAM_RGX)
+    if (!match) return {}
+    return { [match[1]]: { [match[2]]: { deprecated: !!match[3], description: match[4] } } }
+  } else {
+    const res: { [key: string]: Record<string, { description: string; deprecated?: boolean }> } = {}
+    for (const p of params) {
+      const match = p.match(PARSE_PARAM_RGX)
+      if (!match) continue
+
+      if (!(match[1] in res)) res[match[1]] = {}
+      res[match[1]][match[2]] = { deprecated: !!match[3], description: match[4] }
+    }
+    return res
+  }
+}
+const parseDocParams: (
+  schema: Record<string, any>,
+  meta: Record<string, string | string[]>
+) => OpenAPIV3.ParameterObject[] = (schema, meta) => {
+  let params = schema.params as TSchema
+  let query = schema.query as TSchema
+  let docParams = parseStringParam(meta.param)
+  return [
+    ...Object.entries(params || []).map(([k, v]) => ({
+      name: k,
+      in: 'path',
+      description: docParams?.['path']?.[k]?.description ?? '',
+      required: !(Optional in v),
+      deprecated: docParams?.['path']?.[k]?.deprecated ?? false
+    })),
+    ...Object.entries(query || []).map(([k, v]) => {
+      return {
+        name: k,
+        in: 'query',
+        description: docParams?.['query']?.[k].description ?? '',
+        required: !(Optional in v),
+        deprecated: docParams?.['query']?.[k]?.deprecated ?? false
+      }
+    })
+  ]
+}
+const parseBody: (schema?: TSchema, description?: string) => OpenAPIV3.RequestBodyObject | undefined = (
+  schema,
+  description
+) => {
+  if (!schema) return undefined
+  return {
+    description: description,
+    content: {
+      'application/json': { schema }
+    },
+    required: !(Optional in schema)
+  }
+}
+const parseResponseSchema = (schema?: TSchema) => {
+  if (!schema) return schema
+  if (schema[Kind] === 'Literal') schema['enum'] = [schema.const]
+  else if (schema[Kind] === 'Object') {
+    Object.keys(schema.properties).forEach(k => {
+      schema.properties[k] = parseResponseSchema(schema.properties[k])
+    })
+  } else if (schema[Kind] === 'Array') schema.items = parseResponseSchema(schema.items)
+  return schema
+}
+const parseResponse: (schemas?: Record<number, TSchema>) => OpenAPIV3.ResponsesObject | undefined = schemas => {
+  if (!schemas) return undefined
+  return Object.fromEntries(
+    Object.entries(schemas).map(([code, schema]) => [
+      code,
+      {
+        description: '',
+        content: {
+          'application/json': { schema: parseResponseSchema(schema) }
+        }
+      }
+    ])
+  )
+}
+const kadreMethod = <
+  H extends TProperties,
+  P extends TProperties,
+  Q extends TProperties,
+  B extends TSchema,
+  R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+>(
+  kadre: Kadre,
+  method: Method,
+  path: string,
+  schema: Schema<H, P, Q, B, R>,
+  hooks: Hook<Schema<H, P, Q, B, R>>[],
+  handler: Handler<Schema<H, P, Q, B, R>>
+) => {
+  const context: Context<typeof schema> = {
+    headers: {} as Static<TObject<Exclude<(typeof schema)['headers'], undefined>>>,
+    params: {} as Static<TObject<Exclude<(typeof schema)['params'], undefined>>>,
+    query: {} as Static<TObject<Exclude<(typeof schema)['query'], undefined>>>,
+    body: {} as Static<Exclude<(typeof schema)['body'], undefined>>,
+    request: {} as Request,
+    state: {},
+    set: {} as {
+      headers: {
+        [header: string]: string
+      } & {
+        ['Set-Cookie']?: string | string[]
+      }
+      status?: number
+      redirect?: string
     }
   }
-  use(plugin: Elysia) {
+  const metadata = kadre.routesMetadata && path in kadre?.routesMetadata ? kadre?.routesMetadata[path][method] : {}
+  kadre.elysia[method](
+    path,
+    async (ctx: any) => {
+      context.request = ctx.request
+      context.set = ctx.set
+      let { headers, params, query, body } = ctx
+      // Request validation
+      let errors = []
+      try {
+        if (schema.headers)
+          headers = { ...headers, ...parseEntry(ctx.headers, schema.headers, { name: 'headers', i: true }) }
+        context.headers = headers
+      } catch (error) {
+        errors.push(error)
+      }
+      try {
+        if (schema.query) query = parseEntry(ctx.query, schema.query, { name: 'query' })
+        context.query = query
+      } catch (error) {
+        errors.push(error)
+      }
+      try {
+        if (schema.params) params = parseEntry(ctx.params, schema.params, { name: 'params' })
+        context.params = params
+      } catch (error) {
+        errors.push(error)
+      }
+      try {
+        if (schema.body) body = validateBody(ctx.body, schema.body as PType) ? ctx.body : undefined
+        context.body = body
+      } catch (error) {
+        errors.push(error)
+      }
+      if (errors.length) {
+        ctx.set.status = 400
+        //@ts-ignore
+        return errors.reduce((acc, c) => ({ ...acc, ...c.error }), {})
+      }
+      // Call chain
+      let response = null
+      const callStack: number[] = []
+      let callStackError: boolean = false
+      const callChain = hooks.map((hook, idx) => ({
+        call: async () => {
+          callStack.push(idx)
+          await hook(context, async () => {
+            await callChain[idx + 1].call()
+          })
+          if (callStack.pop() !== idx && !callStackError) {
+            console.error('Call stack error')
+            callStackError = true
+          }
+        }
+      }))
+      callChain.push({
+        call: async () => {
+          callStack.push(callChain.length - 1)
+          response = await handler(context)
+          callStack.pop()
+        }
+      })
+      if (callChain.length > 1) await callChain[0].call()
+      else response = await handler(context)
+      if (callStackError) {
+        ctx.set.status = 500
+        return 'Internal server error'
+      }
+
+      return response
+    },
+    {
+      detail: {
+        tags: metadata?.tags
+          ? Array.isArray(metadata?.tags)
+            ? metadata?.tags.join(' ').split(' ')
+            : metadata?.tags.split(' ')
+          : [],
+        summary: Array.isArray(metadata?.summary) ? metadata?.summary[0] : metadata?.summary,
+        description: Array.isArray(metadata?.description) ? metadata?.description[0] : metadata?.description,
+        deprecated: !!metadata?.deprecated,
+        parameters: parseDocParams(schema, metadata),
+        requestBody: parseBody(schema.body, Array.isArray(metadata?.body) ? metadata?.body[0] : metadata?.body),
+        responses: parseResponse(schema.response)
+      }
+    }
+  )
+}
+
+export default class Kadre {
+  elysia: Elysia<string, any>
+  options?: KadreConfig
+  routesMetadata?: RouteMetadata
+  listening: boolean = false
+  errorHandler: (err: RequestErrorHandler) => any
+  constructor(options?: KadreConfig) {
+    this.options = options
+    const { basePath = '', doc: docOptions } = options || {}
+    const excludeRegex = new RegExp(`^${options?.basePath || ''}${this.options?.doc?.path ?? '/doc'}(\/|$)`)
+    const doc: KadreConfig['doc'] = {
+      ...DEFAULT_DOC_OPTIONS,
+      ...docOptions,
+      exclude: docOptions?.exclude
+        ? Array.isArray(docOptions?.exclude)
+          ? [...docOptions?.exclude, excludeRegex]
+          : [docOptions?.exclude, excludeRegex]
+        : excludeRegex,
+      swaggerOptions: {
+        // supportedSubmitMethods: [],
+        ...(docOptions?.swaggerOptions || {})
+      }
+    }
+    this.elysia = new Elysia({ prefix: basePath })
+
+    this.errorHandler = ({ set, payload }) => {
+      set.status = payload?.status || 500
+      return payload?.error || 'Internal server error'
+    }
+    this.elysia.onError(reqError => {
+      if (reqError.error instanceof SyntaxError) {
+        return this.errorHandler({
+          set: reqError.set,
+          payload: { status: 400, error: { message: reqError.error.message } }
+        })
+      } else if (reqError.error.message === 'NOT_FOUND') {
+        return this.errorHandler({
+          set: reqError.set,
+          payload: { status: 404, error: { message: 'Not found' } }
+        })
+      } else {
+        return this.errorHandler({
+          set: reqError.set,
+          payload: { status: 500, error: { message: 'Internal server error' } }
+        })
+      }
+    })
+
+    //@ts-ignore
+    if (doc?.enabled) this.elysia.use(swagger(doc))
+  }
+  use(plugin: (app: Elysia) => Elysia<string, any>) {
     this.elysia.use(plugin)
     return this.elysia
   }
-  listen(port: number) {
-    port = port || 3000
-    return this.elysia.listen(port)
+  async listen(port?: number) {
+    if (this.listening) await this.stop()
+    if (Bun.env.BUN_ENV === 'development') {
+      console.log('🏗️  \x1b[1;30mConstructing routes\x1b[0m')
+      await defineRoutes(this.options || {}, this)
+      console.log('\n✅ \x1b[1;30mdone\x1b[0m')
+    }
+    return new Promise<Server>(r =>
+      this.elysia.listen(port || this.options?.port || 3000, s => {
+        const url = `http://localhost:${s.port}${this.options?.basePath || ''}`
+        console.log(`\n\x1b[1;30m🚀 API running at\x1b[0m \x1b[4;34m${url}\x1b[0m`)
+
+        this.listening = true
+        r(s)
+      })
+    )
+  }
+  stop() {
+    this.listening = false
+    return this.elysia.stop()
   }
   onError(handler: (err: RequestErrorHandler) => any) {
     this.errorHandler = handler
   }
-  get: KadreEndpoint = (path, schema, hooks, handler) => kadreMethod(this, 'get', path, schema, hooks, handler)
-  post: KadreEndpoint = (path, schema, hooks, handler) => kadreMethod(this, 'post', path, schema, hooks, handler)
-  put: KadreEndpoint = (path, schema, hooks, handler) => kadreMethod(this, 'put', path, schema, hooks, handler)
-  delete: KadreEndpoint = (path, schema, hooks, handler) => kadreMethod(this, 'delete', path, schema, hooks, handler)
-  patch: KadreEndpoint = (path, schema, hooks, handler) => kadreMethod(this, 'patch', path, schema, hooks, handler)
+  get: Endpoint = (path, schema, hooks, handler) => kadreMethod(this, 'get', path, schema, hooks, handler)
+  post: Endpoint = (path, schema, hooks, handler) => kadreMethod(this, 'post', path, schema, hooks, handler)
+  put: Endpoint = (path, schema, hooks, handler) => kadreMethod(this, 'put', path, schema, hooks, handler)
+  delete: Endpoint = (path, schema, hooks, handler) => kadreMethod(this, 'delete', path, schema, hooks, handler)
+  patch: Endpoint = (path, schema, hooks, handler) => kadreMethod(this, 'patch', path, schema, hooks, handler)
 }
 
-const kadre = new Kadre()
-
-const schema = {
-  params: Type.Object({
-    userId: Type.Number(),
-    name: Type.String(),
-    dhushdyeudgeygd: Type.String()
-  }),
-  query: Type.Object({
-    name: Type.String(),
-    age: Type.Number()
-  }),
-  body: Type.Object({
-    name: Type.String(),
-    age: Type.Number()
-  }),
-  response: {
-    200: Type.Array(
-      Type.Object({
-        name: Type.String(),
-        age: Type.Number()
-      })
-    ),
-    400: Type.Object({
-      message: Type.String()
-    })
-  }
-}
-
-type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never
-type LastOf<T> = UnionToIntersection<T extends any ? () => T : never> extends () => infer R ? R : never
-type Push<T extends any[], V> = [...T, V]
-type TuplifyUnion<T, L = LastOf<T>, N = [T] extends [never] ? true : false> = true extends N
-  ? []
-  : Push<TuplifyUnion<Exclude<T, L>>, L>
-
-type Check1 = ExtractedResponses<typeof schema>
-type Check2 = StaticPropertiesOfResponse<Check1>
-type Check3 = TuplifyUnion<Check2>
-type Check4 = XORRecursive<Check3>
-
-const ok: Check2 = [
-  {
-    name: 'test',
-    age: 21
-  }
-]
-
-kadre.post(
-  '/users/:userId',
-  schema,
-  [
-    ctx => {
-      let params = ctx.params
-    }
-  ],
-  ctx => {
-    return {
-      message: 'test'
-    }
-  }
-)
-
-kadre.post('/users/:userId', schema, [], ctx => {
-  const toto = ctx.params
-  return [
-    {
-      name: 'toto',
-      age: 42
-    }
-  ]
-})
-
-// detail: {
-//   tags: tags,
-//   summary: 'quick summary', // Infer from file comment ?
-//   description: 'descritpion', // Infer from file comment ?
-//   parameters: parseParams(request),
-//   requestBody: parseBody(request),
-//   responses: parseResponses(response),
-//   deprecated: false // infer from file comment ?
-//   // security: SecurityRequirementObject[],
-//   // servers: ServerObject[]
-// },
+export { T } from './typebox'
