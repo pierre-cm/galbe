@@ -111,18 +111,53 @@ export type Hook<S extends Schema> = (ctx: Context<S>, next: Next) => any | Prom
 export type Handler<S extends Schema> = (
   ctx: Context<S>
 ) => MaybePromise<XORRecursive<TuplifyUnion<StaticPropertiesOfResponse<ExtractedResponses<S>>>>>
-export type Endpoint = <
-  H extends TProperties,
-  P extends TProperties,
-  Q extends TProperties,
-  B extends TSchema,
-  R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
->(
-  path: string,
-  schema: Schema<H, P, Q, B, R>,
-  hooks: Hook<Schema<H, P, Q, B, R>>[],
-  handler: Handler<Schema<H, P, Q, B, R>>
-) => void
+export type Endpoint = {
+  <
+    H extends TProperties,
+    P extends TProperties,
+    Q extends TProperties,
+    B extends TSchema,
+    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  >(
+    path: string,
+    schema: Schema<H, P, Q, B, R>,
+    hooks: Hook<Schema<H, P, Q, B, R>>[],
+    handler: Handler<Schema<H, P, Q, B, R>>
+  ): void
+  <
+    H extends TProperties,
+    P extends TProperties,
+    Q extends TProperties,
+    B extends TSchema,
+    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  >(
+    path: string,
+    schema: Schema<H, P, Q, B, R>,
+    handler: Handler<Schema<H, P, Q, B, R>>
+  ): void
+  <
+    H extends TProperties,
+    P extends TProperties,
+    Q extends TProperties,
+    B extends TSchema,
+    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  >(
+    path: string,
+    hooks: Hook<Schema<H, P, Q, B, R>>[],
+    handler: Handler<Schema<H, P, Q, B, R>>
+  ): void
+  <
+    H extends TProperties,
+    P extends TProperties,
+    Q extends TProperties,
+    B extends TSchema,
+    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  >(
+    path: string,
+    handler: Handler<Schema<H, P, Q, B, R>>
+  ): void
+}
+
 export type RequestErrorHandler = {
   set: {
     headers: {
@@ -233,6 +268,32 @@ const parseResponse: (schemas?: Record<number, TSchema>) => OpenAPIV3.ResponsesO
     ])
   )
 }
+const overloadDiscriminer = <
+  H extends TProperties,
+  P extends TProperties,
+  Q extends TProperties,
+  B extends TSchema,
+  R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+>(
+  kadre: Kadre,
+  method: Method,
+  path: string,
+  arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
+  arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
+  arg4?: Handler<Schema<H, P, Q, B, R>>
+) => {
+  if (typeof arg2 === 'function') {
+    return kadreMethod(kadre, method, path, undefined, undefined, arg2)
+  } else {
+    if (Array.isArray(arg2)) {
+      if (typeof arg3 === 'function') return kadreMethod(kadre, method, path, undefined, arg2, arg3)
+    } else {
+      if (Array.isArray(arg3) && arg4) return kadreMethod(kadre, method, path, arg2, arg3, arg4)
+      else if (typeof arg3 === 'function') return kadreMethod(kadre, method, path, arg2, undefined, arg3)
+    }
+  }
+  throw new Error('Undefined endpoint signature')
+}
 const kadreMethod = <
   H extends TProperties,
   P extends TProperties,
@@ -243,10 +304,12 @@ const kadreMethod = <
   kadre: Kadre,
   method: Method,
   path: string,
-  schema: Schema<H, P, Q, B, R>,
-  hooks: Hook<Schema<H, P, Q, B, R>>[],
+  schema: Schema<H, P, Q, B, R> | undefined,
+  hooks: Hook<Schema<H, P, Q, B, R>>[] | undefined,
   handler: Handler<Schema<H, P, Q, B, R>>
 ) => {
+  schema = schema ?? {}
+  hooks = hooks || []
   const context: Context<typeof schema> = {
     headers: {} as Static<TObject<Exclude<(typeof schema)['headers'], undefined>>>,
     params: {} as Static<TObject<Exclude<(typeof schema)['params'], undefined>>>,
@@ -274,26 +337,26 @@ const kadreMethod = <
       // Request validation
       let errors = []
       try {
-        if (schema.headers)
+        if (schema?.headers)
           headers = { ...headers, ...parseEntry(ctx.headers, schema.headers, { name: 'headers', i: true }) }
         context.headers = headers
       } catch (error) {
         errors.push(error)
       }
       try {
-        if (schema.query) query = parseEntry(ctx.query, schema.query, { name: 'query' })
+        if (schema?.query) query = parseEntry(ctx.query, schema.query, { name: 'query' })
         context.query = query
       } catch (error) {
         errors.push(error)
       }
       try {
-        if (schema.params) params = parseEntry(ctx.params, schema.params, { name: 'params' })
+        if (schema?.params) params = parseEntry(ctx.params, schema.params, { name: 'params' })
         context.params = params
       } catch (error) {
         errors.push(error)
       }
       try {
-        if (schema.body) body = validateBody(ctx.body, schema.body as PType) ? ctx.body : undefined
+        if (schema?.body) body = validateBody(ctx.body, schema.body as PType) ? ctx.body : undefined
         context.body = body
       } catch (error) {
         errors.push(error)
@@ -307,7 +370,7 @@ const kadreMethod = <
       let response = null
       const callStack: number[] = []
       let callStackError: boolean = false
-      const callChain = hooks.map((hook, idx) => ({
+      const callChain = (hooks || []).map((hook, idx) => ({
         call: async () => {
           callStack.push(idx)
           await hook(context, async () => {
@@ -432,11 +495,66 @@ export default class Kadre {
   onError(handler: (err: RequestErrorHandler) => any) {
     this.errorHandler = handler
   }
-  get: Endpoint = (path, schema, hooks, handler) => kadreMethod(this, 'get', path, schema, hooks, handler)
-  post: Endpoint = (path, schema, hooks, handler) => kadreMethod(this, 'post', path, schema, hooks, handler)
-  put: Endpoint = (path, schema, hooks, handler) => kadreMethod(this, 'put', path, schema, hooks, handler)
-  delete: Endpoint = (path, schema, hooks, handler) => kadreMethod(this, 'delete', path, schema, hooks, handler)
-  patch: Endpoint = (path, schema, hooks, handler) => kadreMethod(this, 'patch', path, schema, hooks, handler)
+  get: Endpoint = <
+    H extends TProperties,
+    P extends TProperties,
+    Q extends TProperties,
+    B extends TSchema,
+    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  >(
+    path: string,
+    arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
+    arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
+    arg4?: Handler<Schema<H, P, Q, B, R>>
+  ) => overloadDiscriminer(this, 'get', path, arg2, arg3, arg4)
+  post: Endpoint = <
+    H extends TProperties,
+    P extends TProperties,
+    Q extends TProperties,
+    B extends TSchema,
+    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  >(
+    path: string,
+    arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
+    arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
+    arg4?: Handler<Schema<H, P, Q, B, R>>
+  ) => overloadDiscriminer(this, 'post', path, arg2, arg3, arg4)
+  put: Endpoint = <
+    H extends TProperties,
+    P extends TProperties,
+    Q extends TProperties,
+    B extends TSchema,
+    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  >(
+    path: string,
+    arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
+    arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
+    arg4?: Handler<Schema<H, P, Q, B, R>>
+  ) => overloadDiscriminer(this, 'put', path, arg2, arg3, arg4)
+  patch: Endpoint = <
+    H extends TProperties,
+    P extends TProperties,
+    Q extends TProperties,
+    B extends TSchema,
+    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  >(
+    path: string,
+    arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
+    arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
+    arg4?: Handler<Schema<H, P, Q, B, R>>
+  ) => overloadDiscriminer(this, 'patch', path, arg2, arg3, arg4)
+  delete: Endpoint = <
+    H extends TProperties,
+    P extends TProperties,
+    Q extends TProperties,
+    B extends TSchema,
+    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  >(
+    path: string,
+    arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
+    arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
+    arg4?: Handler<Schema<H, P, Q, B, R>>
+  ) => overloadDiscriminer(this, 'delete', path, arg2, arg3, arg4)
 }
 
 export { T } from './typebox'

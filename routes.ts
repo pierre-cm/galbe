@@ -114,6 +114,7 @@ export const defineRoutes = async (options: KadreConfig, kadre: Kadre) => {
           console.log(`\x1b\[0;32m    ${f}\x1b[0m`)
         } catch (err) {
           console.log(`\x1b\[0;31m    ${f}\x1b[0m`)
+          throw err
         }
       }
     }

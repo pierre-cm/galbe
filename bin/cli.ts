@@ -70,12 +70,18 @@ program
       resolve(devRoot, 'index.ts'),
       `import kadre from '${relative(devRoot, fileName)}';kadre.listen(${port || 3000});`
     )
+    process.on('SIGINT', async () => {
+      await rm(resolve(ROOT, '.kadre', 'dev'), { recursive: true })
+    })
     Bun.spawn(['bun', 'run', '--watch', resolve(devRoot, 'index.ts')], {
       cwd: ROOT,
       stdout: 'inherit',
       env: {
         ...Bun.env,
         BUN_ENV: 'development'
+      },
+      async onExit() {
+        await rm(resolve(ROOT, '.kadre', 'dev'), { recursive: true })
       }
     })
   })
