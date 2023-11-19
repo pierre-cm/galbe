@@ -1,0 +1,10 @@
+#!/usr/bin/env bun
+
+const COMMIT_MSG = await Bun.file(Bun.argv[2]).text()
+const COMMIT_EMOJI = { feat: '✨', fix: '🔧', doc: '📚', chore: '🧹' }
+
+const newCommitMsg = COMMIT_MSG.replace(/^(feat|fix|doc|chore):(.*)/, (_, type, msg) => {
+  return `${COMMIT_EMOJI[type]} ${type}:${msg}`
+})
+
+await Bun.write(Bun.argv[2], newCommitMsg)

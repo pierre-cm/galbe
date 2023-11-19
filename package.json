@@ -3,6 +3,9 @@
   "module": "index.ts",
   "type": "module",
   "bin": "./bin/cli.ts",
+  "scripts":{
+    "postinstall": "bun run ./scripts/postinstall.ts"
+  },
   "devDependencies": {
     "@types/esprima": "^4.0.5",
     "@types/estraverse": "^5.1.5",
