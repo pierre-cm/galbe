@@ -11,7 +11,7 @@ import {
   TUnion,
   TAny,
   Static
-} from './typebox'
+} from '@sinclair/typebox'
 import { Kind, Optional } from '@sinclair/typebox'
 import { RequestError } from '.'
 
@@ -127,6 +127,40 @@ const paramParser = (value: string | string[] | null, type: PType): OrArray<Para
   }
 }
 
+export const requestPathParser = (input: string, path: string) => {
+  let pPath = path.replace(/^\/$(.*)\/?$/, '$1').split('/')
+  let pInput = input.replace(/^\/$(.*)\/?$/, '$1').split('/')
+  let params: Record<string, any> = {}
+  pPath.shift()
+  pInput.shift()
+  for (const [i, p] of pPath.entries()) {
+    const match = p.match(/^:(.*)/)
+    if (match) params[match[1]] = pInput[i]
+  }
+  return params
+}
+
+export const requestBodyParser = (body: string, contentType?: string) => {
+  switch (contentType) {
+    case 'application/json':
+      return JSON.parse(body)
+    default:
+      return body
+  }
+}
+
+export const responseParser = (response: any) => {
+  if (typeof response !== 'string') {
+    try {
+      return { response: JSON.stringify(response), type: 'application/json' }
+    } catch (error) {
+      console.error(error)
+      throw new RequestError({ status: 500, error: 'Internal Server Error' })
+    }
+  }
+  return { response, type: 'text/plain' }
+}
+
 export const parseEntry = <T extends TProperties>(
   params: { [key: string]: string | string[] },
   schema: T,
@@ -206,6 +240,7 @@ export const validateSchema = <T extends PType>(elt: any, schema: T): boolean =>
       }
     }
     if (Object.keys(err).length) errors.push(err)
+  } else if (schema[Kind] === 'Any') {
   } else {
     throw `Unsupported schema type ${schema[Kind]}`
   }
