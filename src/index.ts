@@ -1,4 +1,4 @@
-import { Static, TSchema, TArray, TObject, TProperties } from '@sinclair/typebox'
+import { Static, TSchema, TArray, TObject, TProperties, Type } from '@sinclair/typebox'
 import { Optional, Kind } from '@sinclair/typebox'
 
 import { OpenAPIV3 } from 'openapi-types'
@@ -108,7 +108,7 @@ const overloadDiscriminer = <
   P extends TProperties,
   Q extends TProperties,
   B extends TSchema,
-  R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
 >(
   kadre: Kadre,
   method: Method,
@@ -117,11 +117,16 @@ const overloadDiscriminer = <
   arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
   arg4?: Handler<Schema<H, P, Q, B, R>>
 ) => {
+  const defaultSchema = {
+    response: {
+      200: Type.Any()
+    }
+  }
   if (typeof arg2 === 'function') {
-    return kadreMethod(kadre, method, path, undefined, undefined, arg2)
+    return kadreMethod(kadre, method, path, defaultSchema, undefined, arg2)
   } else {
     if (Array.isArray(arg2)) {
-      if (typeof arg3 === 'function') return kadreMethod(kadre, method, path, undefined, arg2, arg3)
+      if (typeof arg3 === 'function') return kadreMethod(kadre, method, path, defaultSchema, arg2, arg3)
     } else {
       if (Array.isArray(arg3) && arg4) return kadreMethod(kadre, method, path, arg2, arg3, arg4)
       else if (typeof arg3 === 'function') return kadreMethod(kadre, method, path, arg2, undefined, arg3)
@@ -134,7 +139,7 @@ const kadreMethod = <
   P extends TProperties,
   Q extends TProperties,
   B extends TSchema,
-  R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
 >(
   kadre: Kadre,
   method: Method,
@@ -186,7 +191,19 @@ const kadreMethod = <
 export { Type as T } from '@sinclair/typebox'
 
 export { RequestError } from './types'
-
+/**
+ * #### Kadre Server
+ * Instanciate a Kadre web server
+ *
+ * ---
+ * @example
+ * ```typescript
+ * import { Kadre } from 'kadre'
+ * import config from "./kadre.config"
+ *
+ * export default new Kadre(config)
+ * ```
+ */
 export class Kadre {
   config?: KadreConfig
   routesMetadata?: RouteMetadata
@@ -212,7 +229,8 @@ export class Kadre {
   private add(route: any) {
     this.router.add(route)
   }
-  use(plugin: KadrePlugin) {
+  async use(plugin: KadrePlugin) {
+    if (plugin.init) await plugin?.init(this)
     this.plugins.push(plugin)
   }
   async listen(port?: number) {
@@ -307,3 +325,5 @@ export class Kadre {
     arg4?: Handler<Schema<H, P, Q, B, R>>
   ) => this.add(overloadDiscriminer(this, 'options', path, arg2, arg3, arg4))
 }
+
+export * from './types'

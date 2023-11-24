@@ -2,10 +2,10 @@
 import { program } from 'commander'
 import { relative, resolve } from 'path'
 import { mkdir, readdir, rm } from 'fs/promises'
-import Kadre from '..'
-import { RouteMetadata, metaAnalysis } from '#/routes'
+import { RouteMetadata, metaAnalysis } from '../src/routes'
 import { randomUUID } from 'crypto'
 import { glob } from 'glob'
+import { Kadre } from '../src/index'
 
 const ROOT = process.cwd()
 const BUILD_ID = randomUUID()
@@ -95,8 +95,8 @@ program
   .action(async (fileName, props) => {
     const { out, compile } = props
     const k: Kadre = (await import(resolve(ROOT, fileName))).default
-    const routes = await parseRoutes(k?.options?.routes)
-    const buildIndex = await createBuildIndex(fileName, routes, k?.options?.port)
+    const routes = await parseRoutes(k?.config?.routes)
+    const buildIndex = await createBuildIndex(fileName, routes, k?.config?.port)
 
     const cmds = [
       'bun',

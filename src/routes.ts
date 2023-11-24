@@ -4,7 +4,7 @@ import { glob } from 'glob'
 import esprima from 'esprima'
 import estraverse from 'estraverse'
 
-import { Kadre } from '.'
+import { Kadre } from 'index'
 import { KadreConfig } from './types'
 
 export type RouteMetadata = Record<string, Record<string, Record<string, string | string[]>>>

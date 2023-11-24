@@ -1,5 +1,5 @@
 import { Static, TSchema, TArray, TObject, TProperties } from '@sinclair/typebox'
-import { Kadre } from './index.ts'
+import { Kadre } from './index'
 
 export type Method = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options'
 type Without<T, U> = T extends any[]
@@ -26,20 +26,62 @@ type ExtractedResponses<S extends { response?: unknown }> = Exclude<S['response'
 type StaticPropertiesOfResponse<R> = {
   [K in keyof R]: R[K] extends TSchema ? Static<R[K]> : never
 }[keyof R]
+/**
+ * #### KadreConfig
+ * Instanciate a Kadre web server
+ *
+ * ---
+ * @example
+ * ```typescript
+ * import { Kadre } from 'kadre'
+ * const config : KadreConfig = {
+ *   port: 8080,
+ *   basePath: "/v1",
+ *   routes: "src/**­/*.route.ts"
+ * }
+ *
+ * export default new Kadre(config)
+ * ```
+ */
 export type KadreConfig = {
   port?: number
   basePath?: string
   routes?: string | string[]
-  doc?: {
-    // TODO
-  }
+  plugin?: Record<string, any>
 }
+/**
+ * #### Schema
+ * Define a request Schema with constraint upon
+ *
+ * ---
+ * @example
+ * ```typescript
+ * import { T, Schema } from 'kadre'
+ * const MyRequestSchema = {
+ *   params: {
+ *    id: T.Number(),
+ *   },
+ *   body: T.Object({
+ *     name: T.String()
+ *     age: T.Optional(T.Number({minimum: 0})),
+ *   }),
+ *   response: {
+ *     200: T.Object({
+ *       message: T.Literal("Created"),
+ *     }),
+ *     404: T.Object({
+ *       message: T.Literal("Not found"),
+ *     })
+ *   }
+ * }
+ * ```
+ */
 export type Schema<
   H extends TProperties = TProperties,
   P extends TProperties = TProperties,
   Q extends TProperties = TProperties,
   B extends TSchema = TSchema,
-  R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
 > = {
   headers?: H
   params?: P
@@ -73,7 +115,7 @@ export type Endpoint = {
     P extends TProperties,
     Q extends TProperties,
     B extends TSchema,
-    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+    R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
   >(
     path: string,
     schema: Schema<H, P, Q, B, R>,
@@ -85,7 +127,7 @@ export type Endpoint = {
     P extends TProperties,
     Q extends TProperties,
     B extends TSchema,
-    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+    R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
   >(
     path: string,
     schema: Schema<H, P, Q, B, R>,
@@ -96,7 +138,7 @@ export type Endpoint = {
     P extends TProperties,
     Q extends TProperties,
     B extends TSchema,
-    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+    R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
   >(
     path: string,
     hooks: Hook<Schema<H, P, Q, B, R>>[],
@@ -107,7 +149,7 @@ export type Endpoint = {
     P extends TProperties,
     Q extends TProperties,
     B extends TSchema,
-    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+    R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
   >(
     path: string,
     handler: Handler<Schema<H, P, Q, B, R>>
@@ -136,7 +178,7 @@ export type Route<
   P extends TProperties = TProperties,
   Q extends TProperties = TProperties,
   B extends TSchema = TSchema,
-  R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
+  R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
 > = {
   method: Method
   path: string
@@ -155,8 +197,28 @@ export class NotFoundError extends RequestError {
   }
 }
 
+/**
+ * #### KadrePlugin
+ * Define a plugin for a Kadre server
+ *
+ * ---
+ * @example
+ * ```typescript
+ * import { KadrePlugin } from 'kadre'
+ * const MyPlugin : KadrePlugin = {
+ *   let config = {}
+ *   init: (kadre) => {
+ *     config = kadre.config?.plugin?.myPlugin
+ *   },
+ *   fetch: (request, { kadre: k }) => {
+ *     if(new URL(request).pathname === '/myPlugin') {
+ *       return new Response('Hello Mom!')
+ *     }
+ *   }
+ * }
+ * ```
+ */
 export type KadrePlugin = {
-  fetch?: (request: Request, app: { kadre: Kadre; context: Context }) => Response | void
+  init?: (kadre: Kadre) => MaybePromise<void>
+  fetch?: (request: Request, app: { kadre: Kadre; context: Context }) => MaybePromise<Response | void>
 }
-
-export { Kadre } from './index.ts'

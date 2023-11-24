@@ -1,5 +1,6 @@
-import { PType, parseEntry, requestBodyParser, requestPathParser, responseParser, validateBody } from '#/parser'
-import { Context, Hook, Kadre, NotFoundError, RequestError, Route } from '#/types'
+import { PType, parseEntry, requestBodyParser, requestPathParser, responseParser, validateBody } from 'parser'
+import { Context, Hook, NotFoundError, RequestError, Route } from 'types'
+import { Kadre } from 'index'
 
 const textDecoder = new TextDecoder()
 
@@ -23,7 +24,7 @@ export default (kadre: Kadre, port?: number) => {
         state: {}
       }
       for (const plugin of kadre.plugins) {
-        let resp = plugin.fetch ? plugin.fetch(req, { kadre, context }) : null
+        let resp = plugin.fetch ? await plugin.fetch(req, { kadre, context }) : null
         if (resp) return resp
       }
       const url = new URL(req.url)
@@ -138,7 +139,7 @@ export default (kadre: Kadre, port?: number) => {
     },
     error(error) {
       console.error(error)
-      return new Response('Inyernal Server Error', {
+      return new Response('Internal Server Error', {
         status: 500,
         headers: {
           'Content-Type': 'text/plain'

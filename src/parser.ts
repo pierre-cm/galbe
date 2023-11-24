@@ -13,7 +13,7 @@ import {
   Static
 } from '@sinclair/typebox'
 import { Kind, Optional } from '@sinclair/typebox'
-import { RequestError } from '.'
+import { RequestError } from 'index'
 
 type PrimitiveType = TBoolean | TInteger | TNumber | TString
 export type PType = PrimitiveType | TLiteral | TObject | TArray | TUnion | TAny
