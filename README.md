@@ -8,16 +8,31 @@
 - [x] Details
 - [x] Build
 
-- [ ] Todo api example
+- Own Framework
 
-  - Create [ ]
-  - Update [ ]
-  - GetList [ ]
-  - Get [ ]
-  - Create from file [ ]
-  - Dl as file [ ]
+  - [x] Types
+  - [x] errorHandler
+  - [x] plugin use()
+  - [x] jsdoc
+  - [x] response type
+
+- Todo api example
+
+  - [x] Create
+  - [x] GetList
+  - [x] Get
+  - [x] Update
+  - [x] Delete
+  - [ ] Bulk create from file
+  - [ ] Dl as file
+
+- Hooks
+
+  - [ ] Headers authentication pos/update/delete
 
 - [ ] Unit tests
 - [ ] Documentation
+
+- [ ] create-kadre
 
 - [ ] Website

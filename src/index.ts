@@ -1,4 +1,13 @@
-import { Static, TSchema, TArray, TObject, TProperties, Type } from '@sinclair/typebox'
+import {
+  Static,
+  TSchema,
+  TArray,
+  TObject,
+  TProperties,
+  Type,
+  JavaScriptTypeBuilder,
+  SchemaOptions
+} from '@sinclair/typebox'
 import { Optional, Kind } from '@sinclair/typebox'
 
 import { OpenAPIV3 } from 'openapi-types'
@@ -188,7 +197,24 @@ const kadreMethod = <
   }
 }
 
-export { Type as T } from '@sinclair/typebox'
+export interface FileOptions extends SchemaOptions {
+  mimeType?: string
+  minLength?: number
+  maxLength?: number
+}
+export interface TFile extends TSchema, FileOptions {
+  [Kind]: 'File'
+  static: ReadableStream
+  type: 'file'
+}
+class KadreTypeBuilder extends JavaScriptTypeBuilder {
+  /** `[Kadre]` Creates a File type */
+  public File(options: FileOptions = {}): TFile {
+    return this.Create({ ...options, [Kind]: 'File', type: 'file' })
+  }
+}
+
+export const T = new KadreTypeBuilder()
 
 export { RequestError } from './types'
 /**

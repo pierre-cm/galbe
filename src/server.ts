@@ -2,8 +2,6 @@ import { PType, parseEntry, requestBodyParser, requestPathParser, responseParser
 import { Context, Hook, NotFoundError, RequestError, Route } from 'types'
 import { Kadre } from 'index'
 
-const textDecoder = new TextDecoder()
-
 const handleInternalError = (error: any) => {
   console.error(error)
   return new RequestError({ status: 500, error: 'Internal Server Error' })
@@ -46,13 +44,12 @@ export default (kadre: Kadre, port?: number) => {
         let inHeaders = Object.fromEntries(req.headers.entries())
         let inQuery = Object.fromEntries(url.searchParams.entries())
         let inParams = requestPathParser(url.pathname, route.path)
-        let inBody: string | undefined = ''
-        if (req.body) for await (const chunk of req.body) inBody += textDecoder.decode(chunk)
 
+        context.body = await requestBodyParser(req.body, inHeaders)
         context.headers = { ...context.headers, ...inHeaders }
         context.query = inQuery
         context.params = inParams
-        context.body = inBody ? requestBodyParser(inBody, inHeaders['content-type']) : null
+
         const hooks: Hook[] = []
 
         // request validation
@@ -80,7 +77,8 @@ export default (kadre: Kadre, port?: number) => {
           else throw handleInternalError(error)
         }
         try {
-          if (schema?.body) context.body = validateBody(context.body, schema.body as PType) ? context.body : undefined
+          if (schema?.body)
+            context.body = validateBody(context.body, schema.body as PType, inHeaders) ? context.body : undefined
         } catch (error) {
           if (error instanceof RequestError) errors.push(error)
           else throw handleInternalError(error)

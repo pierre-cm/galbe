@@ -13,12 +13,15 @@ import {
   Static
 } from '@sinclair/typebox'
 import { Kind, Optional } from '@sinclair/typebox'
-import { RequestError } from 'index'
+import { RequestError, TFile } from 'index'
 
 type PrimitiveType = TBoolean | TInteger | TNumber | TString
-export type PType = PrimitiveType | TLiteral | TObject | TArray | TUnion | TAny
+export type PType = PrimitiveType | TLiteral | TObject | TArray | TFile | TUnion | TAny
 type ParamType = boolean | number | string | null | undefined
 type OrArray<T> = T | T[]
+
+const textDecoder = new TextDecoder()
+const textEncoder = new TextEncoder()
 
 const unionHas = (union: TUnion, type: string): TSchema | null => {
   let has = null
@@ -35,9 +38,24 @@ const validate = (value: any, type: PType) => {
   const validator = schemaValidator(value, type)
   if (!validator.valid) throw validator.errors
 }
+const validateFile = (_value: any, schema: TFile, headers: Record<string, string>): boolean => {
+  const errors = []
+  if (schema.mimeType !== undefined && !headers?.['content-type'].match(new RegExp(`^${schema.mimeType}`)))
+    errors.push(`Invalid file MIME type. Expecting '${schema.mimeType}' but found '${headers?.['content-type']}'`)
+  if (schema.minLength !== undefined && Number(headers?.['content-length']) < schema.minLength)
+    errors.push(
+      `Invalid file size. Expect file size to be ${schema.minLength} Bytes or more but is ${headers?.['content-length']} Bytes`
+    )
+  if (schema.maxLength !== undefined && Number(headers?.['content-length']) > schema.maxLength)
+    errors.push(
+      `Invalid file size. Expect file size to be less than ${schema.maxLength} Bytes or more but is ${headers?.['content-length']} Bytes`
+    )
+  if (errors.length) throw Array.isArray(errors) && errors.length === 1 ? errors[0] : errors
+  return true
+}
 
 const schemaValidator = (value: OrArray<ParamType>, type: PType): { valid: boolean; errors: string | string[] } => {
-  let errors = []
+  const errors = []
   if (type[Kind] === 'Integer' || type[Kind] === 'Number') {
     if (type.exclusiveMinimum !== undefined)
       if ((value as number) <= type.exclusiveMinimum)
@@ -140,13 +158,38 @@ export const requestPathParser = (input: string, path: string) => {
   return params
 }
 
-export const requestBodyParser = (body: string, contentType?: string) => {
-  switch (contentType) {
-    case 'application/json':
-      return JSON.parse(body)
-    default:
-      return body
-  }
+const bodyToStr = async (body: ReadableStream) => {
+  let res = ''
+  for await (const chunk of body) res += textDecoder.decode(chunk)
+  return res
+}
+export const requestBodyParser = async (
+  body: ReadableStream | null,
+  headers: { 'content-type'?: string; 'content-length'?: string }
+) => {
+  if (body === null) return null
+  const { 'content-type': contentType, 'content-length': _contentLength } = headers
+  if (contentType?.match(/^text\//)) {
+    let str = await bodyToStr(body)
+    return str
+  } else if (contentType?.match(/^application\/json/)) {
+    let str = await bodyToStr(body)
+    return JSON.parse(str)
+  } else if (contentType?.match(/^application\/x-www-form-urlencoded/)) {
+    let str = await bodyToStr(body)
+    let obj = Object.fromEntries(
+      str.split('\n').map(l => {
+        const [k, v] = l.split('=')
+        return [decodeURIComponent(k), decodeURIComponent(v)]
+      })
+    )
+    return obj
+  } else if (contentType?.match(/^multipart\/form-data/)) {
+    const boundaryStr = contentType.match(/boundary\=(.*);?.*$/)?.[1]
+    const _boundary = textEncoder.encode(boundaryStr)
+    // TODO: Implement multipart/form-data parser
+    return body
+  } else return body
 }
 
 export const responseParser = (response: any) => {
@@ -240,6 +283,9 @@ export const validateSchema = <T extends PType>(elt: any, schema: T): boolean =>
       }
     }
     if (Object.keys(err).length) errors.push(err)
+  } else if (schema[Kind] === 'File') {
+    if (!(elt instanceof ReadableStream)) throw 'Not a valid file'
+    validate(elt, schema as TFile)
   } else if (schema[Kind] === 'Any') {
   } else {
     throw `Unsupported schema type ${schema[Kind]}`
@@ -251,8 +297,9 @@ export const validateSchema = <T extends PType>(elt: any, schema: T): boolean =>
   return true
 }
 
-export const validateBody = <T extends PType>(body: any, schema: T): boolean => {
+export const validateBody = <T extends PType>(body: any, schema: T, headers: Record<string, string>): boolean => {
   try {
+    if (schema[Kind] === 'File') return validateFile(body, schema, headers)
     return validateSchema(body, schema)
   } catch (err) {
     throw new RequestError({ status: 400, error: { body: err } })
