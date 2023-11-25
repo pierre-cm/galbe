@@ -1,8 +1,8 @@
 import { readdir } from 'fs/promises'
 import { extname } from 'path'
 import { glob } from 'glob'
-import esprima from 'esprima'
-import estraverse from 'estraverse'
+import { parse } from 'acorn'
+import { simple } from 'acorn-walk'
 
 import { Kadre } from 'index'
 import { KadreConfig } from './types'
@@ -23,61 +23,53 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMetadata> => 
       target: 'bun',
       tsconfig: {
         compilerOptions: {
-          //@ts-ignore https://github.com/oven-sh/bun/pull/7055
+          // @ts-ignore https://github.com/oven-sh/bun/pull/7055
           removeComments: false
         }
       }
     }).transformSync(content)
   }
 
-  const ast = esprima.parseModule(content, { comment: true, loc: true })
+  const comments: Record<number, string> = {}
 
-  const comments = ast.comments
-    ?.filter(c => c.type === 'Block')
-    .reduce((acc, c) => {
-      //@ts-ignore
-      if (c.loc?.end.line) acc[c.loc?.end.line] = c.value
-      return acc
-    }, {})
-
-  estraverse.traverse(ast, {
-    enter: function (node, parent) {
-      let fnExpr = null
+  const ast = parse(content, {
+    ecmaVersion: 'latest',
+    sourceType: 'module',
+    locations: true,
+    onComment: (isBlock, text, _start, _end, _locStart, locEnd) => {
+      if (isBlock && locEnd?.line) comments[locEnd?.line] = text
+    }
+  })
+  simple(ast, {
+    ExportDefaultDeclaration(node) {
       // @ts-ignore
-      if (node.type === 'MemberExpression' && node.object.name === 'exports' && node.property.name === 'default') {
-        // @ts-ignore
-        fnExpr = parent.right
-      } else if (node.type === 'ExportDefaultDeclaration') fnExpr = node.declaration
-
-      if (fnExpr) {
-        let kadreIdentifier = fnExpr.params[0].name
-        estraverse.traverse(fnExpr.body, {
-          enter: function (n, _p) {
+      let kadreIdentifier = node.declaration.params[0].name
+      // @ts-ignore
+      simple(node.declaration.body, {
+        CallExpression(node) {
+          // @ts-ignore
+          if (node.callee.object.name === kadreIdentifier) {
             // @ts-ignore
-            if (n?.type === 'CallExpression' && n?.callee?.object?.name === kadreIdentifier) {
-              // @ts-ignore
-              const com = n.loc?.start.line - 1 in comments ? comments[n.loc?.start.line - 1] : ''
-              const refs = [
-                ...com.matchAll(new RegExp(`^\\s*\\*\\s*@(${COMMENT_PROPS.join('|')})\\s+([^\\n]*)\\s*$`, 'gm'))
-              ].reduce((acc, n) => {
-                return {
-                  ...acc,
-                  [n[1]]: n[1] in acc ? [...(typeof acc[n[1]] === 'string' ? [acc[n[1]]] : acc[n[1]]), n[2]] : n[2]
-                }
-              }, {})
+            const path = node.arguments[0].value
+            // @ts-ignore
+            const method = node.callee.property.name
+            const line = node.loc?.start.line
+            const com = line && line - 1 in comments ? comments[line - 1] : ''
 
-              // @ts-ignore
-              const path: string = n.arguments[0].value
-              // @ts-ignore
-              const method: Method = n.callee.property.name
+            const refs = [
+              ...com.matchAll(new RegExp(`^\\s*\\*\\s*@(${COMMENT_PROPS.join('|')})\\s+([^\\n]*)\\s*$`, 'gm'))
+            ].reduce((acc, n) => {
+              return {
+                ...acc,
+                [n[1]]: n[1] in acc ? [...(typeof acc[n[1]] === 'string' ? [acc[n[1]]] : acc[n[1]]), n[2]] : n[2]
+              }
+            }, {} as Record<string, any>)
 
-              if (!(path in meta)) meta[path] = {}
-              if (!(method in meta[path])) meta[path][method] = refs
-            }
+            if (!(path in meta)) meta[path] = {}
+            if (!(method in meta[path])) meta[path][method] = refs
           }
-        })
-        this.break()
-      }
+        }
+      })
     }
   })
   return meta
