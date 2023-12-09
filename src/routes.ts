@@ -6,6 +6,7 @@ import { simple } from 'acorn-walk'
 
 import { Kadre } from 'index'
 import { KadreConfig } from './types'
+import { transformSync } from '@swc/core'
 
 export type RouteMetadata = Record<string, Record<string, Record<string, string | string[]>>>
 
@@ -18,16 +19,26 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMetadata> => 
   let meta: RouteMetadata = {}
 
   if (fileExt === '.ts') {
-    content = new Bun.Transpiler({
-      loader: 'ts',
-      target: 'bun',
-      tsconfig: {
-        compilerOptions: {
-          // @ts-ignore https://github.com/oven-sh/bun/pull/7055
-          removeComments: false
-        }
+    //// Much faster but doesn't include comments. See https://github.com/oven-sh/bun/pull/7055
+    // content = new Bun.Transpiler({
+    //   loader: 'ts',
+    //   target: 'bun',
+    //   tsconfig: {
+    //     compilerOptions: {
+    //       // @ts-ignore https://github.com/oven-sh/bun/pull/7055
+    //       removeComments: false
+    //     }
+    //   }
+    // }).transformSync(content)
+    content = transformSync(content, {
+      jsc: {
+        parser: {
+          syntax: 'typescript'
+        },
+        preserveAllComments: true,
+        target: 'esnext'
       }
-    }).transformSync(content)
+    }).code
   }
 
   const comments: Record<number, string> = {}
@@ -54,7 +65,7 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMetadata> => 
             // @ts-ignore
             const method = node.callee.property.name
             const line = node.loc?.start.line
-            const com = line && line - 1 in comments ? comments[line - 1] : ''
+            const com = line && line in comments ? comments[line] : ''
 
             const refs = [
               ...com.matchAll(new RegExp(`^\\s*\\*\\s*@(${COMMENT_PROPS.join('|')})\\s+([^\\n]*)\\s*$`, 'gm'))
@@ -72,6 +83,7 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMetadata> => 
       })
     }
   })
+  console.log(meta)
   return meta
 }
 

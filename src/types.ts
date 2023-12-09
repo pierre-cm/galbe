@@ -1,5 +1,112 @@
-import { Static, TSchema, TArray, TObject, TProperties } from '@sinclair/typebox'
+import {
+  TSchema,
+  TBoolean,
+  TNumber,
+  TInteger,
+  TString,
+  TLiteral,
+  TArray,
+  TObject,
+  TProperties,
+  TUnion,
+  TAny,
+  Static,
+  OptionalPropertyKeys,
+  ReadonlyOptionalPropertyKeys,
+  ReadonlyPropertyKeys,
+  RequiredPropertyKeys,
+  Kind
+} from '@sinclair/typebox'
 import { Kadre } from './index'
+
+export const Stream = Symbol.for('Kadre.Stream')
+export type TStream<T extends TSchema = TSchema> = T & {
+  [Stream]: 'Stream'
+}
+
+export type TBody =
+  | TString
+  | TBoolean
+  | TNumber
+  | TInteger
+  | TObject
+  | TArray
+  | TUrlForm
+  | TMultipartForm
+  | TUnion
+  | TStream
+export type TStreamable = TByteArray | TString | TArray | TUrlForm | TMultipartForm
+export type TUrlFormParam = TString | TBoolean | TNumber | TInteger | TLiteral | TAny | TUnion
+export type TMultipartFormParam = TByteArray | TUrlFormParam | TObject | TArray
+export type MaybeArray<T> = T | T[]
+
+export interface MultipartFormData<
+  K extends string | number | symbol = string,
+  V extends Static<TMultipartFormParam> = any
+> {
+  headers: { type?: string; name: K; filename?: string }
+  content: V
+}
+
+export interface TByteArray extends TSchema {
+  [Kind]: 'ByteArray'
+  static: Uint8Array
+  type: 'byteArray'
+}
+export interface TMultipartForm<T extends TMultipartProperties = TMultipartProperties> extends TSchema {
+  [Kind]: 'MultipartForm'
+  static: MultipartPropertiesReduce<T, this['params']>
+  type: 'multipartForm'
+}
+export interface TUrlForm<T extends TUrlFormProperties = TUrlFormProperties> extends TSchema {
+  [Kind]: 'UrlForm'
+  static: UrlFormPropertiesReduce<T, this['params']>
+  type: 'urlForm'
+}
+
+export type TMultipartProperties<V = TMultipartFormParam> = Record<string, V>
+export type MultipartPropertiesReduce<T extends TMultipartProperties, P extends unknown[]> = MultipartPropertiesReducer<
+  T,
+  {
+    [K in keyof T]: Static<T[K], P>
+  }
+>
+export type MultipartPropertiesReducer<
+  T extends TMultipartProperties,
+  R extends Record<keyof any, unknown>
+> = MultipartEvaluate<
+  Readonly<Partial<Pick<R, ReadonlyOptionalPropertyKeys<T>>>> &
+    Readonly<Pick<R, ReadonlyPropertyKeys<T>>> &
+    Partial<Pick<R, OptionalPropertyKeys<T>>> &
+    Required<Pick<R, RequiredPropertyKeys<T>>>
+>
+export type MultipartEvaluate<T> = T extends infer O
+  ? {
+      [K in keyof O]: O[K] extends Static<TMultipartFormParam> ? MultipartFormData<K, O[K]> : never
+    }
+  : never
+
+export type TUrlFormProperties<V = TUrlFormParam> = Record<string, V>
+export type UrlFormPropertiesReduce<T extends TUrlFormProperties, P extends unknown[]> = UrlFormPropertiesReducer<
+  T,
+  {
+    [K in keyof T]: Static<T[K], P>
+  }
+>
+export type UrlFormPropertiesReducer<
+  T extends TUrlFormProperties,
+  R extends Record<keyof any, unknown>
+> = UrlFormEvaluate<
+  Readonly<Partial<Pick<R, ReadonlyOptionalPropertyKeys<T>>>> &
+    Readonly<Pick<R, ReadonlyPropertyKeys<T>>> &
+    Partial<Pick<R, OptionalPropertyKeys<T>>> &
+    Required<Pick<R, RequiredPropertyKeys<T>>>
+>
+export type UrlFormEvaluate<T> = T extends infer O
+  ? {
+      [K in keyof O]: O[K] extends Static<TUrlFormParam> ? O[K] : never
+    }
+  : never
 
 export type Method = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options'
 type Without<T, U> = T extends any[]
@@ -80,7 +187,7 @@ export type Schema<
   H extends TProperties = TProperties,
   P extends TProperties = TProperties,
   Q extends TProperties = TProperties,
-  B extends TSchema = TSchema,
+  B extends TBody = TBody,
   R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
 > = {
   headers?: H
@@ -114,7 +221,7 @@ export type Endpoint = {
     H extends TProperties,
     P extends TProperties,
     Q extends TProperties,
-    B extends TSchema,
+    B extends TBody,
     R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
   >(
     path: string,
@@ -126,7 +233,7 @@ export type Endpoint = {
     H extends TProperties,
     P extends TProperties,
     Q extends TProperties,
-    B extends TSchema,
+    B extends TBody,
     R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
   >(
     path: string,
@@ -137,7 +244,7 @@ export type Endpoint = {
     H extends TProperties,
     P extends TProperties,
     Q extends TProperties,
-    B extends TSchema,
+    B extends TBody,
     R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
   >(
     path: string,
@@ -148,7 +255,7 @@ export type Endpoint = {
     H extends TProperties,
     P extends TProperties,
     Q extends TProperties,
-    B extends TSchema,
+    B extends TBody,
     R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
   >(
     path: string,
@@ -177,7 +284,7 @@ export type Route<
   H extends TProperties = TProperties,
   P extends TProperties = TProperties,
   Q extends TProperties = TProperties,
-  B extends TSchema = TSchema,
+  B extends TBody = TBody,
   R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
 > = {
   method: Method

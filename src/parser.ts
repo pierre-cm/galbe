@@ -1,24 +1,29 @@
 import {
-  TSchema,
+  Kind,
+  Optional,
+  Static,
   TBoolean,
-  TNumber,
   TInteger,
-  TString,
   TLiteral,
-  TArray,
+  TNumber,
   TObject,
   TProperties,
-  TUnion,
-  TAny,
-  Static
+  TSchema,
+  TUnion
 } from '@sinclair/typebox'
-import { Kind, Optional } from '@sinclair/typebox'
-import { RequestError, TFile } from 'index'
-
-type PrimitiveType = TBoolean | TInteger | TNumber | TString
-export type PType = PrimitiveType | TLiteral | TObject | TArray | TFile | TUnion | TAny
-type ParamType = boolean | number | string | null | undefined
-type OrArray<T> = T | T[]
+import {
+  MultipartFormData,
+  MaybeArray,
+  RequestError,
+  TBody,
+  TMultipartForm,
+  TUrlForm,
+  Stream,
+  TUrlFormParam,
+  TMultipartFormParam,
+  TStream
+} from 'index'
+import { validate } from 'validator'
 
 const textDecoder = new TextDecoder()
 const textEncoder = new TextEncoder()
@@ -34,58 +39,335 @@ const unionHas = (union: TUnion, type: string): TSchema | null => {
   return has
 }
 
-const validate = (value: any, type: PType) => {
-  const validator = schemaValidator(value, type)
-  if (!validator.valid) throw validator.errors
-}
-const validateFile = (_value: any, schema: TFile, headers: Record<string, string>): boolean => {
-  const errors = []
-  if (schema.mimeType !== undefined && !headers?.['content-type'].match(new RegExp(`^${schema.mimeType}`)))
-    errors.push(`Invalid file MIME type. Expecting '${schema.mimeType}' but found '${headers?.['content-type']}'`)
-  if (schema.minLength !== undefined && Number(headers?.['content-length']) < schema.minLength)
-    errors.push(
-      `Invalid file size. Expect file size to be ${schema.minLength} Bytes or more but is ${headers?.['content-length']} Bytes`
-    )
-  if (schema.maxLength !== undefined && Number(headers?.['content-length']) > schema.maxLength)
-    errors.push(
-      `Invalid file size. Expect file size to be less than ${schema.maxLength} Bytes or more but is ${headers?.['content-length']} Bytes`
-    )
-  if (errors.length) throw Array.isArray(errors) && errors.length === 1 ? errors[0] : errors
-  return true
+const CONTENT_SCHEMA_COMPATIBILITY = {
+  text: ['String', 'Boolean', 'Number', 'Object', 'Array'],
+  json: ['String', 'Boolean', 'Number', 'Object', 'Array'],
+  urlForm: ['UrlForm'],
+  multipartForm: ['MultipartForm']
 }
 
-const schemaValidator = (value: OrArray<ParamType>, type: PType): { valid: boolean; errors: string | string[] } => {
-  const errors = []
-  if (type[Kind] === 'Integer' || type[Kind] === 'Number') {
-    if (type.exclusiveMinimum !== undefined)
-      if ((value as number) <= type.exclusiveMinimum)
-        errors.push(`${value} is less or equal to ${type.exclusiveMinimum}`)
-    if (type.exclusiveMaximum !== undefined)
-      if ((value as number) >= type.exclusiveMaximum)
-        errors.push(`${value} is greater or equal to ${type.exclusiveMaximum}`)
-    if (type.minimum !== undefined)
-      if ((value as number) < type.minimum) errors.push(`${value} is less than ${type.minimum}`)
-    if (type.maximum !== undefined)
-      if ((value as number) > type.maximum) errors.push(`${value} is greater than ${type.maximum}`)
-  } else if (type[Kind] === 'String') {
-    if (type.minLength !== undefined && (value as string).length < type.minLength)
-      errors.push(`${value} length is too small (${type.minLength} char min)`)
-    if (type.maxLength !== undefined && (value as string).length > type.maxLength)
-      errors.push(`${value} length is too large (${type.maxLength} char max)`)
-    if (type.pattern !== undefined && !(value as string).match(type.pattern))
-      errors.push(`${value} does not match pattern ${type.pattern}`)
-  } else if (type[Kind] === 'Array') {
-    if (type.minItems !== undefined && (value as any[]).length < type.minItems)
-      errors.push(`Must contain at least ${type.minItems} item${type.minItems > 1 ? 's' : ''}`)
-    if (type.maxItems !== undefined && (value as any[]).length > type.maxItems)
-      errors.push(`Must contain at most (${type.maxItems} item${type.maxItems > 1 ? 's' : ''}`)
-    if (type.uniqueItems === true && new Set(value as any[]).size !== (value as any[]).length)
-      errors.push(`Has duplicate values`)
+export const requestBodyParser = async (
+  body: ReadableStream | null,
+  headers: { 'content-type'?: string; 'content-length'?: string },
+  schema?: TBody
+) => {
+  const { 'content-type': contentType, 'content-length': _contentLength } = headers
+  const isStream = schema && Stream in schema
+  try {
+    if (body === null) return undefined
+    if (contentType?.match(/^text\//)) {
+      if (schema && !CONTENT_SCHEMA_COMPATIBILITY['text'].includes(schema[Kind]))
+        throw new RequestError({ status: 400, error: { body: `Expected ${schema[Kind]}` } })
+      return isStream ? $streamToString(body) : await streamToString(body, schema)
+    } else if (contentType?.match(/^application\/json/)) {
+      if (schema && !CONTENT_SCHEMA_COMPATIBILITY['json'].includes(schema[Kind]))
+        throw new RequestError({ status: 400, error: { body: `Expected ${schema[Kind]}` } })
+      return await streamToString(body, schema)
+    } else if (contentType?.match(/^application\/x-www-form-urlencoded/)) {
+      if (schema && !CONTENT_SCHEMA_COMPATIBILITY['urlForm'].includes(schema[Kind]))
+        throw new RequestError({ status: 400, error: { body: `Expected ${schema[Kind]}` } })
+      return isStream ? $streamToUrlForm(body, schema as TStream<TUrlForm>) : streamToUrlForm(body, schema as TUrlForm)
+    } else if (contentType?.match(/^multipart\/form-data/)) {
+      if (schema && !CONTENT_SCHEMA_COMPATIBILITY['multipartForm'].includes(schema[Kind]))
+        throw new RequestError({ status: 400, error: { body: `Expected ${schema[Kind]}` } })
+      const boundary = contentType.match(/boundary\=(.*);?.*$/)?.[1] || ''
+      return isStream
+        ? $streamToMultipartForm(body, boundary, schema as TStream<TMultipartForm>)
+        : streamToMultipartForm(body, boundary, schema as TMultipartForm)
+    } else return body
+  } catch (error) {
+    if (error instanceof RequestError) throw error
+    else throw new RequestError({ status: 400, error: { body: error } })
   }
-  return { valid: !errors.length, errors: Array.isArray(errors) && errors.length === 1 ? errors[0] : errors }
 }
-
-const paramParser = (value: string | string[] | null, type: PType): OrArray<ParamType> => {
+async function* $streamToString(body: ReadableStream) {
+  for await (const chunk of body) yield textDecoder.decode(chunk)
+}
+const streamToString = async (body: ReadableStream, schema?: TBody) => {
+  let res = ''
+  for await (const chunk of $streamToString(body)) res += chunk
+  if (schema) return validate(res, schema, true)
+  return res
+}
+async function* $streamToUrlForm(
+  body: ReadableStream<Uint8Array>,
+  schema?: TStream<TUrlForm>
+): AsyncGenerator<[string, any]> {
+  let rest: Uint8Array = new Uint8Array()
+  let bK: Uint8Array = new Uint8Array()
+  let bV: Uint8Array = new Uint8Array()
+  let start = 0
+  const required = new Set(
+    Object.entries(schema?.properties || {})
+      .filter(([_, v]: [string, any]) => !(Optional in v))
+      .map(([k, _]) => k)
+  )
+  for await (const chunk of body) {
+    start = 0
+    for (let i = 0; i < chunk.length; i++) {
+      if (chunk[i] === 0x26) {
+        bV = new Uint8Array(rest.length + i - start)
+        bV.set(rest)
+        bV.set(chunk.slice(start, i), rest.length)
+        let [key, val]: [string, any] = [
+          decodeURIComponent(textDecoder.decode(bK)),
+          decodeURIComponent(textDecoder.decode(bV))
+        ]
+        try {
+          val = schema?.properties && key in schema?.properties ? paramParser(val, schema?.properties[key]) : val
+        } catch (error) {
+          throw new RequestError({ status: 400, error: { body: { [key]: error } } })
+        }
+        required.delete(key)
+        yield [key, val]
+        bK = new Uint8Array()
+        bV = new Uint8Array()
+        start = i + 1
+        rest = new Uint8Array()
+      } else if (chunk[i] === 0x3d) {
+        bK = new Uint8Array(rest.length + i - start)
+        bK.set(rest)
+        bK.set(chunk.slice(start, i), rest.length)
+        start = i + 1
+        rest = new Uint8Array()
+      }
+      if (i === chunk.length - 1) {
+        const newRest = new Uint8Array(rest.length + i + 1 - start)
+        newRest.set(rest)
+        newRest.set(chunk.slice(start, i + 1), rest.length)
+        rest = newRest
+      }
+    }
+  }
+  let [key, val]: [string, any] = [
+    decodeURIComponent(textDecoder.decode(bK)),
+    decodeURIComponent(textDecoder.decode(rest))
+  ]
+  try {
+    val = schema?.properties && key in schema?.properties ? paramParser(val, schema?.properties[key]) : val
+  } catch (error) {
+    throw new RequestError({ status: 400, error: { body: { [key]: error } } })
+  }
+  required.delete(key)
+  yield [key, val]
+  if (required.size > 0)
+    throw new RequestError({
+      status: 400,
+      error: { body: `Missing field${required.size > 1 ? 's' : ''} ${[...required]}` }
+    })
+}
+const streamToUrlForm = async (body: ReadableStream<Uint8Array>, schema?: TUrlForm) => {
+  let entries = []
+  const required = new Set(
+    Object.entries(schema?.properties || {})
+      .filter(([_, v]: [string, any]) => !(Optional in v))
+      .map(([k, _]) => k)
+  )
+  let errors: Record<string, any> = {}
+  for await (const chunk of $streamToUrlForm(body)) entries.push(chunk)
+  const object: Record<string, any> = {}
+  for (let e of entries) {
+    if (e[0] in object) {
+      if (Array.isArray(object[e[0]])) object[e[0]].push(e[1])
+      else object[e[0]] = [object[e[0]], e[1]]
+    } else object[e[0]] = e[1]
+  }
+  if (schema?.properties)
+    for (let [k, v] of Object.entries(object)) {
+      required.delete(k)
+      try {
+        object[k] = schema?.properties && k in schema?.properties ? paramParser(v, schema?.properties[k]) : v
+      } catch (error) {
+        errors[k] = k in errors ? [...errors[k], error] : error
+      }
+    }
+  if (Object.keys(errors).length) throw new RequestError({ status: 400, error: { body: errors } })
+  if (required.size > 0)
+    throw new RequestError({
+      status: 400,
+      error: { body: `Missing field${required.size > 1 ? 's' : ''} ${[...required]}` }
+    })
+  return object
+}
+async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundary: string, schema?: TMultipartForm) {
+  const bound = textEncoder.encode(boundary)
+  let rest = new Uint8Array()
+  let bK: Uint8Array = new Uint8Array()
+  let bV: Uint8Array = new Uint8Array()
+  let start = 0
+  const required = new Set(
+    Object.entries(schema?.properties || {})
+      .filter(([_, v]: [string, any]) => !(Optional in v))
+      .map(([k, _]) => k)
+  )
+  for await (const chunk of data) {
+    start = 0
+    for (let i = 0; i < chunk.length; i++) {
+      let matchBound = true
+      for (let b = 0; b < bound.length; b++) {
+        if (chunk[i + b] === bound[b]) continue
+        else {
+          matchBound = false
+          break
+        }
+      }
+      if (matchBound) {
+        bV = new Uint8Array(rest.length + i - start)
+        bV.set(rest)
+        bV.set(chunk.slice(start, i), rest.length)
+        const headers = parseMultipartHeader(textDecoder.decode(bK))
+        if (headers)
+          try {
+            required.delete(headers.name)
+            yield {
+              headers,
+              content: parseMultipartContent(bV, headers, schema)
+            }
+          } catch (err) {
+            if (err instanceof RequestError) throw err
+            throw new RequestError({ status: 400, error: { body: { [headers.name]: err } } })
+          }
+        bK = new Uint8Array()
+        bV = new Uint8Array()
+        start = i + bound.length
+        rest = new Uint8Array()
+        i = start
+      } else if (chunk[i] === 0x0d && chunk[i + 1] === 0x0a && chunk[i + 2] === 0x0d) {
+        bK = new Uint8Array(rest.length + i - start)
+        bK.set(rest)
+        bK.set(chunk.slice(start, i), rest.length)
+        start = i + 3
+        rest = new Uint8Array()
+        i = start
+      }
+      if (i === chunk.length - 1) {
+        const newRest = new Uint8Array(rest.length + i + 1 - start)
+        newRest.set(rest)
+        newRest.set(chunk.slice(start, i + 1), rest.length)
+        rest = newRest
+      }
+    }
+  }
+  const headers = parseMultipartHeader(textDecoder.decode(bK))
+  if (headers)
+    try {
+      required.delete(headers.name)
+      yield {
+        headers,
+        content: parseMultipartContent(bV, headers, schema)
+      }
+    } catch (err) {
+      throw new RequestError({ status: 400, error: { body: { [headers.name]: err } } })
+    }
+  if (required.size > 0)
+    throw new RequestError({
+      status: 400,
+      error: { body: `Missing field${required.size > 1 ? 's' : ''} ${[...required]}` }
+    })
+}
+const parseMultipartHeader = (header: string): { name: string; [key: string]: string } | null => {
+  if (!header) return null
+  let disposition = 'form-data'
+  const multipartHeader = [
+    ...header.matchAll(/\s*([\w-]+)\s*:\s*([^;]*);?/g),
+    ...header.matchAll(/;?\s*(\w+)\s*=\s*\"([^"]*)\";?/g)
+  ].reduce((acc: Record<string, string>, v: string[]) => {
+    const key = v[1].toLowerCase().replace(/^content-/, '')
+    if (key === 'disposition') {
+      disposition = v[2]
+      return acc
+    }
+    acc[key] = v[2]
+    return acc
+  }, {})
+  if (disposition !== 'form-data') null
+  //@ts-ignore
+  return multipartHeader
+}
+const parseMultipartContent = (
+  content: Uint8Array,
+  headers: { name: string; type?: string },
+  schema?: TMultipartForm
+) => {
+  const type = headers?.type ?? 'text/plain'
+  let result: any = content
+  content = content.slice(1, content.length - 4)
+  if (type === 'text/plain') {
+    const str = textDecoder.decode(content).trim()
+    return schema?.properties && headers.name in schema?.properties
+      ? paramParser(str, schema?.properties[headers.name])
+      : str
+  } else if (type === 'application/json') {
+    if (!schema?.properties || !(headers.name in schema?.properties))
+      try {
+        result = JSON.parse(textDecoder.decode(content).trim())
+      } catch (err: any) {
+        throw new RequestError({ status: 400, error: { body: { [headers.name]: err?.message || 'Parsing error' } } })
+      }
+    else if (schema?.properties) {
+      if (schema?.properties[headers.name][Kind] === 'Object') {
+        try {
+          result = JSON.parse(textDecoder.decode(content).trim())
+        } catch (err: any) {
+          throw new RequestError({ status: 400, error: { body: { [headers.name]: err?.message || 'Parsing error' } } })
+        }
+        try {
+          validate(result, schema?.properties[headers.name])
+        } catch (err) {
+          throw new RequestError({ status: 400, error: { body: { [headers.name]: err } } })
+        }
+      } else if (schema?.properties[headers.name][Kind] === 'ByteArray') {
+        return content
+      } else if (schema?.properties[headers.name][Kind] === 'String') {
+        result = textDecoder.decode(content).trim()
+      } else {
+        throw new RequestError({
+          status: 400,
+          error: { body: { [headers.name]: `Expect ${schema?.properties[headers.name][Kind]} found json` } }
+        })
+      }
+    }
+  } else if (schema?.properties?.[headers.name]) {
+    try {
+      validate(result, schema?.properties[headers.name])
+    } catch (err) {
+      throw new RequestError({ status: 400, error: { body: { [headers.name]: err } } })
+    }
+  }
+  return result
+}
+const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary: string, schema?: TMultipartForm) => {
+  const res: Record<string, MultipartFormData> = {}
+  const errors: Record<string, any> = {}
+  const required = new Set(
+    Object.entries(schema?.properties || {})
+      .filter(([_, v]: [string, any]) => !(Optional in v))
+      .map(([k, _]) => k)
+  )
+  for await (const chunk of $streamToMultipartForm(data, boundary)) {
+    res[chunk.headers.name] = chunk
+    required.delete(chunk.headers.name)
+    if (schema?.properties && chunk.headers.name in schema?.properties) {
+      try {
+        validate(chunk.content, schema?.properties[chunk.headers.name], true)
+      } catch (err) {
+        errors[chunk.headers.name] = err
+      }
+    }
+  }
+  if (Object.keys(errors).length)
+    throw new RequestError({
+      status: 400,
+      error: { body: errors }
+    })
+  if (required.size > 0)
+    throw new RequestError({
+      status: 400,
+      error: { body: `Missing field${required.size > 1 ? 's' : ''} ${[...required]}` }
+    })
+  return res
+}
+const paramParser = (value: string | string[] | null, type: TMultipartFormParam): MaybeArray<Static<TUrlFormParam>> => {
   if (value === null) {
     if (type[Kind] === 'Any') return undefined
     if (type[Optional]) return undefined
@@ -95,43 +377,45 @@ const paramParser = (value: string | string[] | null, type: PType): OrArray<Para
     if (type[Kind] !== 'Array') throw `Multiple values found`
     validate(value, type)
     let pv = []
-    for (let v of value) pv.push(paramParser(v, type.items as PType) as ParamType)
+    let errors: Record<number, any> = {}
+    for (let [idx, v] of value.entries()) {
+      try {
+        pv.push(paramParser(v, type.items as TMultipartFormParam) as Static<TUrlFormParam>)
+      } catch (error) {
+        errors[idx] = error
+      }
+    }
+    if (Object.keys(errors).length) throw errors
     return pv
   } else {
     if (type[Kind] === 'Boolean') {
       if (value === 'true') return true
       if (value === 'false') return false
       else throw `${value} is not a valid boolean. Should be 'true' or 'false'`
-    }
-    if (type[Kind] === 'Integer') {
+    } else if (type[Kind] === 'Integer') {
       if (value === null || value === undefined) throw `${value} is not a valid integer`
       const parsedValue = parseInt(value, 10)
       if (isNaN(parsedValue) || String(parsedValue) !== String(value)) throw `${value} is not a valid integer`
-      validate(value, type)
+      validate(parsedValue, type)
       return parsedValue
-    }
-    if (type[Kind] === 'Number') {
+    } else if (type[Kind] === 'Number') {
       if (value === null || value === undefined) throw `${value} is not a valid number`
       const parsedValue = Number(value)
       if (isNaN(parsedValue) || String(parsedValue) !== String(value)) throw `${value} is not a valid number`
-      validate(value, type)
+      validate(parsedValue, type)
       return parsedValue
-    }
-    if (type[Kind] === 'String') {
+    } else if (type[Kind] === 'String') {
       validate(value, type)
       return value
-    }
-    if (type[Kind] === 'Literal') {
+    } else if (type[Kind] === 'Literal') {
       if (value !== type.const) throw `${value} is not a valid value`
       return value
-    }
-    if (type[Kind] === 'Any') return value
-    if (type[Kind] === 'Array') {
-      const validator = schemaValidator([value], type)
-      if (!validator.valid) throw validator.errors
-      return paramParser(value, type.items as PrimitiveType)
-    }
-    if (type[Kind] === 'Union') {
+    } else if (type[Kind] === 'Any') return value
+    else if (type[Kind] === 'Array') {
+      return [paramParser(value, type.items as TMultipartFormParam) as Static<TUrlFormParam>]
+    } else if (type[Kind] === 'ByteArray') {
+      return textEncoder.encode(value)
+    } else if (type[Kind] === 'Union') {
       let t = unionHas(type, 'Boolean')
       if (t) return paramParser(value, t as TBoolean)
       t = unionHas(type, 'Integer')
@@ -158,52 +442,6 @@ export const requestPathParser = (input: string, path: string) => {
   return params
 }
 
-const bodyToStr = async (body: ReadableStream) => {
-  let res = ''
-  for await (const chunk of body) res += textDecoder.decode(chunk)
-  return res
-}
-export const requestBodyParser = async (
-  body: ReadableStream | null,
-  headers: { 'content-type'?: string; 'content-length'?: string }
-) => {
-  if (body === null) return null
-  const { 'content-type': contentType, 'content-length': _contentLength } = headers
-  if (contentType?.match(/^text\//)) {
-    let str = await bodyToStr(body)
-    return str
-  } else if (contentType?.match(/^application\/json/)) {
-    let str = await bodyToStr(body)
-    return JSON.parse(str)
-  } else if (contentType?.match(/^application\/x-www-form-urlencoded/)) {
-    let str = await bodyToStr(body)
-    let obj = Object.fromEntries(
-      str.split('\n').map(l => {
-        const [k, v] = l.split('=')
-        return [decodeURIComponent(k), decodeURIComponent(v)]
-      })
-    )
-    return obj
-  } else if (contentType?.match(/^multipart\/form-data/)) {
-    const boundaryStr = contentType.match(/boundary\=(.*);?.*$/)?.[1]
-    const _boundary = textEncoder.encode(boundaryStr)
-    // TODO: Implement multipart/form-data parser
-    return body
-  } else return body
-}
-
-export const responseParser = (response: any) => {
-  if (typeof response !== 'string') {
-    try {
-      return { response: JSON.stringify(response), type: 'application/json' }
-    } catch (error) {
-      console.error(error)
-      throw new RequestError({ status: 500, error: 'Internal Server Error' })
-    }
-  }
-  return { response, type: 'text/plain' }
-}
-
 export const parseEntry = <T extends TProperties>(
   params: { [key: string]: string | string[] },
   schema: T,
@@ -223,7 +461,7 @@ export const parseEntry = <T extends TProperties>(
     const k = options?.i === true ? key.toLowerCase() : key
     const v = params[k] || null
     try {
-      let p = paramParser(v, s as PType)
+      let p = paramParser(v, s as TMultipartFormParam)
       //@ts-ignore
       if (p !== undefined) parsedParams[k] = p
     } catch (errMsg) {
@@ -239,69 +477,14 @@ export const parseEntry = <T extends TProperties>(
   return parsedParams as Static<TObject<T>>
 }
 
-export const validateSchema = <T extends PType>(elt: any, schema: T): boolean => {
-  type ValidationError = string | string[] | { [key: string]: ValidationError }
-  const errors: ValidationError[] = []
-
-  if (schema[Kind] === 'Boolean') {
-    if (elt !== true && elt !== false) throw 'Not a valid boolean'
-    validate(elt, schema as TBoolean)
-  } else if (schema[Kind] === 'Integer') {
-    if (!Number.isInteger(elt)) throw 'Not a valid integer'
-    validate(elt, schema as TInteger)
-  } else if (schema[Kind] === 'Number') {
-    if (Number.isNaN(elt)) throw 'Not a valid number'
-    validate(elt, schema as TNumber)
-  } else if (schema[Kind] === 'String') {
-    if (!(typeof elt === 'string')) throw 'Not a valid string'
-    validate(elt, schema as TString)
-  } else if (schema[Kind] === 'Object') {
-    if (typeof elt !== 'object') throw 'Not a valid object'
-    const err: ValidationError = {}
-    Object.entries(schema.properties).forEach(([k, s]) => {
-      if (!(k in elt)) {
-        if (!s[Optional]) err[k] = 'Required'
-        return
-      }
-      try {
-        validateSchema(elt[k], s as PType)
-      } catch (e) {
-        err[k] = e as ValidationError
-      }
-    })
-    if (Object.keys(err).length) errors.push(err)
-  } else if (schema[Kind] === 'Array') {
-    if (!Array.isArray(elt)) throw 'Not a valid array'
-    validate(elt, schema)
-    const err: ValidationError = {}
-    for (let [idx, v] of elt.entries()) {
-      try {
-        validateSchema(v, schema.items as PType)
-      } catch (e) {
-        console.log(e)
-        err[idx] = e as ValidationError
-      }
+export const responseParser = (response: any) => {
+  if (typeof response !== 'string') {
+    try {
+      return { response: JSON.stringify(response), type: 'application/json' }
+    } catch (error) {
+      console.error(error)
+      throw new RequestError({ status: 500, error: 'Internal Server Error' })
     }
-    if (Object.keys(err).length) errors.push(err)
-  } else if (schema[Kind] === 'File') {
-    if (!(elt instanceof ReadableStream)) throw 'Not a valid file'
-    validate(elt, schema as TFile)
-  } else if (schema[Kind] === 'Any') {
-  } else {
-    throw `Unsupported schema type ${schema[Kind]}`
   }
-
-  if (Object.keys(errors).length === 1) throw errors[0]
-  if (Object.keys(errors).length > 1) throw errors
-
-  return true
-}
-
-export const validateBody = <T extends PType>(body: any, schema: T, headers: Record<string, string>): boolean => {
-  try {
-    if (schema[Kind] === 'File') return validateFile(body, schema, headers)
-    return validateSchema(body, schema)
-  } catch (err) {
-    throw new RequestError({ status: 400, error: { body: err } })
-  }
+  return { response, type: 'text/plain' }
 }

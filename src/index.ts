@@ -6,7 +6,7 @@ import {
   TProperties,
   Type,
   JavaScriptTypeBuilder,
-  SchemaOptions
+  TypeClone
 } from '@sinclair/typebox'
 import { Optional, Kind } from '@sinclair/typebox'
 
@@ -22,7 +22,17 @@ import {
   Context,
   ErrorHandler,
   RequestError,
-  KadrePlugin
+  KadrePlugin,
+  Stream,
+  TStream,
+  TMultipartProperties,
+  TMultipartForm,
+  TUrlFormProperties,
+  TUrlForm,
+  TBody,
+  TByteArray,
+  TStreamable,
+  MultipartFormData
 } from './types'
 import { Server } from 'bun'
 import server from './server'
@@ -116,7 +126,7 @@ const overloadDiscriminer = <
   H extends TProperties,
   P extends TProperties,
   Q extends TProperties,
-  B extends TSchema,
+  B extends TBody,
   R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
 >(
   kadre: Kadre,
@@ -147,7 +157,7 @@ const kadreMethod = <
   H extends TProperties,
   P extends TProperties,
   Q extends TProperties,
-  B extends TSchema,
+  B extends TBody,
   R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
 >(
   kadre: Kadre,
@@ -197,24 +207,61 @@ const kadreMethod = <
   }
 }
 
-export interface FileOptions extends SchemaOptions {
-  mimeType?: string
-  minLength?: number
-  maxLength?: number
-}
-export interface TFile extends TSchema, FileOptions {
-  [Kind]: 'File'
-  static: ReadableStream
-  type: 'file'
-}
+// type PropertyKey<T extends TProperties> = T extends Record<infer F, TSchema> ? F : never
+// type PropertyValue<T extends TProperties> = T extends Record<TPropertyKey, infer F> ? F : never
+
 class KadreTypeBuilder extends JavaScriptTypeBuilder {
-  /** `[Kadre]` Creates a File type */
-  public File(options: FileOptions = {}): TFile {
-    return this.Create({ ...options, [Kind]: 'File', type: 'file' })
+  public ByteArray(): TByteArray {
+    return this.Create({ [Kind]: 'ByteArray', type: 'byteArray', params: {} })
+  }
+  public Stream<T extends TUrlForm>(
+    schema: T
+  ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<[string, string | number | boolean]>; params: unknown[] }
+  public Stream<T extends TMultipartForm>(
+    schema: T
+  ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<MultipartFormData, void, unknown>; params: unknown[] }
+  public Stream<T extends TStreamable>(schema: T): TStream<T> {
+    return {
+      ...TypeClone.Type(schema),
+      [Stream]: 'Stream'
+    }
+  }
+  public MultipartForm<T extends TMultipartProperties>(properties?: T): TMultipartForm {
+    if (!properties) return this.Create({ [Kind]: 'MultipartForm', type: 'multipartForm' })
+    const propertyKeys = Object.getOwnPropertyNames(properties)
+    const clonedProperties = propertyKeys.reduce(
+      //@ts-ignore
+      (acc, key) => ({ ...acc, [key]: TypeClone.Type(properties[key]) }),
+      {} as TProperties
+    )
+    return this.Create({
+      [Kind]: 'MultipartForm',
+      type: 'multipartForm',
+      properties: clonedProperties
+    })
+  }
+  public UrlForm<T extends TUrlFormProperties>(properties?: T): TUrlForm {
+    if (!properties) return this.Create({ [Kind]: 'UrlForm', type: 'urlForm' })
+    const propertyKeys = Object.getOwnPropertyNames(properties)
+    const clonedProperties = propertyKeys.reduce(
+      //@ts-ignore
+      (acc, key) => ({ ...acc, [key]: TypeClone.Type(properties[key]) }),
+      {} as TProperties
+    )
+    return this.Create({ [Kind]: 'UrlForm', type: 'urlForm', properties: clonedProperties })
   }
 }
 
 export const T = new KadreTypeBuilder()
+
+const TestStream: TBody = T.UrlForm({ toto: T.String(), titi: T.Number() })
+const TestStatic: TBody = T.Stream(T.UrlForm({ stream: T.String() }))
+
+// const Tetfstfs = T.Optional(T.Stream())
+
+type TypeTest1 = (typeof TestStream)['static']
+type TypeTest2 = (typeof TestStatic)['static']
+// type TypeTest3 = (typeof Tetfstfs)['static']
 
 export { RequestError } from './types'
 /**
@@ -247,6 +294,7 @@ export class Kadre {
         context.set.status = error.status
         return error.error
       } else {
+        console.error(error)
         return 'Internal Server Error'
       }
     }
@@ -282,7 +330,7 @@ export class Kadre {
     H extends TProperties,
     P extends TProperties,
     Q extends TProperties,
-    B extends TSchema,
+    B extends TBody,
     R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
   >(
     path: string,
@@ -294,7 +342,7 @@ export class Kadre {
     H extends TProperties,
     P extends TProperties,
     Q extends TProperties,
-    B extends TSchema,
+    B extends TBody,
     R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
   >(
     path: string,
@@ -306,7 +354,7 @@ export class Kadre {
     H extends TProperties,
     P extends TProperties,
     Q extends TProperties,
-    B extends TSchema,
+    B extends TBody,
     R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
   >(
     path: string,
@@ -318,7 +366,7 @@ export class Kadre {
     H extends TProperties,
     P extends TProperties,
     Q extends TProperties,
-    B extends TSchema,
+    B extends TBody,
     R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
   >(
     path: string,
@@ -330,7 +378,7 @@ export class Kadre {
     H extends TProperties,
     P extends TProperties,
     Q extends TProperties,
-    B extends TSchema,
+    B extends TBody,
     R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
   >(
     path: string,
@@ -342,7 +390,7 @@ export class Kadre {
     H extends TProperties,
     P extends TProperties,
     Q extends TProperties,
-    B extends TSchema,
+    B extends TBody,
     R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
   >(
     path: string,

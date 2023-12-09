@@ -13,8 +13,10 @@
   - [x] Types
   - [x] errorHandler
   - [x] plugin use()
-  - [x] jsdoc
-  - [x] response type
+  - [ ] jsdoc
+  - [x] on the fly body request validation (REST handle parsing of Multipart arrays + Multipart static )
+
+- [ ] Unit tests
 
 - Todo api example
 
@@ -30,7 +32,6 @@
 
   - [ ] Headers authentication pos/update/delete
 
-- [ ] Unit tests
 - [ ] Documentation
 
 - [ ] create-kadre

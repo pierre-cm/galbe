@@ -1,4 +1,4 @@
-import { PType, parseEntry, requestBodyParser, requestPathParser, responseParser, validateBody } from 'parser'
+import { parseEntry, requestBodyParser, requestPathParser, responseParser } from 'parser'
 import { Context, Hook, NotFoundError, RequestError, Route } from 'types'
 import { Kadre } from 'index'
 
@@ -45,7 +45,7 @@ export default (kadre: Kadre, port?: number) => {
         let inQuery = Object.fromEntries(url.searchParams.entries())
         let inParams = requestPathParser(url.pathname, route.path)
 
-        context.body = await requestBodyParser(req.body, inHeaders)
+        context.body = await requestBodyParser(req.body, inHeaders, schema.body)
         context.headers = { ...context.headers, ...inHeaders }
         context.query = inQuery
         context.params = inParams
@@ -72,13 +72,6 @@ export default (kadre: Kadre, port?: number) => {
         }
         try {
           if (schema?.params) context.params = parseEntry(context.params, schema.params, { name: 'params' })
-        } catch (error) {
-          if (error instanceof RequestError) errors.push(error)
-          else throw handleInternalError(error)
-        }
-        try {
-          if (schema?.body)
-            context.body = validateBody(context.body, schema.body as PType, inHeaders) ? context.body : undefined
         } catch (error) {
           if (error instanceof RequestError) errors.push(error)
           else throw handleInternalError(error)
@@ -113,7 +106,7 @@ export default (kadre: Kadre, port?: number) => {
         else response = await route.handler(context)
         if (callStackError) {
           context.set.status = 500
-          throw new Response('Internal server error', { status: 500 })
+          throw new Response('Internal Server Error', { status: 500 })
         }
 
         const resp = responseParser(response)
@@ -122,6 +115,11 @@ export default (kadre: Kadre, port?: number) => {
           headers: { ...context.set.headers, 'Content-Type': resp.type }
         })
       } catch (error) {
+        if (error instanceof RequestError)
+          return new Response(JSON.stringify(error.error), {
+            status: error.status,
+            headers: { 'Content-Type': 'application/json' }
+          })
         try {
           context.set.status = 500
           let response = responseParser(kadre.errorHandler(error, context))
