@@ -44,20 +44,12 @@ export const validate = (elt: any, schema: TSchema, parse = false): any => {
     if (parse && typeof elt === 'string') {
       try {
         elt = JSON.parse(elt)
-      } catch {
+      } catch (error) {
         throw 'Not a valid array'
       }
     }
     if (!Array.isArray(elt)) throw 'Not a valid array'
-    const err: ValidationError = {}
-    for (let [idx, v] of elt.entries()) {
-      try {
-        validate(v, schema.items)
-      } catch (e) {
-        err[idx] = e as ValidationError
-      }
-    }
-    if (Object.keys(err).length) errors.push(err)
+    schemaValidation(elt, schema)
   } else if (schema[Kind] === 'ByteArray') {
     if (!(elt instanceof Uint8Array)) throw 'Not a valid ByteArray'
   } else if (schema[Kind] === 'Any') {

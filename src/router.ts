@@ -24,7 +24,7 @@ export class KadreRouter {
   routes: RouteTree
   prefix: string
   constructor(prefix?: string) {
-    this.routes = { GET: {}, POST: {}, PUT: {}, PATCH: {}, DELETE: {} }
+    this.routes = { GET: {}, POST: {}, PUT: {}, PATCH: {}, DELETE: {}, OPTIONS: {} }
     prefix = prefix || ''
     if (prefix && !prefix.match(/^\//)) prefix = `/${prefix}`
     this.prefix = prefix

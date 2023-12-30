@@ -9,6 +9,8 @@ const handleInternalError = (error: any) => {
 
 export default (kadre: Kadre, port?: number) => {
   const router = kadre.router
+  if (kadre?.config?.basePath && kadre?.config?.basePath[0] !== '/')
+    kadre.config.basePath = `/${kadre?.config?.basePath}`
   return Bun.serve({
     port: port || 3000,
     async fetch(req) {
@@ -28,10 +30,9 @@ export default (kadre: Kadre, port?: number) => {
       const url = new URL(req.url)
       let route: Route
       let response: any = ''
-
       try {
         // find route
-        if (url.pathname.match(new RegExp(`^\\/${kadre.config?.basePath || ''}`))) throw new NotFoundError()
+        if (!url.pathname.match(new RegExp(`^${kadre.config?.basePath || ''}`))) throw new NotFoundError()
         try {
           route = router.find(req.method, url.pathname)
         } catch (error) {

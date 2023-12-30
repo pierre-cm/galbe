@@ -36,7 +36,7 @@ export type TBody =
   | TUnion
   | TStream
 export type TStreamable = TByteArray | TString | TArray | TUrlForm | TMultipartForm
-export type TUrlFormParam = TString | TBoolean | TNumber | TInteger | TLiteral | TAny | TUnion
+export type TUrlFormParam = TString | TBoolean | TNumber | TInteger | TLiteral | TArray | TUnion
 export type TMultipartFormParam = TByteArray | TUrlFormParam | TObject | TArray
 export type MaybeArray<T> = T | T[]
 

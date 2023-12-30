@@ -24,6 +24,6 @@
     "emitDeclarationOnly": true,
     "outDir": "./dist",
   },
-  "include":["src/**/*","bin/**/*","script/**/*.ts"],
-  "exclude": ["node_modules", "bin/**/*","script/**/*.ts"]
+  "include":["src/**/*","test/**/*", "bin/**/*","script/**/*.ts"],
+  "exclude": ["node_modules", "test/**/*", "bin/**/*","script/**/*.ts"]
 }
