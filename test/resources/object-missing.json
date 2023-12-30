@@ -1,0 +1,6 @@
+{
+    "string": "test",
+    "number": 3.14,
+    "bool": true,
+    "arrayNumber": [0]
+}
