@@ -25,5 +25,5 @@
     "outDir": "./dist",
   },
   "include":["src/**/*","test/**/*", "bin/**/*","script/**/*.ts"],
-  "exclude": ["node_modules", "test/**/*", "bin/**/*","script/**/*.ts"]
+  "exclude": ["node_modules", "test/**/*", "bin/**/*","script/**/*.ts", "docs"]
 }
