@@ -1,11 +1,11 @@
+import type { KadreConfig } from './types'
+
 import { readdir } from 'fs/promises'
 import { extname } from 'path'
 import { glob } from 'glob'
 import { parse } from 'acorn'
 import { simple } from 'acorn-walk'
-
-import { Kadre } from 'index'
-import { KadreConfig } from './types'
+import { Kadre } from './index'
 import { transformSync } from '@swc/core'
 
 export type RouteMetadata = Record<string, Record<string, Record<string, string | string[]>>>

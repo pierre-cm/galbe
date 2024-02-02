@@ -1,6 +1,8 @@
-import { parseEntry, requestBodyParser, requestPathParser, responseParser } from 'parser'
-import { Context, Hook, NotFoundError, RequestError, Route } from 'types'
-import { Kadre } from 'index'
+import type { Context, Hook, Route } from './types'
+
+import { NotFoundError, RequestError } from './types'
+import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
+import { Kadre } from './index'
 
 const handleInternalError = (error: any) => {
   console.error(error)

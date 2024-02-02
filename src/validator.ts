@@ -1,9 +1,10 @@
-import { Kind, Optional, TProperties, TSchema } from '@sinclair/typebox'
+import type { TProperties, TSchema } from '@sinclair/typebox'
+
+import { Kind, Optional } from '@sinclair/typebox'
 
 export const validate = (elt: any, schema: TSchema, parse = false): any => {
   type ValidationError = string | string[] | { [key: string]: ValidationError }
   const errors: ValidationError[] = []
-
   if (schema[Kind] === 'Boolean') {
     if (parse && typeof elt === 'string') elt = elt === 'true' ? true : elt === 'false' ? false : null
     if (elt !== true && elt !== false) throw 'Not a valid boolean'
@@ -27,6 +28,7 @@ export const validate = (elt: any, schema: TSchema, parse = false): any => {
       }
     }
     if (typeof elt !== 'object') throw 'Not a valid object'
+    if (Array.isArray(elt)) throw 'Not a valid object'
     const err: ValidationError = {}
     Object.entries(schema.properties as TProperties).forEach(([k, s]) => {
       if (!(k in elt)) {
@@ -34,7 +36,7 @@ export const validate = (elt: any, schema: TSchema, parse = false): any => {
         return
       }
       try {
-        validate(elt[k], s)
+        validate(elt[k], s, parse)
       } catch (e) {
         err[k] = e as ValidationError
       }
@@ -51,6 +53,8 @@ export const validate = (elt: any, schema: TSchema, parse = false): any => {
     if (!Array.isArray(elt)) throw 'Not a valid array'
     schemaValidation(elt, schema)
   } else if (schema[Kind] === 'ByteArray') {
+    if (parse && typeof elt === 'string') elt = Uint8Array.from(elt, c => c.charCodeAt(0))
+    else if (parse && Array.isArray(elt)) elt = new Uint8Array(elt)
     if (!(elt instanceof Uint8Array)) throw 'Not a valid ByteArray'
   } else if (schema[Kind] === 'Any') {
   } else {

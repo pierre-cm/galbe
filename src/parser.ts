@@ -1,27 +1,37 @@
-import { Kind, Optional, Static, TObject, TProperties } from '@sinclair/typebox'
-import {
+import type { Static, TObject, TProperties } from '@sinclair/typebox'
+import type {
   MultipartFormData,
   MaybeArray,
-  RequestError,
   TBody,
   TMultipartForm,
   TUrlForm,
-  Stream,
   TUrlFormParam,
   TMultipartFormParam,
   TStream
-} from 'index'
-import { validate } from 'validator'
+} from './index'
+
+import { Kind, Optional } from '@sinclair/typebox'
+import { RequestError, Stream, T } from './index'
+import { validate } from './validator'
 
 const textDecoder = new TextDecoder()
 const textEncoder = new TextEncoder()
 
-const CONTENT_SCHEMA_COMPATIBILITY = {
-  text: ['String', 'Boolean', 'Number', 'Object', 'Array'],
-  json: ['String', 'Boolean', 'Number', 'Object', 'Array'],
-  urlForm: ['UrlForm'],
-  multipartForm: ['MultipartForm']
-}
+const asynGenToRS = (gen: AsyncGenerator) =>
+  new ReadableStream({
+    async start(controller) {
+      for await (const chunk of gen) {
+        controller.enqueue(chunk)
+      }
+      controller.close()
+    }
+  })
+
+const BA_HEADER = 'application/octet-stream'
+const JSON_HEADER = 'application/json'
+const TXT_HEADER_RX = /^text\//
+const FORM_HEADER_RX = /^application\/x-www-form-urlencoded/
+const MP_HEADER_RX = /^multipart\/form-data/
 
 export const requestBodyParser = async (
   body: ReadableStream | null,
@@ -29,44 +39,110 @@ export const requestBodyParser = async (
   schema?: TBody
 ) => {
   const { 'content-type': contentType, 'content-length': _contentLength } = headers
+  const kind = schema?.[Kind]
   const isStream = schema && Stream in schema
   try {
     if (body === null) {
-      if (schema && schema[Kind] !== 'Null' && schema[Kind] !== 'Undefined')
-        throw new RequestError({ status: 400, error: { body: 'Required' } })
-      return undefined
-    }
-    if (contentType?.match(/^text\//)) {
-      if (schema && !CONTENT_SCHEMA_COMPATIBILITY['text'].includes(schema[Kind]))
-        throw new RequestError({ status: 400, error: { body: `Expected ${schema[Kind]}` } })
-      return isStream ? $streamToString(body) : await streamToString(body, schema)
-    } else if (contentType?.match(/^application\/json/)) {
-      if (schema && !CONTENT_SCHEMA_COMPATIBILITY['json'].includes(schema[Kind]))
-        throw new RequestError({ status: 400, error: { body: `Expected ${schema[Kind]}` } })
-      try {
-        if (schema) return await streamToString(body, schema)
-        else return JSON.parse(await streamToString(body))
-      } catch (err: any) {
-        if (err instanceof SyntaxError)
-          throw new RequestError({ status: 400, error: { body: err?.message || 'Parsing error' } })
-        throw new RequestError({ status: 400, error: { body: err || 'Parsing error' } })
+      if (schema) {
+        if (kind === 'ByteArray') {
+          if (Stream in schema) {
+            return new ReadableStream({
+              start(controller) {
+                controller.enqueue(new Uint8Array())
+                controller.close()
+              }
+            })
+          } else return new Uint8Array()
+        } else {
+          throw new RequestError({ status: 400, error: { body: `Not a valid ${kind}` } })
+        }
+      } else {
+        if (contentType === BA_HEADER) {
+          return new Uint8Array()
+        } else if (contentType === JSON_HEADER) {
+          throw new RequestError({ status: 400, error: { body: 'Not a valid json' } })
+        } else if (contentType?.match(TXT_HEADER_RX)) {
+          throw new RequestError({ status: 400, error: { body: 'Not a valid text' } })
+        } else if (contentType?.match(FORM_HEADER_RX)) {
+          throw new RequestError({ status: 400, error: { body: 'Not a valid form' } })
+        } else if (contentType?.match(MP_HEADER_RX)) {
+          throw new RequestError({ status: 400, error: { body: 'Not a valid multipart form' } })
+        } else return null
       }
-    } else if (contentType?.match(/^application\/x-www-form-urlencoded/)) {
-      if (schema && !CONTENT_SCHEMA_COMPATIBILITY['urlForm'].includes(schema[Kind]))
-        throw new RequestError({ status: 400, error: { body: `Expected ${schema[Kind]}` } })
-      return isStream ? $streamToUrlForm(body, schema as TStream<TUrlForm>) : streamToUrlForm(body, schema as TUrlForm)
-    } else if (contentType?.match(/^multipart\/form-data/)) {
-      if (schema && !CONTENT_SCHEMA_COMPATIBILITY['multipartForm'].includes(schema[Kind]))
-        throw new RequestError({ status: 400, error: { body: `Expected ${schema[Kind]}` } })
-      const boundary = contentType.match(/boundary\="?([^"]*)"?;?.*$/)?.[1] || ''
-      return isStream
-        ? $streamToMultipartForm(body, boundary, schema as TStream<TMultipartForm>)
-        : streamToMultipartForm(body, boundary, schema as TMultipartForm)
     } else {
-      if (!schema) return body
-      if (schema[Kind] === 'String')
-        return Stream in schema ? $streamToString(body) : await streamToString(body, schema)
-      else return await streamToString(body, schema)
+      if (kind === 'ByteArray') {
+        if (schema && isStream) return body
+        const bytes = []
+        for await (const b of body) bytes.push(...b)
+        return new Uint8Array(bytes)
+      } else if (kind === 'String' && isStream) {
+        return asynGenToRS($streamToString(body))
+      } else if (
+        (!contentType?.match(FORM_HEADER_RX) && kind === 'UrlForm') ||
+        (!contentType?.match(MP_HEADER_RX) && kind === 'MultipartForm')
+      ) {
+        let received = contentType?.match(FORM_HEADER_RX)
+          ? 'UrlForm'
+          : contentType?.match(MP_HEADER_RX)
+          ? 'MultipartForm'
+          : contentType
+        throw new RequestError({ status: 400, error: { body: `Expected ${kind}, received ${received}` } })
+      } else if (!contentType || contentType === BA_HEADER) {
+        if (!schema) {
+          if (schema && isStream) return body
+          const bytes = []
+          for await (const b of body) bytes.push(...b)
+          return new Uint8Array(bytes)
+        } else {
+          if (isStream) return body
+          else return await streamToString(body, schema)
+        }
+      } else if (contentType === JSON_HEADER) {
+        if (!schema) {
+          return await streamToString(body, T.Object(T.Any()))
+        } else {
+          const str = await streamToString(body)
+          let json
+          try {
+            json = JSON.parse(str)
+          } catch (err: any) {
+            throw new RequestError({
+              status: 400,
+              error: { body: err?.message ?? 'Parsing error' }
+            })
+          }
+          return validate(json, schema, true)
+        }
+      } else if (contentType.match(TXT_HEADER_RX)) {
+        if (!schema) {
+          return await streamToString(body)
+        } else {
+          return await streamToString(body, schema)
+        }
+      } else if (contentType.match(FORM_HEADER_RX)) {
+        if (!schema) {
+          return await streamToUrlForm(body)
+        } else {
+          if (kind !== 'UrlForm')
+            throw new RequestError({ status: 400, error: { body: `Expected ${kind}, received UrlForm` } })
+          if (isStream) return asynGenToRS($streamToUrlForm(body, schema as TStream<TUrlForm>))
+          else return await streamToUrlForm(body, schema as TUrlForm)
+        }
+      } else if (contentType.match(MP_HEADER_RX)) {
+        const boundary = contentType.match(/boundary\="?([^"]*)"?;?.*$/)?.[1] || ''
+        if (!schema) {
+          return await streamToMultipartForm(body, boundary)
+        } else {
+          if (kind !== 'MultipartForm')
+            throw new RequestError({ status: 400, error: { body: `Expected ${kind}, received MultipartForm` } })
+          if (isStream) return asynGenToRS($streamToMultipartForm(body, boundary, schema as TStream<TMultipartForm>))
+          else {
+            return streamToMultipartForm(body, boundary, schema as TMultipartForm)
+          }
+        }
+      } else {
+        return body
+      }
     }
   } catch (error) {
     if (error instanceof RequestError) throw error
@@ -352,7 +428,7 @@ const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary:
     Object.entries(schema?.properties || {}).filter(([_, v]: [string, any]) => !(Optional in v))
   )
   for await (const chunk of $streamToMultipartForm(data, boundary)) {
-    if (schema?.properties[chunk.headers.name][Kind] === 'Array') {
+    if (schema?.properties?.[chunk.headers.name]?.[Kind] === 'Array') {
       if (chunk.headers.name in res) {
         res[chunk.headers.name].content.push(chunk.content)
       } else {
@@ -446,7 +522,7 @@ const paramParser = (value: string | string[] | null, type: TMultipartFormParam)
     } else if (type[Kind] === 'Array') {
       return [paramParser(value, type.items as TMultipartFormParam) as Static<TUrlFormParam>]
     } else if (type[Kind] === 'ByteArray') {
-      return textEncoder.encode(value)
+      return Uint8Array.from(value, c => c.charCodeAt(0))
     } else if (type[Kind] === 'Union') {
       const union = Object.values(type.anyOf)
       for (const elt of union) {
@@ -457,6 +533,8 @@ const paramParser = (value: string | string[] | null, type: TMultipartFormParam)
         }
       }
       throw `${value} could not be parsed to any of ${union.map(u => u[Kind])}`
+    } else if (type[Kind] === 'Any') {
+      return value
     }
     throw `Unknown parsing type ${type[Kind]}`
   }

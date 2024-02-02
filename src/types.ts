@@ -1,4 +1,4 @@
-import {
+import type {
   TSchema,
   TBoolean,
   TNumber,
@@ -9,14 +9,15 @@ import {
   TObject,
   TProperties,
   TUnion,
-  TAny,
   Static,
   OptionalPropertyKeys,
   ReadonlyOptionalPropertyKeys,
   ReadonlyPropertyKeys,
   RequiredPropertyKeys,
-  Kind
+  TAny
 } from '@sinclair/typebox'
+
+import { Kind } from '@sinclair/typebox'
 import { Kadre } from './index'
 
 export const Stream = Symbol.for('Kadre.Stream')
@@ -25,6 +26,7 @@ export type TStream<T extends TSchema = TSchema> = T & {
 }
 
 export type TBody =
+  | TByteArray
   | TString
   | TBoolean
   | TNumber
@@ -35,8 +37,8 @@ export type TBody =
   | TMultipartForm
   | TUnion
   | TStream
-export type TStreamable = TByteArray | TString | TArray | TUrlForm | TMultipartForm
-export type TUrlFormParam = TString | TBoolean | TNumber | TInteger | TLiteral | TArray | TUnion
+export type TStreamable = TByteArray | TString | TUrlForm | TMultipartForm
+export type TUrlFormParam = TString | TByteArray | TBoolean | TNumber | TInteger | TLiteral | TArray | TAny | TUnion
 export type TMultipartFormParam = TByteArray | TUrlFormParam | TObject | TArray
 export type MaybeArray<T> = T | T[]
 

@@ -1,18 +1,7 @@
-import {
-  Static,
-  TSchema,
-  TArray,
-  TObject,
-  TProperties,
-  Type,
-  JavaScriptTypeBuilder,
-  TypeClone
-} from '@sinclair/typebox'
-import { Optional, Kind } from '@sinclair/typebox'
-
-import { OpenAPIV3 } from 'openapi-types'
-import { RouteMetadata, defineRoutes } from './routes'
-import {
+import type { Server } from 'bun'
+import type { Static, TSchema, TArray, TObject, TProperties, TString } from '@sinclair/typebox'
+import type { RouteMetadata } from './routes'
+import type {
   KadreConfig,
   Method,
   Schema,
@@ -21,9 +10,7 @@ import {
   Endpoint,
   Context,
   ErrorHandler,
-  RequestError,
   KadrePlugin,
-  Stream,
   TStream,
   TMultipartProperties,
   TMultipartForm,
@@ -34,9 +21,13 @@ import {
   TStreamable,
   MultipartFormData
 } from './types'
-import { Server } from 'bun'
+
+import { Type, JavaScriptTypeBuilder, TypeClone, Optional, Kind } from '@sinclair/typebox'
+import { OpenAPIV3 } from 'openapi-types'
 import server from './server'
 import { KadreRouter } from './router'
+import { defineRoutes } from './routes'
+import { Stream, RequestError } from './types'
 
 const PARSE_PARAM_RGX = /^\s*\{(\w+)\}\s*(\w+)\s*(@deprecated)?\s+(.*)$/
 const parseStringParam = (
@@ -211,20 +202,26 @@ const kadreMethod = <
 // type PropertyValue<T extends TProperties> = T extends Record<TPropertyKey, infer F> ? F : never
 
 class KadreTypeBuilder extends JavaScriptTypeBuilder {
-  public ByteArray(): TByteArray {
-    return this.Create({ [Kind]: 'ByteArray', type: 'byteArray', params: {} })
-  }
   public Stream<T extends TUrlForm>(
     schema: T
   ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<[string, string | number | boolean]>; params: unknown[] }
   public Stream<T extends TMultipartForm>(
     schema: T
   ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<MultipartFormData, void, unknown>; params: unknown[] }
+  public Stream<T extends TByteArray>(
+    schema: T
+  ): Omit<TStream<T>, 'static'> & { static: ReadableStream<Uint8Array>; params: unknown[] }
+  public Stream<T extends TString>(
+    schema: T
+  ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<string>; params: unknown[] }
   public Stream<T extends TStreamable>(schema: T): TStream<T> {
     return {
       ...TypeClone.Type(schema),
       [Stream]: 'Stream'
     }
+  }
+  public ByteArray(): TByteArray {
+    return this.Create({ [Kind]: 'ByteArray', type: 'byteArray', params: {} })
   }
   public MultipartForm<T extends TMultipartProperties>(properties?: T): TMultipartForm {
     if (!properties) return this.Create({ [Kind]: 'MultipartForm', type: 'multipartForm' })
