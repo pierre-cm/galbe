@@ -5,30 +5,34 @@ import { Kind, Optional } from '@sinclair/typebox'
 export const validate = (elt: any, schema: TSchema, parse = false): any => {
   type ValidationError = string | string[] | { [key: string]: ValidationError }
   const errors: ValidationError[] = []
+  const iElt = elt
+
   if (schema[Kind] === 'Boolean') {
     if (parse && typeof elt === 'string') elt = elt === 'true' ? true : elt === 'false' ? false : null
-    if (elt !== true && elt !== false) throw 'Not a valid boolean'
+    if (elt !== true && elt !== false) throw `${iElt} is not a valid boolean. Should be 'true' or 'false'`
   } else if (schema[Kind] === 'Integer') {
     if (parse && typeof elt === 'string') elt = Number(elt)
-    if (!Number.isInteger(elt)) throw 'Not a valid integer'
+    if (!Number.isInteger(elt)) throw `${iElt} is not a valid integer`
     schemaValidation(elt, schema)
   } else if (schema[Kind] === 'Number') {
     if (parse && typeof elt === 'string') elt = Number(elt)
-    if (!Number.isFinite(elt)) throw 'Not a valid number'
+    if (!Number.isFinite(elt)) throw `${iElt} is not a valid number`
     schemaValidation(elt, schema)
   } else if (schema[Kind] === 'String') {
-    if (!(typeof elt === 'string')) throw 'Not a valid string'
+    if (!(typeof elt === 'string')) throw `${iElt} is not a valid string`
     schemaValidation(elt, schema)
+  } else if (schema[Kind] === 'Literal') {
+    if (elt !== schema.const) throw `${iElt} is not a valid value`
   } else if (schema[Kind] === 'Object') {
     if (parse && typeof elt === 'string') {
       try {
         elt = JSON.parse(elt)
       } catch {
-        throw 'Not a valid object'
+        throw `${iElt} is not a valid object`
       }
     }
-    if (typeof elt !== 'object') throw 'Not a valid object'
-    if (Array.isArray(elt)) throw 'Not a valid object'
+    if (typeof elt !== 'object') throw `${iElt} is not a valid object`
+    if (Array.isArray(elt)) throw `Expected an object, not an array`
     const err: ValidationError = {}
     Object.entries(schema.properties as TProperties).forEach(([k, s]) => {
       if (!(k in elt)) {
@@ -56,6 +60,20 @@ export const validate = (elt: any, schema: TSchema, parse = false): any => {
     if (parse && typeof elt === 'string') elt = Uint8Array.from(elt, c => c.charCodeAt(0))
     else if (parse && Array.isArray(elt)) elt = new Uint8Array(elt)
     if (!(elt instanceof Uint8Array)) throw 'Not a valid ByteArray'
+  } else if (schema[Kind] === 'Union') {
+    const union = Object.values(schema.anyOf)
+    let valid = false
+    for (const u of union) {
+      try {
+        elt = validate(elt, u as TSchema, parse)
+        valid = true
+        break
+      } catch (err) {
+        continue
+      }
+    }
+    // @ts-ignore
+    if (!valid) throw `${elt} could not be parsed to any of: ${union.map(u => u?.const ?? u[Kind]).join(', ')}`
   } else if (schema[Kind] === 'Any') {
   } else {
     throw `Unsupported schema type ${schema[Kind]}`

@@ -14,7 +14,7 @@ export default (kadre: Kadre, port?: number) => {
   if (kadre?.config?.basePath && kadre?.config?.basePath[0] !== '/')
     kadre.config.basePath = `/${kadre?.config?.basePath}`
   return Bun.serve({
-    port: port || 3000,
+    port: port || kadre.config?.port || 3000,
     async fetch(req) {
       const context: Context = {
         request: req,

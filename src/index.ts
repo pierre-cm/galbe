@@ -210,7 +210,7 @@ class KadreTypeBuilder extends JavaScriptTypeBuilder {
   ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<MultipartFormData, void, unknown>; params: unknown[] }
   public Stream<T extends TByteArray>(
     schema: T
-  ): Omit<TStream<T>, 'static'> & { static: ReadableStream<Uint8Array>; params: unknown[] }
+  ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<Uint8Array>; params: unknown[] }
   public Stream<T extends TString>(
     schema: T
   ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<string>; params: unknown[] }
@@ -306,13 +306,13 @@ export class Kadre {
   }
   async listen(port?: number) {
     if (this.listening) this.stop()
-    if (Bun.env.BUN_ENV === 'development') {
+    if (Bun.env.BUN_ENV === 'development' && !!this.config?.routes) {
       console.log('🏗️  \x1b[1;30mConstructing routes\x1b[0m')
       await defineRoutes(this.config || {}, this)
       console.log('\n✅ \x1b[1;30mdone\x1b[0m')
     }
     this.server = server(this, port)
-    const url = `http://localhost:${port}${this.config?.basePath || ''}`
+    const url = `http://localhost:${this.config?.port ?? port}${this.config?.basePath || ''}`
     console.log(`\n\x1b[1;30m🚀 API running at\x1b[0m \x1b[4;34m${url}\x1b[0m`)
     this.listening = true
     return this.server

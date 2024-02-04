@@ -1,0 +1,8 @@
+{
+    "string": "test"
+    "number": 3.14,
+    "bool": true,
+    "arrayStr": ["un", "deux", "trois"],
+    "arrayNumber": [0],
+    "arrayBool": [true, false]
+}

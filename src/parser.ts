@@ -13,19 +13,18 @@ import type {
 import { Kind, Optional } from '@sinclair/typebox'
 import { RequestError, Stream, T } from './index'
 import { validate } from './validator'
+import { readableStreamToArrayBuffer } from 'bun'
 
 const textDecoder = new TextDecoder()
 const textEncoder = new TextEncoder()
 
-const asynGenToRS = (gen: AsyncGenerator) =>
-  new ReadableStream({
-    async start(controller) {
-      for await (const chunk of gen) {
-        controller.enqueue(chunk)
-      }
-      controller.close()
-    }
-  })
+async function* rsToAsyncIterator(readableStream: ReadableStream) {
+  try {
+    for await (const chunk of readableStream) yield chunk
+  } finally {
+    readableStream.cancel()
+  }
+}
 
 const BA_HEADER = 'application/octet-stream'
 const JSON_HEADER = 'application/json'
@@ -71,12 +70,11 @@ export const requestBodyParser = async (
       }
     } else {
       if (kind === 'ByteArray') {
-        if (schema && isStream) return body
-        const bytes = []
-        for await (const b of body) bytes.push(...b)
+        if (isStream) return rsToAsyncIterator(body)
+        const bytes = await readableStreamToArrayBuffer(body)
         return new Uint8Array(bytes)
       } else if (kind === 'String' && isStream) {
-        return asynGenToRS($streamToString(body))
+        return $streamToString(body)
       } else if (
         (!contentType?.match(FORM_HEADER_RX) && kind === 'UrlForm') ||
         (!contentType?.match(MP_HEADER_RX) && kind === 'MultipartForm')
@@ -89,12 +87,12 @@ export const requestBodyParser = async (
         throw new RequestError({ status: 400, error: { body: `Expected ${kind}, received ${received}` } })
       } else if (!contentType || contentType === BA_HEADER) {
         if (!schema) {
-          if (schema && isStream) return body
+          if (isStream) return rsToAsyncIterator(body)
           const bytes = []
           for await (const b of body) bytes.push(...b)
           return new Uint8Array(bytes)
         } else {
-          if (isStream) return body
+          if (isStream) return rsToAsyncIterator(body)
           else return await streamToString(body, schema)
         }
       } else if (contentType === JSON_HEADER) {
@@ -125,7 +123,7 @@ export const requestBodyParser = async (
         } else {
           if (kind !== 'UrlForm')
             throw new RequestError({ status: 400, error: { body: `Expected ${kind}, received UrlForm` } })
-          if (isStream) return asynGenToRS($streamToUrlForm(body, schema as TStream<TUrlForm>))
+          if (isStream) return $streamToUrlForm(body, schema as TStream<TUrlForm>)
           else return await streamToUrlForm(body, schema as TUrlForm)
         }
       } else if (contentType.match(MP_HEADER_RX)) {
@@ -135,13 +133,13 @@ export const requestBodyParser = async (
         } else {
           if (kind !== 'MultipartForm')
             throw new RequestError({ status: 400, error: { body: `Expected ${kind}, received MultipartForm` } })
-          if (isStream) return asynGenToRS($streamToMultipartForm(body, boundary, schema as TStream<TMultipartForm>))
+          if (isStream) return $streamToMultipartForm(body, boundary, schema as TStream<TMultipartForm>)
           else {
             return streamToMultipartForm(body, boundary, schema as TMultipartForm)
           }
         }
       } else {
-        return body
+        return rsToAsyncIterator(body)
       }
     }
   } catch (error) {
@@ -223,6 +221,7 @@ async function* $streamToUrlForm(
   for (const [k, s] of Object.entries(required)) {
     //@ts-ignore
     if (s[Kind] === 'Array') {
+      yield [k, []]
       delete required[k]
     }
   }
@@ -230,7 +229,7 @@ async function* $streamToUrlForm(
   if (reqKeys.length > 0)
     throw new RequestError({
       status: 400,
-      error: { body: `Missing field${reqKeys.length > 1 ? 's' : ''} ${[...reqKeys]}` }
+      error: { body: `Missing field${reqKeys.length > 1 ? 's' : ''}: ${reqKeys.join(', ')}` }
     })
 }
 const streamToUrlForm = async (body: ReadableStream<Uint8Array>, schema?: TUrlForm) => {
@@ -268,7 +267,7 @@ const streamToUrlForm = async (body: ReadableStream<Uint8Array>, schema?: TUrlFo
   if (reqKeys.length > 0)
     throw new RequestError({
       status: 400,
-      error: { body: `Missing field${reqKeys.length > 1 ? 's' : ''} ${[...reqKeys]}` }
+      error: { body: `Missing field${reqKeys.length > 1 ? 's' : ''}: ${reqKeys.join(', ')}` }
     })
   return object
 }
@@ -278,10 +277,8 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
   let bK: Uint8Array = new Uint8Array()
   let bV: Uint8Array = new Uint8Array()
   let start = 0
-  const required = new Set(
-    Object.entries(schema?.properties || {})
-      .filter(([_, v]: [string, any]) => !(Optional in v))
-      .map(([k, _]) => k)
+  const required = Object.fromEntries(
+    Object.entries(schema?.properties || {}).filter(([_, v]: [string, any]) => !(Optional in v))
   )
   for await (const chunk of data) {
     start = 0
@@ -300,9 +297,9 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
         bV.set(chunk.slice(start, i), rest.length)
         bV = bV.slice(1, bV.length - 4)
         const headers = parseMultipartHeader(textDecoder.decode(bK))
-        if (headers)
+        if (headers) {
           try {
-            required.delete(headers.name)
+            delete required[headers.name]
             yield {
               headers,
               content: parseMultipartContent(bV, headers, schema)
@@ -311,6 +308,7 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
             if (err instanceof RequestError) throw err
             throw new RequestError({ status: 400, error: { body: { [headers.name]: err } } })
           }
+        }
         bK = new Uint8Array()
         bV = new Uint8Array()
         start = i + bound.length
@@ -332,21 +330,31 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
       }
     }
   }
-  const headers = parseMultipartHeader(textDecoder.decode(bK))
-  if (headers)
-    try {
-      required.delete(headers.name)
-      yield {
-        headers,
-        content: parseMultipartContent(bV, headers, schema)
-      }
-    } catch (err) {
-      throw new RequestError({ status: 400, error: { body: { [headers.name]: err } } })
+  // const headers = parseMultipartHeader(textDecoder.decode(bK))
+  // console.log(headers)
+  // if (headers) {
+  //   try {
+  //     delete required[headers.name]
+  //     yield {
+  //       headers,
+  //       content: parseMultipartContent(bV, headers, schema)
+  //     }
+  //   } catch (err) {
+  //     throw new RequestError({ status: 400, error: { body: { [headers.name]: err } } })
+  //   }
+  // }
+  for (const [k, s] of Object.entries(required)) {
+    //@ts-ignore
+    if (s[Kind] === 'Array') {
+      yield { headers: { name: k }, content: [] }
+      delete required[k]
     }
-  if (required.size > 0)
+  }
+  const reqKeys = Object.keys(required)
+  if (reqKeys.length > 0)
     throw new RequestError({
       status: 400,
-      error: { body: `Missing field${required.size > 1 ? 's' : ''} ${[...required]}` }
+      error: { body: `Missing field${reqKeys.length > 1 ? 's' : ''}: ${reqKeys.join(', ')}` }
     })
 }
 const parseMultipartHeader = (header: string): { name: string; [key: string]: string } | null => {
@@ -377,18 +385,17 @@ const parseMultipartContent = (
   let result: any = content
   if (type === 'text/plain') {
     const str = textDecoder.decode(content).trim()
-    let s = schema?.properties[headers.name]
-    return schema?.properties && headers.name in schema?.properties
-      ? paramParser(str, s?.[Kind] === 'Array' ? s?.items : s)
-      : str
+    let s = schema?.properties?.[headers.name]
+    return s ? paramParser(str, s?.[Kind] === 'Array' ? s?.items : s) : str
   } else if (type === 'application/json') {
-    if (!schema?.properties || !(headers.name in schema?.properties))
+    if (!schema?.properties || !(headers.name in schema?.properties)) {
       try {
         result = JSON.parse(textDecoder.decode(content).trim())
       } catch (err: any) {
         throw new RequestError({ status: 400, error: { body: { [headers.name]: err?.message || 'Parsing error' } } })
       }
-    else if (schema?.properties) {
+    } else if (schema?.properties) {
+      // console.log('YAAYAYA')
       if (schema?.properties[headers.name][Kind] === 'Object') {
         try {
           result = JSON.parse(textDecoder.decode(content).trim())
@@ -428,16 +435,24 @@ const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary:
     Object.entries(schema?.properties || {}).filter(([_, v]: [string, any]) => !(Optional in v))
   )
   for await (const chunk of $streamToMultipartForm(data, boundary)) {
-    if (schema?.properties?.[chunk.headers.name]?.[Kind] === 'Array') {
-      if (chunk.headers.name in res) {
-        res[chunk.headers.name].content.push(chunk.content)
-      } else {
+    if (chunk.headers.name in res) {
+      if (!Array.isArray(res[chunk.headers.name].content))
+        res[chunk.headers.name].content = [res[chunk.headers.name].content]
+      res[chunk.headers.name].content.push(chunk.content)
+    } else {
+      if (schema?.properties?.[chunk.headers.name]?.[Kind] === 'Array')
         res[chunk.headers.name] = { ...chunk, content: [chunk.content] }
-      }
-    } else res[chunk.headers.name] = chunk
+      else res[chunk.headers.name] = chunk
+    }
     delete required[chunk.headers.name]
+
     if (schema?.properties && chunk?.headers?.name in schema.properties) {
       try {
+        if (
+          Array.isArray(res[chunk.headers.name].content) &&
+          schema?.properties?.[chunk.headers.name]?.[Kind] !== 'Array'
+        )
+          throw `Multiple values found`
         res[chunk.headers.name].content = validate(
           res[chunk.headers.name].content,
           schema?.properties[chunk.headers.name],
@@ -473,7 +488,7 @@ const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary:
   if (reqKeys.length > 0)
     throw new RequestError({
       status: 400,
-      error: { body: `Missing field${reqKeys.length > 1 ? 's' : ''} ${[...reqKeys]}` }
+      error: { body: `Missing field${reqKeys.length > 1 ? 's' : ''}: ${reqKeys.join(', ')}` }
     })
   return res
 }
@@ -532,7 +547,7 @@ const paramParser = (value: string | string[] | null, type: TMultipartFormParam)
           continue
         }
       }
-      throw `${value} could not be parsed to any of ${union.map(u => u[Kind])}`
+      throw `${value} could not be parsed to any of ${union.map(u => u?.const ?? u[Kind]).join(', ')}`
     } else if (type[Kind] === 'Any') {
       return value
     }

@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeAll } from 'bun:test'
-import { Kadre, T } from '../src/index'
+import { Kadre, T, type Context } from '../src/index'
 
 const port = 7357
 const METHODS = ['get', 'post', 'put', 'patch', 'delete', 'options']
@@ -23,6 +23,14 @@ const fileHash = async (ba: any) =>
   Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', ba)))
     .map(byte => byte.toString(16).padStart(2, '0'))
     .join('')
+
+const isAsyncIterator = (obj: any) => {
+  if (Object(obj) !== obj) return false
+  const method = obj[Symbol.asyncIterator]
+  if (typeof method != 'function') return false
+  const aIter = method.call(obj)
+  return aIter === obj
+}
 const parseBody = async (body: any): Promise<any> =>
   typeof body === 'object' && body !== null && !Array.isArray(body)
     ? Object.fromEntries(
@@ -34,6 +42,19 @@ const parseBody = async (body: any): Promise<any> =>
         )
       )
     : body
+const parseAsyncIterator = async (body: any): Promise<any> => {
+  const chunks = []
+  let type
+  for await (const chunk of body) {
+    if (chunk instanceof Uint8Array) type = 'ByteArray'
+    else if (typeof chunk === 'string') type = 'string'
+    chunks.push(chunk)
+  }
+  // @ts-ignore
+  if (type === 'ByteArray') return new Uint8Array(chunks.map(c => Array.from(c)).flat())
+  if (type === 'string') return chunks.join('')
+  return chunks
+}
 const handleBody = async (ctx: any) => {
   if (ctx.body === undefined) {
     return { type: 'undefined' }
@@ -51,9 +72,21 @@ const handleBody = async (ctx: any) => {
   }
   if (ctx?.body instanceof Uint8Array) {
     return { type: 'ByteArray', content: decoder.decode(ctx.body) }
+  }
+  if (isAsyncIterator(ctx.body)) {
+    return { type: 'AsyncIterator', content: await parseAsyncIterator(ctx.body) }
   } else {
     return { type: typeof ctx.body, content: await parseBody(ctx.body) }
   }
+}
+const handleUrlFormStream = async (ctx: Context) => {
+  let resp: Record<string, any> = {}
+  for await (const [k, v] of ctx.body) {
+    if (k in resp) {
+      resp[k] = Array.isArray(resp[k]) ? [...resp[k], v] : [resp[k], v]
+    } else resp[k] = v
+  }
+  return { type: 'object', content: resp }
 }
 
 const schema_objectBase = {
@@ -188,6 +221,96 @@ describe('requests', () => {
       },
       handleBody
     )
+    kadre.post(
+      '/form/stream/schema/base',
+      {
+        body: T.Stream(
+          T.UrlForm({
+            ...schema_objectBase,
+            union: T.Optional(T.Union([T.Number(), T.Boolean()])),
+            literal: T.Optional(T.Literal('x')),
+            array: T.Array(T.Any()),
+            numArray: T.Optional(T.Array(T.Number()))
+          })
+        )
+      },
+      handleUrlFormStream
+    )
+    kadre.post(
+      '/mp/schema/base',
+      {
+        body: T.MultipartForm({
+          ...schema_objectBase,
+          union: T.Optional(T.Union([T.Number(), T.Boolean()])),
+          literal: T.Optional(T.Literal('x')),
+          array: T.Array(T.Any())
+        })
+      },
+      handleBody
+    )
+    kadre.post(
+      '/mp/stream/schema/base',
+      {
+        body: T.Stream(
+          T.MultipartForm({
+            ...schema_objectBase,
+            union: T.Optional(T.Union([T.Number(), T.Boolean()])),
+            literal: T.Optional(T.Literal('x')),
+            array: T.Array(T.Any())
+          })
+        )
+      },
+      handleBody
+    )
+
+    let schema_jsonFile = {
+      string: T.String(),
+      number: T.Number(),
+      bool: T.Boolean(),
+      arrayStr: T.Array(T.String()),
+      arrayNumber: T.Array(T.Number()),
+      arrayBool: T.Array(T.Boolean())
+    }
+
+    kadre.post(
+      '/mp/file',
+      { body: T.MultipartForm({ imgFile: T.ByteArray(), jsonFile: T.Object(schema_jsonFile) }) },
+      handleBody
+    )
+    kadre.post(
+      '/mp/stream/file',
+      { body: T.Stream(T.MultipartForm({ imgFile: T.ByteArray(), jsonFile: T.Object(schema_jsonFile) })) },
+      async ctx => {
+        if (isAsyncIterator(ctx.body)) {
+          const chunks = []
+          for await (const chunk of ctx.body) {
+            if (chunk.content instanceof Uint8Array) chunk.content = await fileHash(chunk.content)
+            chunks.push(chunk)
+          }
+          return { type: 'AsyncIterator', content: chunks }
+        } else {
+          return { type: null, content: 'error' }
+        }
+      }
+    )
+    kadre.post('/ba/file', { body: T.ByteArray() }, async ctx => {
+      if (ctx?.body instanceof Uint8Array) {
+        return { type: 'ByteArray', content: await fileHash(ctx.body) }
+      } else {
+        return { type: null, content: 'error' }
+      }
+    })
+    kadre.post('/ba/stream/file', { body: T.Stream(T.ByteArray()) }, async ctx => {
+      if (isAsyncIterator(ctx.body)) {
+        let bytes = new Uint8Array()
+        for await (const b of ctx.body) {
+          bytes = new Uint8Array([...bytes, ...b])
+        }
+        return { type: 'AsyncIterator', content: await fileHash(bytes) }
+      } else {
+        return { type: null, content: 'error' }
+      }
+    })
 
     await kadre.listen(port)
   })
@@ -510,8 +633,12 @@ describe('requests', () => {
       { body: 'test', schema: 'obj', expected: { status: 400 } },
       { body: 'test', schema: 'form', expected: { status: 400 } },
       { body: 'test', schema: 'mp', expected: { status: 400 } },
-      { body: 'test', schema: 'stream/ba', expected: { status: 200, type: 'ReadableStream', resp: 'test' } },
-      { body: 'test', schema: 'stream/str', expected: { status: 200, type: 'ReadableStream', resp: 'test' } },
+      {
+        body: 'test',
+        schema: 'stream/ba',
+        expected: { status: 200, type: 'AsyncIterator', resp: new Uint8Array([116, 101, 115, 116]) }
+      },
+      { body: 'test', schema: 'stream/str', expected: { status: 200, type: 'AsyncIterator', resp: 'test' } },
       { body: 'test', schema: 'stream/form', expected: { status: 400 } },
       { body: 'test', schema: 'stream/mp', expected: { status: 400 } }
     ]
@@ -572,13 +699,13 @@ describe('requests', () => {
         body: 'test',
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'ReadableStream', resp: 'test' }
+        expected: { status: 200, type: 'AsyncIterator', resp: new Uint8Array([116, 101, 115, 116]) }
       },
       {
         body: 'test',
         type: contentType,
         schema: 'stream/str',
-        expected: { status: 200, type: 'ReadableStream', resp: 'test' }
+        expected: { status: 200, type: 'AsyncIterator', resp: 'test' }
       },
       { body: 'test', type: contentType, schema: 'stream/form', expected: { status: 400 } },
       { body: 'test', type: contentType, schema: 'stream/mp', expected: { status: 400 } }
@@ -648,13 +775,13 @@ describe('requests', () => {
         body: 'test',
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'ReadableStream', resp: 'test' }
+        expected: { status: 200, type: 'AsyncIterator', resp: new Uint8Array([116, 101, 115, 116]) }
       },
       {
         body: 'test',
         type: contentType,
         schema: 'stream/str',
-        expected: { status: 200, type: 'ReadableStream', resp: 'test' }
+        expected: { status: 200, type: 'AsyncIterator', resp: 'test' }
       },
       { body: 'test', type: contentType, schema: 'stream/form', expected: { status: 400 } },
       { body: 'test', type: contentType, schema: 'stream/mp', expected: { status: 400 } }
@@ -718,13 +845,13 @@ describe('requests', () => {
         body: 'test',
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'ReadableStream', resp: 'test' }
+        expected: { status: 200, type: 'AsyncIterator', resp: new Uint8Array([116, 101, 115, 116]) }
       },
       {
         body: 'test',
         type: contentType,
         schema: 'stream/str',
-        expected: { status: 200, type: 'ReadableStream', resp: 'test' }
+        expected: { status: 200, type: 'AsyncIterator', resp: 'test' }
       },
       { body: 'test', type: contentType, schema: 'stream/form', expected: { status: 400 } },
       { body: 'test', type: contentType, schema: 'stream/mp', expected: { status: 400 } }
@@ -766,13 +893,13 @@ describe('requests', () => {
         body: strBody,
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'ReadableStream', resp: strBody }
+        expected: { status: 200, type: 'AsyncIterator', resp: Uint8Array.from(strBody, c => c.charCodeAt(0)) }
       },
       {
         body: strBody,
         type: contentType,
         schema: 'stream/str',
-        expected: { status: 200, type: 'ReadableStream', resp: strBody }
+        expected: { status: 200, type: 'AsyncIterator', resp: strBody }
       },
       {
         body: strBody,
@@ -844,7 +971,7 @@ describe('requests', () => {
       {
         body: form,
         schema: 'stream/str',
-        expected: { status: 200, type: 'ReadableStream', resp: objRespStrRgx }
+        expected: { status: 200, type: 'AsyncIterator', resp: objRespStrRgx }
       },
       { body: form, schema: 'stream/form', expected: { status: 400 } },
       { body: form, schema: 'stream/mp', expected: { status: 200, type: 'object', resp: objResp } }
@@ -896,13 +1023,33 @@ describe('requests', () => {
             'boolean-false': false
           }
         }
+      },
+      {
+        h: {
+          string: 'Hello',
+          zero: '0',
+          number: '42',
+          float: '3.14',
+          integer: '42',
+          'boolean-true': 'a',
+          'boolean-false': 'false'
+        },
+        expected: {
+          status: 400,
+          body: {
+            headers: {
+              'neg-number': 'Required',
+              'boolean-true': "a is not a valid boolean. Should be 'true' or 'false'"
+            }
+          }
+        }
       }
     ]
 
     for (let { h, expected } of cases) {
       let resp = await fetch(`http://localhost:${port}/headers/schema`, { headers: h })
       let body = await resp.json()
-
+      expect(resp.status).toBe(expected.status ?? 200)
       expect(body).toMatchObject(expected.body)
     }
   })
@@ -1039,10 +1186,10 @@ describe('requests', () => {
           resp: {
             body: {
               ba: 'Not a valid ByteArray',
-              string: 'Not a valid string',
-              number: 'Not a valid number',
-              bool: 'Not a valid boolean',
-              object: 'Not a valid object',
+              string: '42 is not a valid string',
+              number: 'a is not a valid number',
+              bool: "x is not a valid boolean. Should be 'true' or 'false'",
+              object: 'Expected an object, not an array',
               array: 'Not a valid array'
             }
           }
@@ -1057,8 +1204,6 @@ describe('requests', () => {
       })
       let respBody = (await resp.json()) as { type: string; content: any }
 
-      // console.log(respBody)
-
       expect(resp.status).toBe(expected.status)
       if (resp.status === 200) {
         if (expected.type) expect(respBody.type).toEqual(expected.type)
@@ -1071,7 +1216,6 @@ describe('requests', () => {
     }
   })
 
-  // TODO UrlForm
   test('body, UrlForm, schema object', async () => {
     const type = 'application/x-www-form-urlencoded'
     const schema = 'form/schema/base'
@@ -1116,6 +1260,18 @@ describe('requests', () => {
         }
       },
       {
+        body: 'optional=optional',
+        type,
+        schema,
+        expected: {
+          status: 400,
+          type: 'object',
+          resp: {
+            body: 'Missing fields: ba, string, number, bool, any'
+          }
+        }
+      },
+      {
         body: 'ba=&string=Hello&string=Mom!&number=aaa&bool=1&any=36&literal=y&union=X',
         type,
         schema,
@@ -1127,7 +1283,7 @@ describe('requests', () => {
               number: 'aaa is not a valid number',
               bool: "1 is not a valid boolean. Should be 'true' or 'false'",
               literal: 'y is not a valid value',
-              union: 'X could not be parsed to any of Number,Boolean'
+              union: 'X could not be parsed to any of Number, Boolean'
             }
           }
         }
@@ -1141,7 +1297,291 @@ describe('requests', () => {
       })
       let respBody = (await resp.json()) as { type: string; content: any }
 
-      // console.log(respBody)
+      expect(resp.status).toBe(expected.status)
+      if (resp.status === 200) {
+        if (expected.type) expect(respBody.type).toEqual(expected.type)
+        if (respBody.type === 'object' && expected.resp === null) expect(respBody.content).toBeNull
+        else expect(respBody.content).toEqual(expected.resp)
+      } else {
+        if (expected.resp === null) expect(respBody.content).toBeNull
+        else expect(respBody).toEqual(expected.resp)
+      }
+    }
+  })
+
+  test('body, UrlForm Stream, schema object', async () => {
+    const type = 'application/x-www-form-urlencoded'
+    const schema = 'form/stream/schema/base'
+
+    const cases: Case[] = [
+      {
+        body: 'ba=&string=&number=0&bool=false&any=false&union=true',
+        type,
+        schema,
+        expected: {
+          status: 200,
+          type: 'object',
+          resp: {
+            ba: new Uint8Array(),
+            string: '',
+            number: 0,
+            bool: false,
+            any: 'false',
+            union: true,
+            array: []
+          }
+        }
+      },
+      {
+        body: 'ba=Hello&string=Mom!&number=42&bool=true&any=36&optional=optional&array=1&array=2&literal=x&union=42',
+        type,
+        schema,
+        expected: {
+          status: 200,
+          type: 'object',
+          resp: {
+            ba: new Uint8Array([72, 101, 108, 108, 111]),
+            string: 'Mom!',
+            number: 42,
+            bool: true,
+            any: '36',
+            optional: 'optional',
+            literal: 'x',
+            union: 42,
+            array: ['1', '2']
+          }
+        }
+      },
+      {
+        body: 'ba=Hello&string=Mom!&number=42&bool=true&any=36&optional=optional&array=1&array=2&literal=x&union=42&numArray=x',
+        type,
+        schema,
+        expected: {
+          status: 400,
+          type: 'object',
+          resp: {
+            body: { numArray: 'x is not a valid number' }
+          }
+        }
+      },
+      {
+        body: 'ba=&string=Hello&string=Mom!&number=1&bool=true&any=36&literal=y&union=X',
+        type,
+        schema,
+        expected: {
+          status: 400,
+          resp: {
+            body: {
+              literal: 'y is not a valid value'
+            }
+          }
+        }
+      },
+      {
+        body: 'optional=otpional',
+        type,
+        schema,
+        expected: {
+          status: 400,
+          resp: {
+            body: 'Missing fields: ba, string, number, bool, any'
+          }
+        }
+      }
+    ]
+    for (let { body, type, schema, expected } of cases) {
+      let resp = await fetch(`http://localhost:${port}/${schema}`, {
+        method: 'POST',
+        body,
+        headers: { ...(type ? { 'content-type': type } : {}) }
+      })
+      let respBody = (await resp.json()) as any
+
+      expect(resp.status).toBe(expected.status)
+      if (resp.status === 200) {
+        if (expected.type) expect(respBody.type).toEqual(expected.type)
+        if (expected.type === 'object' && expected.resp.content === null) expect(respBody).toBeNull
+        else expect(respBody.content).toEqual(expected.resp)
+      } else {
+        if (expected.resp === null) expect(respBody).toBeNull
+        else expect(respBody).toEqual(expected.resp)
+      }
+    }
+  })
+
+  test('body, MultipartForm, schema object', async () => {
+    const schema = 'mp/schema/base'
+
+    const cases: Case[] = [
+      {
+        body: formdata({ ba: '', string: '', number: '0', bool: 'false', any: 'false', union: 'true' }),
+        schema,
+        expected: {
+          status: 200,
+          type: 'object',
+          resp: {
+            ba: {
+              content: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+              headers: {
+                name: 'ba'
+              }
+            },
+            string: {
+              content: '',
+              headers: {
+                name: 'string'
+              }
+            },
+            number: {
+              content: 0,
+              headers: {
+                name: 'number'
+              }
+            },
+            bool: {
+              content: false,
+              headers: {
+                name: 'bool'
+              }
+            },
+            any: {
+              content: 'false',
+              headers: {
+                name: 'any'
+              }
+            },
+            union: {
+              content: true,
+              headers: {
+                name: 'union'
+              }
+            },
+            array: {
+              content: [],
+              headers: {
+                name: 'array'
+              }
+            }
+          }
+        }
+      },
+      {
+        body: formdata({
+          ba: 'Hello',
+          string: 'Mom!',
+          number: '42',
+          bool: 'true',
+          any: '36',
+          optional: 'optional',
+          array: ['1', '2'],
+          literal: 'x',
+          union: '42'
+        }),
+        schema,
+        expected: {
+          status: 200,
+          type: 'object',
+          resp: {
+            ba: {
+              content: '185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969',
+              headers: {
+                name: 'ba'
+              }
+            },
+            string: {
+              content: 'Mom!',
+              headers: {
+                name: 'string'
+              }
+            },
+            number: {
+              content: 42,
+              headers: {
+                name: 'number'
+              }
+            },
+            bool: {
+              content: true,
+              headers: {
+                name: 'bool'
+              }
+            },
+            any: {
+              content: '36',
+              headers: {
+                name: 'any'
+              }
+            },
+            optional: {
+              content: 'optional',
+              headers: {
+                name: 'optional'
+              }
+            },
+            array: {
+              content: ['1', '2'],
+              headers: {
+                name: 'array'
+              }
+            },
+            literal: {
+              content: 'x',
+              headers: {
+                name: 'literal'
+              }
+            },
+            union: {
+              content: 42,
+              headers: {
+                name: 'union'
+              }
+            }
+          }
+        }
+      },
+      {
+        body: formdata({ optional: 'optional' }),
+        schema,
+        expected: {
+          status: 400,
+          type: 'object',
+          resp: {
+            body: 'Missing fields: ba, string, number, bool, any'
+          }
+        }
+      },
+      {
+        body: formdata({
+          ba: '',
+          string: ['Hello', 'Mom!'],
+          number: 'aaa',
+          bool: '1',
+          any: '36',
+          literal: 'y',
+          union: 'X'
+        }),
+        schema,
+        expected: {
+          status: 400,
+          resp: {
+            body: {
+              string: 'Multiple values found',
+              number: 'aaa is not a valid number',
+              bool: "1 is not a valid boolean. Should be 'true' or 'false'",
+              literal: 'y is not a valid value',
+              union: 'X could not be parsed to any of: Number, Boolean'
+            }
+          }
+        }
+      }
+    ]
+    for (let { body, type, schema, expected } of cases) {
+      let resp = await fetch(`http://localhost:${port}/${schema}`, {
+        method: 'POST',
+        body,
+        headers: { ...(type ? { 'content-type': type } : {}) }
+      })
+      let respBody = (await resp.json()) as { type: string; content: any }
 
       expect(resp.status).toBe(expected.status)
       if (resp.status === 200) {
@@ -1154,8 +1594,376 @@ describe('requests', () => {
       }
     }
   })
-  // TODO UrlFor stream
 
-  // TODO MultipartForm
-  // TODO MultipartForm stream
+  test('body, MultipartForm Stream, schema object', async () => {
+    const schema = 'mp/stream/schema/base'
+
+    const cases: Case[] = [
+      {
+        body: formdata({ ba: '', string: '', number: '0', bool: 'false', any: 'false', union: 'true' }),
+        schema,
+        expected: {
+          status: 200,
+          type: 'AsyncIterator',
+          resp: [
+            {
+              content: new Uint8Array(),
+              headers: {
+                name: 'ba'
+              }
+            },
+            {
+              content: '',
+              headers: {
+                name: 'string'
+              }
+            },
+            {
+              content: 0,
+              headers: {
+                name: 'number'
+              }
+            },
+            {
+              content: false,
+              headers: {
+                name: 'bool'
+              }
+            },
+            {
+              content: 'false',
+              headers: {
+                name: 'any'
+              }
+            },
+            {
+              content: true,
+              headers: {
+                name: 'union'
+              }
+            },
+            {
+              content: [],
+              headers: {
+                name: 'array'
+              }
+            }
+          ]
+        }
+      },
+      {
+        body: formdata({
+          ba: 'Hello',
+          string: 'Mom!',
+          number: '42',
+          bool: 'true',
+          any: '36',
+          optional: 'optional',
+          array: ['1', '2'],
+          literal: 'x',
+          union: '42'
+        }),
+        schema,
+        expected: {
+          status: 200,
+          type: 'AsyncIterator',
+          resp: [
+            {
+              content: Uint8Array.from('Hello', c => c.charCodeAt(0)),
+              headers: {
+                name: 'ba'
+              }
+            },
+            {
+              content: 'Mom!',
+              headers: {
+                name: 'string'
+              }
+            },
+            {
+              content: 42,
+              headers: {
+                name: 'number'
+              }
+            },
+            {
+              content: true,
+              headers: {
+                name: 'bool'
+              }
+            },
+            {
+              content: '36',
+              headers: {
+                name: 'any'
+              }
+            },
+            {
+              content: 'optional',
+              headers: {
+                name: 'optional'
+              }
+            },
+            {
+              content: '1',
+              headers: {
+                name: 'array'
+              }
+            },
+            {
+              content: '2',
+              headers: {
+                name: 'array'
+              }
+            },
+            {
+              content: 'x',
+              headers: {
+                name: 'literal'
+              }
+            },
+            {
+              content: 42,
+              headers: {
+                name: 'union'
+              }
+            }
+          ]
+        }
+      },
+      {
+        body: formdata({ optional: 'optional' }),
+        schema,
+        expected: {
+          status: 400,
+          type: 'object',
+          resp: {
+            body: 'Missing fields: ba, string, number, bool, any'
+          }
+        }
+      },
+      {
+        body: formdata({
+          ba: '',
+          string: ['Hello', 'Mom!'],
+          number: 'aaa',
+          bool: '1',
+          any: '36',
+          literal: 'y',
+          union: 'X'
+        }),
+        schema,
+        expected: {
+          status: 400,
+          resp: {
+            body: {
+              number: 'aaa is not a valid number'
+            }
+          }
+        }
+      }
+    ]
+    for (let { body, type, schema, expected } of cases) {
+      let resp = await fetch(`http://localhost:${port}/${schema}`, {
+        method: 'POST',
+        body,
+        headers: { ...(type ? { 'content-type': type } : {}) }
+      })
+      let respBody = (await resp.json()) as { type: string; content: any }
+
+      expect(resp.status).toBe(expected.status)
+      if (resp.status === 200) {
+        if (expected.type) expect(respBody.type).toEqual(expected.type)
+        if (respBody.type === 'object' && expected.resp === null) expect(respBody.content).toBeNull
+        else expect(respBody.content).toEqual(expected.resp)
+      } else {
+        if (expected.resp === null) expect(respBody.content).toBeNull
+        else expect(respBody).toEqual(expected.resp)
+      }
+    }
+  })
+
+  test('body, FileUpload', async () => {
+    const imgFile = Bun.file('test/resources/image.png')
+    const imgFileBytes = new Uint8Array(await imgFile.arrayBuffer())
+
+    const jsonFile = Bun.file('test/resources/object.json')
+    const missingJsonFile = Bun.file('test/resources/object.missing.json')
+    const badSyntaxJsonFile = Bun.file('test/resources/object.badSyntax.json')
+
+    const cases: Case[] = [
+      {
+        body: formdata({ imgFile, jsonFile }),
+        schema: '/mp/file',
+        expected: {
+          status: 200,
+          type: 'object',
+          resp: {
+            imgFile: {
+              content: await fileHash(imgFileBytes),
+              headers: {
+                name: 'imgFile',
+                filename: 'test/resources/image.png',
+                type: 'image/png'
+              }
+            },
+            jsonFile: {
+              content: {
+                string: 'test',
+                number: 3.14,
+                bool: true,
+                arrayStr: ['un', 'deux', 'trois'],
+                arrayNumber: [0],
+                arrayBool: [true, false]
+              },
+              headers: {
+                name: 'jsonFile',
+                filename: 'test/resources/object.json',
+                type: 'application/json'
+              }
+            }
+          }
+        }
+      },
+      {
+        body: formdata({ imgFile, jsonFile: missingJsonFile }),
+        schema: '/mp/file',
+        expected: {
+          status: 400,
+          resp: {
+            body: { jsonFile: { arrayBool: 'Required', arrayStr: 'Required' } }
+          }
+        }
+      },
+      {
+        body: formdata({ imgFile, jsonFile: badSyntaxJsonFile }),
+        schema: '/mp/file',
+        expected: {
+          status: 400,
+          resp: {
+            body: { jsonFile: "JSON Parse error: Expected '}'" }
+          }
+        }
+      },
+      {
+        body: imgFileBytes,
+        schema: '/ba/file',
+        expected: {
+          status: 200,
+          type: 'ByteArray',
+          resp: await fileHash(imgFileBytes)
+        }
+      }
+    ]
+    for (let { body, type, schema, expected } of cases) {
+      let resp = await fetch(`http://localhost:${port}/${schema}`, {
+        method: 'POST',
+        body,
+        headers: { ...(type ? { 'content-type': type } : {}) }
+      })
+      let respBody = (await resp.json()) as { type: string; content: any }
+
+      expect(resp.status).toBe(expected.status)
+      if (resp.status === 200) {
+        if (expected.type) expect(respBody.type).toEqual(expected.type)
+        if (respBody.type === 'object' && expected.resp === null) expect(respBody.content).toBeNull
+        else expect(respBody.content).toEqual(expected.resp)
+      } else {
+        if (expected.resp === null) expect(respBody.content).toBeNull
+        else expect(respBody).toEqual(expected.resp)
+      }
+    }
+  })
+
+  test('body, FileUpload Stream', async () => {
+    const imgFile = Bun.file('test/resources/image.png')
+    const imgFileBytes = new Uint8Array(await imgFile.arrayBuffer())
+
+    const jsonFile = Bun.file('test/resources/object.json')
+    const missingJsonFile = Bun.file('test/resources/object.missing.json')
+    const badSyntaxJsonFile = Bun.file('test/resources/object.badSyntax.json')
+
+    const cases: Case[] = [
+      {
+        body: formdata({ imgFile, jsonFile }),
+        schema: '/mp/stream/file',
+        expected: {
+          status: 200,
+          type: 'AsyncIterator',
+          resp: [
+            {
+              content: await fileHash(imgFileBytes),
+              headers: {
+                name: 'imgFile',
+                filename: 'test/resources/image.png',
+                type: 'image/png'
+              }
+            },
+            {
+              content: {
+                string: 'test',
+                number: 3.14,
+                bool: true,
+                arrayStr: ['un', 'deux', 'trois'],
+                arrayNumber: [0],
+                arrayBool: [true, false]
+              },
+              headers: {
+                name: 'jsonFile',
+                filename: 'test/resources/object.json',
+                type: 'application/json'
+              }
+            }
+          ]
+        }
+      },
+      {
+        body: formdata({ imgFile, jsonFile: missingJsonFile }),
+        schema: '/mp/stream/file',
+        expected: {
+          status: 400,
+          resp: {
+            body: { jsonFile: { arrayBool: 'Required', arrayStr: 'Required' } }
+          }
+        }
+      },
+      {
+        body: formdata({ imgFile, jsonFile: badSyntaxJsonFile }),
+        schema: '/mp/stream/file',
+        expected: {
+          status: 400,
+          resp: {
+            body: { jsonFile: "JSON Parse error: Expected '}'" }
+          }
+        }
+      },
+      {
+        body: imgFileBytes,
+        schema: '/ba/stream/file',
+        expected: {
+          status: 200,
+          type: 'AsyncIterator',
+          resp: await fileHash(imgFileBytes)
+        }
+      }
+    ]
+    for (let { body, type, schema, expected } of cases) {
+      let resp = await fetch(`http://localhost:${port}/${schema}`, {
+        method: 'POST',
+        body,
+        headers: { ...(type ? { 'content-type': type } : {}) }
+      })
+      let respBody = (await resp.json()) as { type: string; content: any }
+
+      expect(resp.status).toBe(expected.status)
+      if (resp.status === 200) {
+        if (expected.type) expect(respBody.type).toEqual(expected.type)
+        if (respBody.type === 'object' && expected.resp === null) expect(respBody.content).toBeNull
+        else expect(respBody.content).toEqual(expected.resp)
+      } else {
+        if (expected.resp === null) expect(respBody.content).toBeNull
+        else expect(respBody).toEqual(expected.resp)
+      }
+    }
+  })
 })
