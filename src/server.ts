@@ -26,7 +26,7 @@ export default (kadre: Kadre, port?: number) => {
         state: {}
       }
       for (const plugin of kadre.plugins) {
-        let resp = plugin.fetch ? await plugin.fetch(req, { kadre, context }) : null
+        let resp = plugin.fetch ? await plugin.fetch(req, kadre) : null
         if (resp) return resp
       }
       const url = new URL(req.url)
@@ -113,6 +113,7 @@ export default (kadre: Kadre, port?: number) => {
         }
         return responseParser(response, context)
       } catch (error) {
+        if (kadre.errorHandler) return kadre.errorHandler(error, context)
         if (error instanceof RequestError)
           return new Response(JSON.stringify(error.error), {
             status: error.status,

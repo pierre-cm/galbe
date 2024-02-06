@@ -45,7 +45,7 @@ describe('responses', () => {
     await kadre.listen(port)
   })
 
-  test('no schema, string', async () => {
+  test('response, string', async () => {
     const reqTxt = 'Hello Mom!'
     let resp = await fetch(`http://localhost:${port}/response?text=${reqTxt}`, {
       method: 'POST'
@@ -58,7 +58,7 @@ describe('responses', () => {
     expect(body).toBe(reqTxt)
   })
 
-  test('no schema, object', async () => {
+  test('response, object', async () => {
     const reqBody = { foo: 'bar' }
     let resp = await fetch(`http://localhost:${port}/response`, {
       method: 'POST',
@@ -75,7 +75,7 @@ describe('responses', () => {
     expect(body).toEqual(reqBody)
   })
 
-  test('no schema, stream', async () => {
+  test('response, stream', async () => {
     const reqTxt = 'Hello Mom!'
     const cases = [{ stream: 'generatorFunction' }, { stream: 'readableStream' }]
 

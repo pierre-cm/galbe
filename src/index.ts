@@ -89,49 +89,15 @@ const parseBody: (schema?: TSchema, description?: string) => OpenAPIV3.RequestBo
     required: !(Optional in schema)
   }
 }
-const parseResponseSchema = (schema?: TSchema) => {
-  if (!schema) return schema
-  if (schema[Kind] === 'Literal') schema['enum'] = [schema.const]
-  else if (schema[Kind] === 'Object') {
-    Object.keys(schema.properties).forEach(k => {
-      schema.properties[k] = parseResponseSchema(schema.properties[k])
-    })
-  } else if (schema[Kind] === 'Array') schema.items = parseResponseSchema(schema.items)
-  return schema
-}
-const parseResponse: (schemas?: Record<number, TSchema>) => OpenAPIV3.ResponsesObject | undefined = schemas => {
-  if (!schemas) return undefined
-  return Object.fromEntries(
-    Object.entries(schemas).map(([code, schema]) => [
-      code,
-      {
-        description: '',
-        content: {
-          'application/json': { schema: parseResponseSchema(schema) }
-        }
-      }
-    ])
-  )
-}
-const overloadDiscriminer = <
-  H extends TProperties,
-  P extends TProperties,
-  Q extends TProperties,
-  B extends TBody,
-  R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
->(
+const overloadDiscriminer = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
   kadre: Kadre,
   method: Method,
   path: string,
-  arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-  arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-  arg4?: Handler<Schema<H, P, Q, B, R>>
+  arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+  arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+  arg4?: Handler<Schema<H, P, Q, B>>
 ) => {
-  const defaultSchema = {
-    response: {
-      200: Type.Any()
-    }
-  }
+  const defaultSchema = {}
   if (typeof arg2 === 'function') {
     return kadreMethod(kadre, method, path, defaultSchema, undefined, arg2)
   } else {
@@ -144,19 +110,13 @@ const overloadDiscriminer = <
   }
   throw new Error('Undefined endpoint signature')
 }
-const kadreMethod = <
-  H extends TProperties,
-  P extends TProperties,
-  Q extends TProperties,
-  B extends TBody,
-  R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
->(
+const kadreMethod = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
   kadre: Kadre,
   method: Method,
   path: string,
-  schema: Schema<H, P, Q, B, R> | undefined,
-  hooks: Hook<Schema<H, P, Q, B, R>>[] | undefined,
-  handler: Handler<Schema<H, P, Q, B, R>>
+  schema: Schema<H, P, Q, B> | undefined,
+  hooks: Hook<Schema<H, P, Q, B>>[] | undefined,
+  handler: Handler<Schema<H, P, Q, B>>
 ) => {
   schema = schema ?? {}
   hooks = hooks || []
@@ -193,7 +153,7 @@ const kadreMethod = <
       deprecated: !!metadata?.deprecated,
       parameters: parseDocParams(schema, metadata),
       requestBody: parseBody(schema.body, Array.isArray(metadata?.body) ? metadata?.body[0] : metadata?.body),
-      responses: parseResponse(schema.response)
+      responses: {} //parseResponse(schema.response)
     }
   }
 }
@@ -278,30 +238,20 @@ export class Kadre {
   config?: KadreConfig
   routesMetadata?: RouteMetadata
   router: KadreRouter
-  errorHandler: ErrorHandler
+  errorHandler?: ErrorHandler
   listening: boolean = false
   server?: Server
   plugins: KadrePlugin[] = []
   constructor(config?: KadreConfig) {
     this.config = config
     const { basePath = '' } = config || {}
-
-    this.errorHandler = (error, context) => {
-      if (error instanceof RequestError) {
-        context.set.status = error.status
-        return error.error
-      } else {
-        console.error(error)
-        return 'Internal Server Error'
-      }
-    }
     this.router = new KadreRouter(basePath)
   }
   private add(route: any) {
     this.router.add(route)
   }
   async use(plugin: KadrePlugin) {
-    if (plugin.init) await plugin?.init(this)
+    if (plugin.init) await plugin?.init(this, this?.config?.plugin?.[plugin?.name])
     this.plugins.push(plugin)
   }
   async listen(port?: number) {
@@ -323,77 +273,41 @@ export class Kadre {
   onError(handler: ErrorHandler) {
     this.errorHandler = handler
   }
-  get: Endpoint = <
-    H extends TProperties,
-    P extends TProperties,
-    Q extends TProperties,
-    B extends TBody,
-    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
-  >(
+  get: Endpoint = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
     path: string,
-    arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-    arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-    arg4?: Handler<Schema<H, P, Q, B, R>>
+    arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+    arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+    arg4?: Handler<Schema<H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'get', path, arg2, arg3, arg4))
-  post: Endpoint = <
-    H extends TProperties,
-    P extends TProperties,
-    Q extends TProperties,
-    B extends TBody,
-    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
-  >(
+  post: Endpoint = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
     path: string,
-    arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-    arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-    arg4?: Handler<Schema<H, P, Q, B, R>>
+    arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+    arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+    arg4?: Handler<Schema<H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'post', path, arg2, arg3, arg4))
-  put: Endpoint = <
-    H extends TProperties,
-    P extends TProperties,
-    Q extends TProperties,
-    B extends TBody,
-    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
-  >(
+  put: Endpoint = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
     path: string,
-    arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-    arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-    arg4?: Handler<Schema<H, P, Q, B, R>>
+    arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+    arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+    arg4?: Handler<Schema<H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'put', path, arg2, arg3, arg4))
-  patch: Endpoint = <
-    H extends TProperties,
-    P extends TProperties,
-    Q extends TProperties,
-    B extends TBody,
-    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
-  >(
+  patch: Endpoint = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
     path: string,
-    arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-    arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-    arg4?: Handler<Schema<H, P, Q, B, R>>
+    arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+    arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+    arg4?: Handler<Schema<H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'patch', path, arg2, arg3, arg4))
-  delete: Endpoint = <
-    H extends TProperties,
-    P extends TProperties,
-    Q extends TProperties,
-    B extends TBody,
-    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
-  >(
+  delete: Endpoint = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
     path: string,
-    arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-    arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-    arg4?: Handler<Schema<H, P, Q, B, R>>
+    arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+    arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+    arg4?: Handler<Schema<H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'delete', path, arg2, arg3, arg4))
-  options: Endpoint = <
-    H extends TProperties,
-    P extends TProperties,
-    Q extends TProperties,
-    B extends TBody,
-    R extends Record<number, TObject<any> | TArray<TObject<any>>> = Record<number, TObject<any> | TArray<TObject<any>>>
-  >(
+  options: Endpoint = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
     path: string,
-    arg2: Schema<H, P, Q, B, R> | Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-    arg3?: Hook<Schema<H, P, Q, B, R>>[] | Handler<Schema<H, P, Q, B, R>>,
-    arg4?: Handler<Schema<H, P, Q, B, R>>
+    arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+    arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
+    arg4?: Handler<Schema<H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'options', path, arg2, arg3, arg4))
 }
 

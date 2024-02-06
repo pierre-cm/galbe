@@ -111,30 +111,8 @@ export type UrlFormEvaluate<T> = T extends infer O
   : never
 
 export type Method = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options'
-type Without<T, U> = T extends any[]
-  ? U extends any[]
-    ? {}
-    : U
-  : U extends any[]
-  ? {}
-  : { [P in Exclude<keyof T, keyof U>]?: never }
-type XOR<T, U> = T | U extends object ? (Without<T, U> & U) | (Without<U, T> & T) : T | U
-type XORRecursive<T extends any[]> = T extends [infer First, infer Second, ...infer Rest]
-  ? XOR<First, XORRecursive<[Second, ...Rest]>>
-  : T extends [infer Only]
-  ? Only
-  : never
 type MaybePromise<T> = T | Promise<T>
-type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never
-type LastOf<T> = UnionToIntersection<T extends any ? () => T : never> extends () => infer R ? R : never
-type Push<T extends any[], V> = [...T, V]
-type TuplifyUnion<T, L = LastOf<T>, N = [T] extends [never] ? true : false> = true extends N
-  ? []
-  : Push<TuplifyUnion<Exclude<T, L>>, L>
-type ExtractedResponses<S extends { response?: unknown }> = Exclude<S['response'], undefined>
-type StaticPropertiesOfResponse<R> = {
-  [K in keyof R]: R[K] extends TSchema ? Static<R[K]> : never
-}[keyof R]
+
 /**
  * #### KadreConfig
  * Instanciate a Kadre web server
@@ -173,15 +151,7 @@ export type KadreConfig = {
  *   body: T.Object({
  *     name: T.String()
  *     age: T.Optional(T.Number({minimum: 0})),
- *   }),
- *   response: {
- *     200: T.Object({
- *       message: T.Literal("Created"),
- *     }),
- *     404: T.Object({
- *       message: T.Literal("Not found"),
- *     })
- *   }
+ *   })
  * }
  * ```
  */
@@ -189,14 +159,12 @@ export type Schema<
   H extends TProperties = TProperties,
   P extends TProperties = TProperties,
   Q extends TProperties = TProperties,
-  B extends TBody = TBody,
-  R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
+  B extends TBody = TBody
 > = {
   headers?: H
   params?: P
   query?: Q
   body?: B
-  response?: R
 }
 export type Context<S extends Schema = any> = {
   headers: Static<TObject<Exclude<S['headers'], undefined>>>
@@ -215,53 +183,27 @@ export type Context<S extends Schema = any> = {
 }
 export type Next = () => void | Promise<void>
 export type Hook<S extends Schema = Schema> = (ctx: Context<S>, next: Next) => any | Promise<any>
-export type Handler<S extends Schema = Schema> = (
-  ctx: Context<S>
-) => MaybePromise<XORRecursive<TuplifyUnion<StaticPropertiesOfResponse<ExtractedResponses<S>>>>>
+export type Handler<S extends Schema = Schema> = (ctx: Context<S>) => any
 export type Endpoint = {
-  <
-    H extends TProperties,
-    P extends TProperties,
-    Q extends TProperties,
-    B extends TBody,
-    R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
-  >(
+  <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
     path: string,
-    schema: Schema<H, P, Q, B, R>,
-    hooks: Hook<Schema<H, P, Q, B, R>>[],
-    handler: Handler<Schema<H, P, Q, B, R>>
+    schema: Schema<H, P, Q, B>,
+    hooks: Hook<Schema<H, P, Q, B>>[],
+    handler: Handler<Schema<H, P, Q, B>>
   ): void
-  <
-    H extends TProperties,
-    P extends TProperties,
-    Q extends TProperties,
-    B extends TBody,
-    R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
-  >(
+  <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
     path: string,
-    schema: Schema<H, P, Q, B, R>,
-    handler: Handler<Schema<H, P, Q, B, R>>
+    schema: Schema<H, P, Q, B>,
+    handler: Handler<Schema<H, P, Q, B>>
   ): void
-  <
-    H extends TProperties,
-    P extends TProperties,
-    Q extends TProperties,
-    B extends TBody,
-    R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
-  >(
+  <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
     path: string,
-    hooks: Hook<Schema<H, P, Q, B, R>>[],
-    handler: Handler<Schema<H, P, Q, B, R>>
+    hooks: Hook<Schema<H, P, Q, B>>[],
+    handler: Handler<Schema<H, P, Q, B>>
   ): void
-  <
-    H extends TProperties,
-    P extends TProperties,
-    Q extends TProperties,
-    B extends TBody,
-    R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
-  >(
+  <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
     path: string,
-    handler: Handler<Schema<H, P, Q, B, R>>
+    handler: Handler<Schema<H, P, Q, B>>
   ): void
 }
 
@@ -286,14 +228,13 @@ export type Route<
   H extends TProperties = TProperties,
   P extends TProperties = TProperties,
   Q extends TProperties = TProperties,
-  B extends TBody = TBody,
-  R extends Record<number, TSchema | TArray<TSchema>> = Record<number, TSchema | TArray<TSchema>>
+  B extends TBody = TBody
 > = {
   method: Method
   path: string
-  schema: Schema<H, P, Q, B, R>
-  context: Context<Schema<H, P, Q, B, R>>
-  handler: Handler<Schema<H, P, Q, B, R>>
+  schema: Schema<H, P, Q, B>
+  context: Context<Schema<H, P, Q, B>>
+  handler: Handler<Schema<H, P, Q, B>>
 }
 
 export type RouteTree = {
@@ -315,11 +256,11 @@ export class NotFoundError extends RequestError {
  * ```typescript
  * import { KadrePlugin } from 'kadre'
  * const MyPlugin : KadrePlugin = {
- *   let config = {}
- *   init: (kadre) => {
- *     config = kadre.config?.plugin?.myPlugin
+ *   name: 'com.example.plugin.name',
+ *   init: (kadre, config) => {
+ *     console.log('Plugin initialization')
  *   },
- *   fetch: (request, { kadre: k }) => {
+ *   fetch: (request, kadre) => {
  *     if(new URL(request).pathname === '/myPlugin') {
  *       return new Response('Hello Mom!')
  *     }
@@ -328,6 +269,7 @@ export class NotFoundError extends RequestError {
  * ```
  */
 export type KadrePlugin = {
-  init?: (kadre: Kadre) => MaybePromise<void>
-  fetch?: (request: Request, app: { kadre: Kadre; context: Context }) => MaybePromise<Response | void>
+  name: string
+  init?: (kadre: Kadre, config?: any) => MaybePromise<any>
+  fetch?: (request: Request, app: Kadre) => MaybePromise<Response | void>
 }
