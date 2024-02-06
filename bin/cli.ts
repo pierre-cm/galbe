@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
+
+import type { RouteMetadata } from '../src/routes'
 import { program } from 'commander'
 import { relative, resolve } from 'path'
 import { mkdir, readdir, rm } from 'fs/promises'
-import { RouteMetadata, metaAnalysis } from '../src/routes'
+import { metaAnalysis } from '../src/routes'
 import { randomUUID } from 'crypto'
 import { glob } from 'glob'
 import { Kadre } from '../src/index'
@@ -49,7 +51,7 @@ ${routes
 _${idx}(kadre)`
   )
   .join(';\n')}
-kadre.listen(${port || 3000});
+kadre.listen(${port});
 `
   )
   return resolve(buildPath, 'index.ts')
@@ -68,7 +70,7 @@ program
     await mkdir(devRoot, { recursive: true })
     await Bun.write(
       resolve(devRoot, 'index.ts'),
-      `import kadre from '${relative(devRoot, fileName)}';kadre.listen(${port || 3000});`
+      `import kadre from '${relative(devRoot, fileName)}';kadre.listen(${port});`
     )
     process.on('SIGINT', async () => {
       await rm(resolve(ROOT, '.kadre', 'dev'), { recursive: true })

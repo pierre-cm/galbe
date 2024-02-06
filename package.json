@@ -1,25 +1,83 @@
 {
   "name": "kadre",
-  "module": "index.ts",
-  "type": "module",
+  "version": "0.0.1",
+  "description": "Fast, lightweight and highly customizable JavaScript web framework based on Bun",
+  "author": "Pierre Caillaud M (https://github.com/pierre-cm)",
   "bin": "./bin/cli.ts",
-  "main": "./dist/index.js",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "bun": "./dist/bun/index.js",
+      "import": "./dist/index.mjs",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./parser": {
+      "bun": "./dist/parser.js",
+      "import": "./dist/parser.mjs",
+      "require": "./dist/cjs/parser.js",
+      "types": "./dist/parser.d.ts"
+    },
+    "./router": {
+      "bun": "./dist/router.js",
+      "import": "./dist/router.mjs",
+      "require": "./dist/cjs/router.js",
+      "types": "./dist/router.d.ts"
+    },
+    "./server": {
+      "bun": "./dist/server.js",
+      "import": "./dist/server.mjs",
+      "require": "./dist/cjs/server.js",
+      "types": "./dist/server.d.ts"
+    },
+    "./validator": {
+      "bun": "./dist/validator.js",
+      "import": "./dist/validator.mjs",
+      "require": "./dist/cjs/validator.js",
+      "types": "./dist/validator.d.ts"
+    },
+    "./types": {
+      "bun": "./dist/types.js",
+      "import": "./dist/types.mjs",
+      "require": "./dist/cjs/types.js",
+      "types": "./dist/types.d.ts"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pierre-cm/kadre"
+  },
+  "bugs": "https://github.com/pierre-cm/kadre/issues",
+  "homepage": "https://kadre.dev",
+  "keywords": [
+    "bun",
+    "http",
+    "web",
+    "framework",
+    "server",
+    "api"
+  ],
+  "license": "MIT",
   "scripts": {
-    "build": "tsc && bun ./scripts/build.ts",
+    "build": "bun ./scripts/build.ts",
+    "clean": "rm -rf dist",
+    "test": "bun test",
     "postinstall": "bun run ./scripts/postinstall.ts"
   },
   "devDependencies": {
-    "@swc/core": "^1.3.100",
+    "@types/bun": "^1.0.4",
     "@types/esprima": "^4.0.5",
     "@types/estraverse": "^5.1.5",
-    "bun-types": "latest"
+    "tsup": "^8.0.1"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.31.28",
+    "@swc/core": "^1.3.107",
     "acorn": "^8.11.2",
     "acorn-walk": "^8.3.0",
     "commander": "^11.1.0",
