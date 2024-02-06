@@ -111,12 +111,7 @@ export default (kadre: Kadre, port?: number) => {
           context.set.status = 500
           throw new Response('Internal Server Error', { status: 500 })
         }
-
-        const resp = responseParser(response)
-        return new Response(resp.response, {
-          status: context.set.status || 200,
-          headers: { ...context.set.headers, 'Content-Type': resp.type }
-        })
+        return responseParser(response, context)
       } catch (error) {
         if (error instanceof RequestError)
           return new Response(JSON.stringify(error.error), {
@@ -125,11 +120,7 @@ export default (kadre: Kadre, port?: number) => {
           })
         try {
           context.set.status = 500
-          let response = responseParser(kadre.errorHandler(error, context))
-          return new Response(response.response, {
-            status: context.set.status,
-            headers: { ...context.set.headers, 'Content-Type': response.type }
-          })
+          return responseParser(response, context)
         } catch (error) {
           console.error(error)
         }

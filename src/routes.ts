@@ -59,7 +59,7 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMetadata> => 
       simple(node.declaration.body, {
         CallExpression(node) {
           // @ts-ignore
-          if (node.callee.object.name === kadreIdentifier) {
+          if (node?.callee?.object?.name === kadreIdentifier) {
             // @ts-ignore
             const path = node.arguments[0].value
             // @ts-ignore
@@ -83,7 +83,6 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMetadata> => 
       })
     }
   })
-  console.log(meta)
   return meta
 }
 
@@ -125,7 +124,7 @@ export const defineRoutes = async (options: KadreConfig, kadre: Kadre) => {
     }
   } else if (Array.isArray(routes)) {
     for (const r of routes) {
-      defineRoutes({ routes: r }, kadre)
+      await defineRoutes({ routes: r }, kadre)
     }
   }
 }

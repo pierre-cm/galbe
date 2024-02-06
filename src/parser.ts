@@ -7,7 +7,8 @@ import type {
   TUrlForm,
   TUrlFormParam,
   TMultipartFormParam,
-  TStream
+  TStream,
+  Context
 } from './index'
 
 import { Kind, Optional } from '@sinclair/typebox'
@@ -52,6 +53,8 @@ export const requestBodyParser = async (
               }
             })
           } else return new Uint8Array()
+        } else if (schema?.[Optional]) {
+          return null
         } else {
           throw new RequestError({ status: 400, error: { body: `Not a valid ${kind}` } })
         }
@@ -330,19 +333,18 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
       }
     }
   }
-  // const headers = parseMultipartHeader(textDecoder.decode(bK))
-  // console.log(headers)
-  // if (headers) {
-  //   try {
-  //     delete required[headers.name]
-  //     yield {
-  //       headers,
-  //       content: parseMultipartContent(bV, headers, schema)
-  //     }
-  //   } catch (err) {
-  //     throw new RequestError({ status: 400, error: { body: { [headers.name]: err } } })
-  //   }
-  // }
+  const headers = parseMultipartHeader(textDecoder.decode(bK))
+  if (headers) {
+    try {
+      delete required[headers.name]
+      yield {
+        headers,
+        content: parseMultipartContent(bV, headers, schema)
+      }
+    } catch (err) {
+      throw new RequestError({ status: 400, error: { body: { [headers.name]: err } } })
+    }
+  }
   for (const [k, s] of Object.entries(required)) {
     //@ts-ignore
     if (s[Kind] === 'Array') {
@@ -395,7 +397,6 @@ const parseMultipartContent = (
         throw new RequestError({ status: 400, error: { body: { [headers.name]: err?.message || 'Parsing error' } } })
       }
     } else if (schema?.properties) {
-      // console.log('YAAYAYA')
       if (schema?.properties[headers.name][Kind] === 'Object') {
         try {
           result = JSON.parse(textDecoder.decode(content).trim())
@@ -493,10 +494,11 @@ const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary:
   return res
 }
 const paramParser = (value: string | string[] | null, type: TMultipartFormParam): MaybeArray<Static<TUrlFormParam>> => {
-  if (value === null) {
-    if (type[Optional]) return undefined
+  if (value === undefined) {
+    if (type[Optional]) return type?.default
     else throw `Required`
-  } else if (Array.isArray(value)) {
+  } else if (value === null) return null
+  else if (Array.isArray(value)) {
     if (type[Kind] !== 'Array') throw `Multiple values found`
     validate(value, type)
     let pv = []
@@ -585,7 +587,8 @@ export const parseEntry = <T extends TProperties>(
 
   Object.entries(schema).forEach(([key, s]) => {
     const k = options?.i === true ? key.toLowerCase() : key
-    const v = params[k] || null
+    let v = params[k]
+    if (s[Kind] === 'Array' && options?.name === 'query' && typeof v === 'string') v = v.split(',')
     try {
       let p = paramParser(v, s as TMultipartFormParam)
       //@ts-ignore
@@ -603,14 +606,51 @@ export const parseEntry = <T extends TProperties>(
   return parsedParams as Static<TObject<T>>
 }
 
-export const responseParser = (response: any) => {
-  if (typeof response !== 'string') {
+const isIterator = (obj: any) => typeof obj?.next === 'function'
+
+export const responseParser = (response: any, ctx: Context) => {
+  const details = {
+    status: ctx.set.status || 200,
+    headers: new Headers(ctx.set.headers)
+  }
+  if (response instanceof Response) return response
+  else if (typeof response === 'string') {
+    if (!details?.headers?.has('content-type')) details?.headers?.set('content-type', 'text/plain')
+    //@ts-ignore
+    return new Response(response, details)
+  }
+  if (response instanceof ReadableStream) {
+    response = rsToAsyncIterator(response)
+  }
+  if (isIterator(response)) {
+    const rs = new ReadableStream({
+      type: 'direct',
+      async pull(controller) {
+        let id = ctx.request.headers.get('last-event-id') ?? crypto.randomUUID()
+        for await (const r of response) {
+          let data = `id:${id}\ndata:${r}\n\n`
+          try {
+            await controller.write(data)
+            // await controller.flush()
+          } catch (err) {
+            console.error(err)
+          }
+          id = crypto.randomUUID()
+        }
+        controller.close()
+      }
+    })
+    details.headers.set('Content-Type', 'text/event-stream')
+    //@ts-ignore
+    return new Response(rs, details)
+  } else {
     try {
-      return { response: JSON.stringify(response), type: 'application/json' }
+      if (!details?.headers?.has('content-type')) details?.headers?.set('content-type', 'application/json')
+      //@ts-ignore
+      return new Response(JSON.stringify(response), details)
     } catch (error) {
       console.error(error)
       throw new RequestError({ status: 500, error: 'Internal Server Error' })
     }
   }
-  return { response, type: 'text/plain' }
 }

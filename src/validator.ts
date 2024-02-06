@@ -85,7 +85,7 @@ export const validate = (elt: any, schema: TSchema, parse = false): any => {
   return elt
 }
 
-const schemaValidation = (value: any, schema: TSchema): { valid: boolean; errors: string | string[] } => {
+const schemaValidation = (value: any, schema: TSchema) => {
   const errors = []
   if (schema[Kind] === 'Integer' || schema[Kind] === 'Number') {
     if (schema.exclusiveMinimum !== undefined)
@@ -103,7 +103,7 @@ const schemaValidation = (value: any, schema: TSchema): { valid: boolean; errors
       errors.push(`${value} length is too small (${schema.minLength} char min)`)
     if (schema.maxLength !== undefined && (value as string).length > schema.maxLength)
       errors.push(`${value} length is too large (${schema.maxLength} char max)`)
-    if (schema.pattern !== undefined && !(value as string).match(schema.pattern))
+    if (schema.pattern !== undefined && !(value as string).match(new RegExp(schema.pattern)))
       errors.push(`${value} does not match pattern ${schema.pattern}`)
   } else if (schema[Kind] === 'Array') {
     if (schema.minItems !== undefined && (value as any[]).length < schema.minItems)
@@ -113,5 +113,5 @@ const schemaValidation = (value: any, schema: TSchema): { valid: boolean; errors
     if (schema.uniqueItems === true && new Set(value as any[]).size !== (value as any[]).length)
       errors.push(`Has duplicate values`)
   }
-  return { valid: !errors.length, errors: Array.isArray(errors) && errors.length === 1 ? errors[0] : errors }
+  if (errors.length) throw Array.isArray(errors) && errors.length === 1 ? errors[0] : errors
 }
