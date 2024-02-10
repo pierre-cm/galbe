@@ -163,8 +163,6 @@ describe('router', () => {
     kadre.get('/test/:foo', h1)
     kadre.get('/test/test', h2)
 
-    // console.dir(router.routes.GET, { depth: null })
-
     let r1 = router.find('GET', '/test/42')
     expect(r1.path).toBe('/test/:foo')
     expect(r1.handler).toBe(h1)
@@ -186,8 +184,6 @@ describe('router', () => {
 
     kadre.get('/test/foo/*/lol', h4)
 
-    // console.dir(router.routes.GET, { depth: null })
-
     let r1 = router.find('GET', '/test/foo/bar/42')
     expect(r1.path).toBe('/test/foo/*')
     expect(r1.handler).toBe(h1)
@@ -208,6 +204,4 @@ describe('router', () => {
     expect(r5.path).toBe('/test/foo/*/lol')
     expect(r5.handler).toBe(h4)
   })
-
-  //TODO: test *
 })

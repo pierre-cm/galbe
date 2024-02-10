@@ -42,6 +42,14 @@ describe('responses', () => {
       }
     )
 
+    kadre.get('/error', _ => {
+      return { next: () => {} }
+    })
+
+    kadre.onError(_ => {
+      throw new Error()
+    })
+
     await kadre.listen(port)
   })
 

@@ -1,4 +1,4 @@
-import type { Context, Hook, Route } from './types'
+import type { Context, Route } from './types'
 
 import { NotFoundError, RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
@@ -53,8 +53,6 @@ export default (kadre: Kadre, port?: number) => {
         context.query = inQuery
         context.params = inParams
 
-        const hooks: Hook[] = []
-
         // request validation
         let errors: RequestError[] = []
         try {
@@ -84,33 +82,28 @@ export default (kadre: Kadre, port?: number) => {
         }
 
         // call chain
-        const callStack: number[] = []
-        let callStackError: boolean = false
-        const callChain = (hooks || []).map((hook, idx) => ({
+        let handlerCalled = false
+        const handlerWrapper = async (context: Context) => {
+          handlerCalled = true
+          return route.handler(context)
+        }
+        const callChain = route.hooks.map((hook, idx) => ({
           call: async () => {
-            callStack.push(idx)
-            await hook(context, async () => {
+            let nextCalled = false
+            let next = async () => {
               await callChain[idx + 1].call()
-            })
-            if (callStack.pop() !== idx && !callStackError) {
-              console.error('Call stack error')
-              callStackError = true
             }
+            await hook(context, next)
+            if (!nextCalled && !handlerCalled) await next()
           }
         }))
         callChain.push({
           call: async () => {
-            callStack.push(callChain.length - 1)
-            response = await route.handler(context)
-            callStack.pop()
+            response = await handlerWrapper(context)
           }
         })
         if (callChain.length > 1) await callChain[0].call()
-        else response = await route.handler(context)
-        if (callStackError) {
-          context.set.status = 500
-          throw new Response('Internal Server Error', { status: 500 })
-        }
+        else response = await handlerWrapper(context)
         return responseParser(response, context)
       } catch (error) {
         if (kadre.errorHandler) return kadre.errorHandler(error, context)

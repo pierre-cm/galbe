@@ -234,6 +234,7 @@ export type Route<
   path: string
   schema: Schema<H, P, Q, B>
   context: Context<Schema<H, P, Q, B>>
+  hooks: Hook[]
   handler: Handler<Schema<H, P, Q, B>>
 }
 

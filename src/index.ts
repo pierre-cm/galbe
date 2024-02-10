@@ -1,6 +1,6 @@
 import type { Server } from 'bun'
-import type { Static, TSchema, TArray, TObject, TProperties, TString } from '@sinclair/typebox'
-import type { RouteMetadata } from './routes'
+import type { Static, TObject, TProperties, TString } from '@sinclair/typebox'
+import type { RouteFileMeta } from './routes'
 import type {
   KadreConfig,
   Method,
@@ -22,73 +22,12 @@ import type {
   MultipartFormData
 } from './types'
 
-import { Type, JavaScriptTypeBuilder, TypeClone, Optional, Kind } from '@sinclair/typebox'
-import { OpenAPIV3 } from 'openapi-types'
+import { JavaScriptTypeBuilder, TypeClone, Kind } from '@sinclair/typebox'
 import server from './server'
 import { KadreRouter } from './router'
 import { defineRoutes } from './routes'
-import { Stream, RequestError } from './types'
+import { Stream } from './types'
 
-const PARSE_PARAM_RGX = /^\s*\{(\w+)\}\s*(\w+)\s*(@deprecated)?\s+(.*)$/
-const parseStringParam = (
-  params: string | string[]
-): { [key: string]: Record<string, { description: string; deprecated?: boolean }> } => {
-  if (!params) return {}
-  if (typeof params === 'string') {
-    const match = params.match(PARSE_PARAM_RGX)
-    if (!match) return {}
-    return { [match[1]]: { [match[2]]: { deprecated: !!match[3], description: match[4] } } }
-  } else {
-    const res: { [key: string]: Record<string, { description: string; deprecated?: boolean }> } = {}
-    for (const p of params) {
-      const match = p.match(PARSE_PARAM_RGX)
-      if (!match) continue
-
-      if (!(match[1] in res)) res[match[1]] = {}
-      res[match[1]][match[2]] = { deprecated: !!match[3], description: match[4] }
-    }
-    return res
-  }
-}
-const parseDocParams: (
-  schema: Record<string, any>,
-  meta: Record<string, string | string[]>
-) => OpenAPIV3.ParameterObject[] = (schema, meta) => {
-  let params = schema.params as TSchema
-  let query = schema.query as TSchema
-  let docParams = parseStringParam(meta.param)
-  return [
-    ...Object.entries(params || []).map(([k, v]) => ({
-      name: k,
-      in: 'path',
-      description: docParams?.['path']?.[k]?.description ?? '',
-      required: !(Optional in v),
-      deprecated: docParams?.['path']?.[k]?.deprecated ?? false
-    })),
-    ...Object.entries(query || []).map(([k, v]) => {
-      return {
-        name: k,
-        in: 'query',
-        description: docParams?.['query']?.[k].description ?? '',
-        required: !(Optional in v),
-        deprecated: docParams?.['query']?.[k]?.deprecated ?? false
-      }
-    })
-  ]
-}
-const parseBody: (schema?: TSchema, description?: string) => OpenAPIV3.RequestBodyObject | undefined = (
-  schema,
-  description
-) => {
-  if (!schema) return undefined
-  return {
-    description: description,
-    content: {
-      'application/json': { schema }
-    },
-    required: !(Optional in schema)
-  }
-}
 const overloadDiscriminer = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
   kadre: Kadre,
   method: Method,
@@ -111,7 +50,7 @@ const overloadDiscriminer = <H extends TProperties, P extends TProperties, Q ext
   throw new Error('Undefined endpoint signature')
 }
 const kadreMethod = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
-  kadre: Kadre,
+  _kadre: Kadre,
   method: Method,
   path: string,
   schema: Schema<H, P, Q, B> | undefined,
@@ -135,31 +74,16 @@ const kadreMethod = <H extends TProperties, P extends TProperties, Q extends TPr
       redirect?: string
     }
   }
-  const metadata = kadre.routesMetadata && path in kadre?.routesMetadata ? kadre?.routesMetadata[path][method] : {}
+  //@ts-ignore
   return {
     method,
     path,
     schema,
     context,
-    handler,
-    details: {
-      tags: metadata?.tags
-        ? Array.isArray(metadata?.tags)
-          ? metadata?.tags.join(' ').split(' ')
-          : metadata?.tags.split(' ')
-        : [],
-      summary: Array.isArray(metadata?.summary) ? metadata?.summary[0] : metadata?.summary,
-      description: Array.isArray(metadata?.description) ? metadata?.description[0] : metadata?.description,
-      deprecated: !!metadata?.deprecated,
-      parameters: parseDocParams(schema, metadata),
-      requestBody: parseBody(schema.body, Array.isArray(metadata?.body) ? metadata?.body[0] : metadata?.body),
-      responses: {} //parseResponse(schema.response)
-    }
+    hooks,
+    handler
   }
 }
-
-// type PropertyKey<T extends TProperties> = T extends Record<infer F, TSchema> ? F : never
-// type PropertyValue<T extends TProperties> = T extends Record<TPropertyKey, infer F> ? F : never
 
 class KadreTypeBuilder extends JavaScriptTypeBuilder {
   public Stream<T extends TUrlForm>(
@@ -211,15 +135,6 @@ class KadreTypeBuilder extends JavaScriptTypeBuilder {
 
 export const T = new KadreTypeBuilder()
 
-const TestStream: TBody = T.UrlForm({ toto: T.String(), titi: T.Number() })
-const TestStatic: TBody = T.Stream(T.UrlForm({ stream: T.String() }))
-
-// const Tetfstfs = T.Optional(T.Stream())
-
-type TypeTest1 = (typeof TestStream)['static']
-type TypeTest2 = (typeof TestStatic)['static']
-// type TypeTest3 = (typeof Tetfstfs)['static']
-
 export { RequestError } from './types'
 /**
  * #### Kadre Server
@@ -236,7 +151,7 @@ export { RequestError } from './types'
  */
 export class Kadre {
   config?: KadreConfig
-  routesMetadata?: RouteMetadata
+  meta?: Array<RouteFileMeta> = []
   router: KadreRouter
   errorHandler?: ErrorHandler
   listening: boolean = false

@@ -1,22 +1,48 @@
 import type { KadreConfig } from './types'
 
-import { readdir } from 'fs/promises'
+import { readdir, lstat } from 'fs/promises'
 import { extname } from 'path'
-import { glob } from 'glob'
 import { parse } from 'acorn'
 import { simple } from 'acorn-walk'
 import { Kadre } from './index'
 import { transformSync } from '@swc/core'
+import { Glob } from 'bun'
 
-export type RouteMetadata = Record<string, Record<string, Record<string, string | string[]>>>
+export type RouteMeta = {
+  header: Record<string, boolean | string | string[]>
+  routes: Record<string, Record<string, Record<string, boolean | string | string[]>>>
+}
 
-const COMMENT_PROPS = ['tags', 'summary', 'description', 'deprecated', 'param', 'body']
+export type RouteFileMeta = {
+  file: string
+} & RouteMeta
 
-export const metaAnalysis = async (filePath: string): Promise<RouteMetadata> => {
+const parseComment = (comment: string): Record<string, string | string[]> => {
+  const head =
+    comment
+      .match(/^([^@]*)/)?.[1]
+      .replace(/^ *\* */gm, '')
+      .trim() || ''
+  const refs = {
+    ...(head ? { head } : {}),
+    ...[...comment.matchAll(new RegExp(`^\\s*\\*\\s*@([a-zA-Z_][0-9a-zA-Z_]*)(?:$|\\s+([^\\n]*)\\s*$)`, 'gm'))].reduce(
+      (acc, n) => {
+        return {
+          ...acc,
+          [n[1]]:
+            n[1] in acc ? [...(typeof acc[n[1]] === 'string' ? [acc[n[1]]] : acc[n[1]]), n[2] ?? true] : n[2] ?? true
+        }
+      },
+      {} as Record<string, any>
+    )
+  }
+  return refs
+}
+export const metaAnalysis = async (filePath: string): Promise<RouteMeta> => {
   const file = Bun.file(filePath)
   const fileExt = extname(filePath)
   let content = await file.text()
-  let meta: RouteMetadata = {}
+  let meta: RouteMeta = { header: {}, routes: {} }
 
   if (fileExt === '.ts') {
     //// Much faster but doesn't include comments. See https://github.com/oven-sh/bun/pull/7055
@@ -55,6 +81,11 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMetadata> => 
     ExportDefaultDeclaration(node) {
       // @ts-ignore
       let kadreIdentifier = node.declaration.params[0].name
+
+      const headerLine = node.loc?.start.line
+      const headerCom = headerLine !== undefined && comments?.[headerLine] ? comments[headerLine] : ''
+      const headerRef = parseComment(headerCom)
+      meta.header = headerRef
       // @ts-ignore
       simple(node.declaration.body, {
         CallExpression(node) {
@@ -65,19 +96,12 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMetadata> => 
             // @ts-ignore
             const method = node.callee.property.name
             const line = node.loc?.start.line
-            const com = line && line in comments ? comments[line] : ''
+            const com = line !== undefined && comments?.[line] ? comments[line] : ''
 
-            const refs = [
-              ...com.matchAll(new RegExp(`^\\s*\\*\\s*@(${COMMENT_PROPS.join('|')})\\s+([^\\n]*)\\s*$`, 'gm'))
-            ].reduce((acc, n) => {
-              return {
-                ...acc,
-                [n[1]]: n[1] in acc ? [...(typeof acc[n[1]] === 'string' ? [acc[n[1]]] : acc[n[1]]), n[2]] : n[2]
-              }
-            }, {} as Record<string, any>)
+            const routeRefs = parseComment(com)
 
-            if (!(path in meta)) meta[path] = {}
-            if (!(method in meta[path])) meta[path][method] = refs
+            if (!(path in meta.routes)) meta.routes[path] = {}
+            if (!(method in meta.routes[path])) meta.routes[path][method] = routeRefs
           }
         }
       })
@@ -99,21 +123,19 @@ export const defineRoutes = async (options: KadreConfig, kadre: Kadre) => {
   }
   const root = process.cwd()
   if (typeof routes === 'string') {
-    let files = await glob(routes, { cwd: root, withFileTypes: true, ignore: 'node_modules/**' })
-    if (!files || !files.length) {
-      console.log(`\x1b\[38;5;245m    No route found\x1b[0m`)
-      return
-    }
-    for (const file of files.map(f => ({ name: f.name, path: f.path, type: f.getType() }))) {
+    let noRouteFound = true
+    for await (const path of new Glob(routes).scan({ cwd: root, absolute: true, onlyFiles: false })) {
+      noRouteFound = false
+      const isDir = (await lstat(path)).isDirectory()
+
       let files: string[] = []
-      if (file.type === 'File') files.push(`${file.path}/${file.name}`)
-      else if (file.type === 'Directory')
-        files = files.concat((await readdir(`${file.path}/${file.name}`)).map(f => `${file.path}/${f}`))
+      if (!isDir) files.push(path)
+      else files = files.concat((await readdir(path)).map(f => `${path}/${f}`))
       if (files.length === 0) console.log(`\x1b\[38;5;245m    No route found\x1b[0m`)
       for (const f of files) {
         try {
           const metadata = await metaAnalysis(f)
-          kadre.routesMetadata = { ...metadata }
+          kadre.meta?.push({ file: path, ...metadata })
           await importRoutes(f, kadre)
           console.log(`\x1b\[0;32m    ${f}\x1b[0m`)
         } catch (err) {
@@ -121,6 +143,10 @@ export const defineRoutes = async (options: KadreConfig, kadre: Kadre) => {
           throw err
         }
       }
+    }
+    if (noRouteFound) {
+      console.log(`\x1b\[38;5;245m    No route found\x1b[0m`)
+      return
     }
   } else if (Array.isArray(routes)) {
     for (const r of routes) {
