@@ -8,7 +8,7 @@ import { mkdir, readdir, rm } from 'fs/promises'
 import { metaAnalysis } from '../src/routes'
 import { randomUUID } from 'crypto'
 import { glob } from 'glob'
-import { Kadre } from '../src/index'
+import { Kadre } from '../src'
 
 const ROOT = process.cwd()
 const BUILD_ID = randomUUID()

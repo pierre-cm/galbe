@@ -1,5 +1,5 @@
 import { expect, test, describe } from 'bun:test'
-import { Kadre, NotFoundError, type RouteNode } from '../src/index'
+import { Kadre, NotFoundError, type RouteNode } from '../src'
 
 describe('router', () => {
   test('empty', async () => {

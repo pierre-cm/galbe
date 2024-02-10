@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeAll } from 'bun:test'
-import { Kadre, T } from '../src/index'
+import { Kadre, T } from '../src'
 import {
   formdata,
   type Case,
@@ -193,7 +193,7 @@ describe('requests', () => {
       { body: T.Stream(T.MultipartForm({ imgFile: T.ByteArray(), jsonFile: T.Object(schema_jsonFile) })) },
       async ctx => {
         if (isAsyncIterator(ctx.body)) {
-          const chunks = []
+          const chunks: any[] = []
           for await (const chunk of ctx.body) {
             if (chunk.content instanceof Uint8Array) chunk.content = await fileHash(chunk.content)
             chunks.push(chunk)
