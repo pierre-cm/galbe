@@ -106,17 +106,13 @@ export default (kadre: Kadre, port?: number) => {
         else response = await handlerWrapper(context)
         return responseParser(response, context)
       } catch (error) {
+        context.set.status = error instanceof RequestError ? error.status : 500
         if (kadre.errorHandler) return kadre.errorHandler(error, context)
-        if (error instanceof RequestError)
+        if (error instanceof RequestError) {
           return new Response(JSON.stringify(error.error), {
             status: error.status,
             headers: { 'Content-Type': 'application/json' }
           })
-        try {
-          context.set.status = 500
-          return responseParser(response, context)
-        } catch (error) {
-          console.error(error)
         }
         return new Response('Internal Server Error', { status: 500 })
       }

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
-import type { RouteMetadata } from '../src/routes'
+import { $ } from 'bun'
+import type { RouteMeta } from '../src/routes'
 import { program } from 'commander'
 import { relative, resolve } from 'path'
 import { mkdir, readdir, rm } from 'fs/promises'
@@ -12,9 +13,11 @@ import { Kadre } from '../src/index'
 const ROOT = process.cwd()
 const BUILD_ID = randomUUID()
 
-const parseRoutes = async (routes?: string | string[]): Promise<{ path: string; meta: RouteMetadata }[]> => {
+process.env.FORCE_COLOR = '1'
+
+const parseRoutes = async (routes?: string | string[]): Promise<{ path: string; meta: RouteMeta }[]> => {
   if (!routes) return []
-  let files: { path: string; meta: RouteMetadata }[] = []
+  let files: { path: string; meta: RouteMeta }[] = []
   if (typeof routes === 'string') {
     let filePaths = await glob(routes, { cwd: ROOT, withFileTypes: true, ignore: 'node_modules/**' })
     for (const file of filePaths.map(f => ({ name: f.name, path: f.path, type: f.getType() }))) {
@@ -38,7 +41,7 @@ const parseRoutes = async (routes?: string | string[]): Promise<{ path: string; 
   return files
 }
 
-const createBuildIndex = async (indexPath: string, routes: { path: string; meta: RouteMetadata }[], port?: number) => {
+const createBuildIndex = async (indexPath: string, routes: { path: string; meta: RouteMeta }[], port?: number) => {
   const buildPath = resolve(ROOT, '.kadre', 'build', BUILD_ID)
   await mkdir(buildPath, { recursive: true })
   await Bun.write(
@@ -75,17 +78,8 @@ program
     process.on('SIGINT', async () => {
       await rm(resolve(ROOT, '.kadre', 'dev'), { recursive: true })
     })
-    Bun.spawn(['bun', 'run', '--watch', resolve(devRoot, 'index.ts')], {
-      cwd: ROOT,
-      stdout: 'inherit',
-      env: {
-        ...Bun.env,
-        BUN_ENV: 'development'
-      },
-      async onExit() {
-        await rm(resolve(ROOT, '.kadre', 'dev'), { recursive: true })
-      }
-    })
+
+    await $`BUN_ENV=development bun run --watch ${resolve(devRoot, 'index.ts')}`.cwd(ROOT)
   })
 
 program

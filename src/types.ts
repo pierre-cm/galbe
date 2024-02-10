@@ -185,23 +185,23 @@ export type Next = () => void | Promise<void>
 export type Hook<S extends Schema = Schema> = (ctx: Context<S>, next: Next) => any | Promise<any>
 export type Handler<S extends Schema = Schema> = (ctx: Context<S>) => any
 export type Endpoint = {
-  <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
+  <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody = TObject>(
     path: string,
     schema: Schema<H, P, Q, B>,
     hooks: Hook<Schema<H, P, Q, B>>[],
     handler: Handler<Schema<H, P, Q, B>>
   ): void
-  <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
+  <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody = TObject>(
     path: string,
     schema: Schema<H, P, Q, B>,
     handler: Handler<Schema<H, P, Q, B>>
   ): void
-  <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
+  <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody = TObject>(
     path: string,
     hooks: Hook<Schema<H, P, Q, B>>[],
     handler: Handler<Schema<H, P, Q, B>>
   ): void
-  <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
+  <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody = TObject>(
     path: string,
     handler: Handler<Schema<H, P, Q, B>>
   ): void

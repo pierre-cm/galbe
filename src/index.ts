@@ -170,6 +170,7 @@ export class Kadre {
     this.plugins.push(plugin)
   }
   async listen(port?: number) {
+    port = port || this.config?.port || 3000
     if (this.listening) this.stop()
     if (Bun.env.BUN_ENV === 'development' && !!this.config?.routes) {
       console.log('🏗️  \x1b[1;30mConstructing routes\x1b[0m')
@@ -177,7 +178,7 @@ export class Kadre {
       console.log('\n✅ \x1b[1;30mdone\x1b[0m')
     }
     this.server = server(this, port)
-    const url = `http://localhost:${this.config?.port ?? port}${this.config?.basePath || ''}`
+    const url = `http://localhost:${port}${this.config?.basePath || ''}`
     console.log(`\n\x1b[1;30m🚀 API running at\x1b[0m \x1b[4;34m${url}\x1b[0m`)
     this.listening = true
     return this.server
