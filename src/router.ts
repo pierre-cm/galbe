@@ -44,15 +44,19 @@ const walkRoutes = (path: string[], node: RouteNode, alts: RouteNode[] = []): Ro
 export class KadreRouter {
   routes: RouteTree
   prefix: string
+  staticRoutes: Map<string, Route>
   constructor(prefix?: string) {
     this.routes = { GET: {}, POST: {}, PUT: {}, PATCH: {}, DELETE: {}, OPTIONS: {} }
     prefix = prefix || ''
     if (prefix && !prefix.match(/^\//)) prefix = `/${prefix}`
     this.prefix = prefix
+    this.staticRoutes = new Map()
   }
   add(route: Route) {
     route.path = route?.path?.[0] === '/' ? route.path : `/${route.path}`
     if (!route.path.match(ROUTE_REGEX)) throw new SyntaxError(`${route.path} is not a valid route path.`)
+    const isStatic = !route.path.match(/(:[\w\d-]+|\*)/)
+    if (isStatic) this.staticRoutes.set(`[${route.method.toUpperCase()}]${route.path}`, route)
     route.path = `${this.prefix || ''}${route.path}`
     let path = route.path.replace(/^\/$(.*)\/?$/, '$1').split('/')
     path.shift()
@@ -83,6 +87,8 @@ export class KadreRouter {
     }
   }
   find(method: string, path: string) {
+    const staticRoute = this.staticRoutes.get(`[${method}]${path}`)
+    if (staticRoute !== undefined) return staticRoute
     let parts = path
       .replace(/\/+/g, '/')
       .replace(/^\/$(.*)\/?$/, '$1')
