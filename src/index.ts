@@ -277,7 +277,6 @@ export class Kadre {
     this.router.add(route)
   }
   async use(plugin: KadrePlugin) {
-    if (plugin.init) await plugin?.init(this, this?.config?.plugin?.[plugin?.name])
     this.plugins.push(plugin)
   }
   async listen(port?: number) {
@@ -288,7 +287,7 @@ export class Kadre {
       await defineRoutes(this.config || {}, this)
       console.log('\n✅ \x1b[1;30mdone\x1b[0m')
     }
-    this.server = server(this, port)
+    this.server = await server(this, port)
     const url = `http://localhost:${port}${this.config?.basePath || ''}`
     console.log(`\n\x1b[1;30m🚀 API running at\x1b[0m \x1b[4;34m${url}\x1b[0m`)
     this.listening = true

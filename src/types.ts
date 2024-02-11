@@ -258,11 +258,11 @@ export class NotFoundError extends RequestError {
  * import { KadrePlugin } from 'kadre'
  * const MyPlugin : KadrePlugin = {
  *   name: 'com.example.plugin.name',
- *   init: (kadre, config) => {
+ *   init: (config, kadre) => {
  *     console.log('Plugin initialization')
  *   },
- *   fetch: (request, kadre) => {
- *     if(new URL(request).pathname === '/myPlugin') {
+ *   onRoute: (route) => {
+ *     if(route.path === '/myPlugin') {
  *       return new Response('Hello Mom!')
  *     }
  *   }
@@ -271,6 +271,9 @@ export class NotFoundError extends RequestError {
  */
 export type KadrePlugin = {
   name: string
-  init?: (kadre: Kadre, config?: any) => MaybePromise<any>
-  fetch?: (request: Request, app: Kadre) => MaybePromise<Response | void>
+  init?: (config: any, kadre: Kadre) => MaybePromise<void>
+  onFetch?: (request: Request) => MaybePromise<Response | void>
+  onRoute?: (route: Route) => MaybePromise<Response | void>
+  beforeHandle?: (context: Context) => MaybePromise<Response | void>
+  afterHandle?: (response: Response) => MaybePromise<Response | void>
 }

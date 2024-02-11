@@ -9,10 +9,36 @@ const handleInternalError = (error: any) => {
   return new RequestError({ status: 500, error: 'Internal Server Error' })
 }
 
-export default (kadre: Kadre, port?: number) => {
+const setupPluginCallbacks = (kadre: Kadre) => ({
+  init: kadre.plugins.reduce((l: { name: string; cb: Function }[], p) => {
+    if (p.init) l.push({ name: p.name, cb: p.init })
+    return l
+  }, []),
+  onFetch: kadre.plugins.reduce((l: Function[], p) => {
+    if (p.onFetch) l.push(p.onFetch)
+    return l
+  }, []),
+  onRoute: kadre.plugins.reduce((l: Function[], p) => {
+    if (p.onRoute) l.push(p.onRoute)
+    return l
+  }, []),
+  beforeHandle: kadre.plugins.reduce((l: Function[], p) => {
+    if (p.beforeHandle) l.push(p.beforeHandle)
+    return l
+  }, []),
+  afterHandle: kadre.plugins.reduce((l: Function[], p) => {
+    if (p.afterHandle) l.push(p.afterHandle)
+    return l
+  }, [])
+})
+
+export default async (kadre: Kadre, port?: number) => {
   const router = kadre.router
   if (kadre?.config?.basePath && kadre?.config?.basePath[0] !== '/')
     kadre.config.basePath = `/${kadre?.config?.basePath}`
+  let pluginsCb = setupPluginCallbacks(kadre)
+  for (const { name, cb } of pluginsCb.init) await cb(kadre?.config?.plugin?.[name], kadre)
+
   return Bun.serve({
     port: port || kadre.config?.port || 3000,
     async fetch(req) {
@@ -25,9 +51,9 @@ export default (kadre: Kadre, port?: number) => {
         body: {},
         state: {}
       }
-      for (const plugin of kadre.plugins) {
-        let resp = plugin.fetch ? await plugin.fetch(req, kadre) : null
-        if (resp) return resp
+      for (const cb of pluginsCb.onFetch) {
+        const r = await cb(req)
+        if (r) return r
       }
       const url = new URL(req.url)
       let route: Route
@@ -40,6 +66,11 @@ export default (kadre: Kadre, port?: number) => {
         } catch (error) {
           if (error instanceof RequestError) throw error
           else throw handleInternalError(error)
+        }
+
+        for (const cb of pluginsCb.onRoute) {
+          const r = await cb(route)
+          if (r) return r
         }
 
         // parse request
@@ -81,6 +112,11 @@ export default (kadre: Kadre, port?: number) => {
           throw new RequestError({ status: 400, error: errors.reduce((acc, c) => ({ ...acc, ...c.error }), {}) })
         }
 
+        for (const cb of pluginsCb.beforeHandle) {
+          const r = await cb(context)
+          if (r) return r
+        }
+
         // call chain
         let handlerCalled = false
         const handlerWrapper = async (context: Context) => {
@@ -104,7 +140,14 @@ export default (kadre: Kadre, port?: number) => {
         })
         if (callChain.length > 1) await callChain[0].call()
         else response = await handlerWrapper(context)
-        return responseParser(response, context)
+        const parsedResponse = responseParser(response, context)
+
+        for (const cb of pluginsCb.afterHandle) {
+          const r = await cb(parsedResponse)
+          if (r) return r
+        }
+
+        return parsedResponse
       } catch (error) {
         context.set.status = error instanceof RequestError ? error.status : 500
         if (kadre.errorHandler) return kadre.errorHandler(error, context)
