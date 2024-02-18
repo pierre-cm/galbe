@@ -13,7 +13,7 @@ import { Kadre } from '../src'
 const ROOT = process.cwd()
 const BUILD_ID = randomUUID()
 
-process.env.FORCE_COLOR = '1'
+Bun.env.FORCE_COLOR = '1'
 
 const parseRoutes = async (routes?: string | string[]): Promise<{ path: string; meta: RouteMeta }[]> => {
   if (!routes) return []
@@ -41,7 +41,7 @@ const parseRoutes = async (routes?: string | string[]): Promise<{ path: string; 
   return files
 }
 
-const createBuildIndex = async (indexPath: string, routes: { path: string; meta: RouteMeta }[], port?: number) => {
+const createBuildIndex = async (indexPath: string, routes: { path: string; meta: RouteMeta }[]) => {
   const buildPath = resolve(ROOT, '.kadre', 'build', BUILD_ID)
   await mkdir(buildPath, { recursive: true })
   await Bun.write(
@@ -54,7 +54,7 @@ ${routes
 _${idx}(kadre)`
   )
   .join(';\n')}
-kadre.listen(${port});
+kadre.listen();
 `
   )
   return resolve(buildPath, 'index.ts')
@@ -92,7 +92,7 @@ program
     const { out, compile } = props
     const k: Kadre = (await import(resolve(ROOT, fileName))).default
     const routes = await parseRoutes(k?.config?.routes)
-    const buildIndex = await createBuildIndex(fileName, routes, k?.config?.port)
+    const buildIndex = await createBuildIndex(fileName, routes)
 
     const cmds = [
       'bun',

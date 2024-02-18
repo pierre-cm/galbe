@@ -48,6 +48,7 @@ import server from './server'
 import { KadreRouter } from './router'
 import { defineRoutes } from './routes'
 import { Stream } from './types'
+import { logRoute } from './util'
 
 const overloadDiscriminer = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
   kadre: Kadre,
@@ -247,6 +248,8 @@ class KadreTypeBuilder extends TypeboxTypeBuilder {
 export const T = new KadreTypeBuilder()
 
 export { RequestError } from './types'
+
+const indexRoutes: { method: string; path: string }[] = []
 /**
  * #### Kadre Server
  * Instanciate a Kadre web server
@@ -261,36 +264,46 @@ export { RequestError } from './types'
  * ```
  */
 export class Kadre {
-  config?: KadreConfig
+  config: KadreConfig
   meta?: Array<RouteFileMeta> = []
   router: KadreRouter
   errorHandler?: ErrorHandler
   listening: boolean = false
+  #prepare: boolean = false
   server?: Server
   plugins: KadrePlugin[] = []
   constructor(config?: KadreConfig) {
-    this.config = config
-    const { basePath = '' } = config || {}
-    this.router = new KadreRouter(basePath)
+    this.config = config ?? {}
+    this.router = new KadreRouter(this.config?.basePath || '')
   }
   private add(route: any) {
     this.router.add(route)
+    if (Bun.env.BUN_ENV === 'development') {
+      if (!this.#prepare) indexRoutes.push({ method: route.method, path: route.path })
+      else logRoute(route)
+    }
   }
   async use(plugin: KadrePlugin) {
     this.plugins.push(plugin)
   }
   async listen(port?: number) {
     port = port || this.config?.port || 3000
+    this.config.port = port
     if (this.listening) this.stop()
-    if (Bun.env.BUN_ENV === 'development' && !!this.config?.routes) {
+    if (Bun.env.BUN_ENV === 'development') {
+      this.#prepare = true
       console.log('🏗️  \x1b[1;30mConstructing routes\x1b[0m')
+      for (const r of indexRoutes) logRoute(r)
       await defineRoutes(this.config || {}, this)
       console.log('\n✅ \x1b[1;30mdone\x1b[0m')
+      this.server = await server(this, port)
+      const url = `http://localhost:${port}${this.config?.basePath || ''}`
+      console.log(`\n\x1b[1;30m🚀 API running at\x1b[0m \x1b[4;34m${url}\x1b[0m`)
+    } else {
+      this.server = await server(this, port)
     }
-    this.server = await server(this, port)
-    const url = `http://localhost:${port}${this.config?.basePath || ''}`
-    console.log(`\n\x1b[1;30m🚀 API running at\x1b[0m \x1b[4;34m${url}\x1b[0m`)
     this.listening = true
+    this.#prepare = false
     return this.server
   }
   stop() {

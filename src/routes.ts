@@ -118,7 +118,7 @@ const importRoutes = async (filePath: string, kadre: Kadre) => {
 export const defineRoutes = async (options: KadreConfig, kadre: Kadre) => {
   const routes = options?.routes
   if (!routes) {
-    console.log(`\x1b\[38;5;245m    No route defined\x1b[0m`)
+    console.log(`\x1b\[38;5;245m    No route file defined\x1b[0m`)
     return
   }
   const root = process.cwd()
@@ -136,15 +136,16 @@ export const defineRoutes = async (options: KadreConfig, kadre: Kadre) => {
         try {
           const metadata = await metaAnalysis(f)
           kadre.meta?.push({ file: path, ...metadata })
+          console.log(`\n\x1b\[0;36m    ${f}\x1b[0m`)
           await importRoutes(f, kadre)
-          console.log(`\x1b\[0;32m    ${f}\x1b[0m`)
         } catch (err) {
-          console.log(`\x1b\[0;31m    ${f}\x1b[0m`)
+          // console.log(`\x1b\[0;31m    ${f}\x1b[0m`)
           throw err
         }
       }
     }
     if (noRouteFound) {
+      process.stdout.write('\r\x1b[K')
       console.log(`\x1b\[38;5;245m    No route found\x1b[0m`)
       return
     }

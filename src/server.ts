@@ -136,6 +136,7 @@ export default async (kadre: Kadre, port?: number) => {
         callChain.push({
           call: async () => {
             response = await handlerWrapper(context)
+            context.set.status = response instanceof Response ? response.status : 200
           }
         })
         if (callChain.length > 1) await callChain[0].call()
