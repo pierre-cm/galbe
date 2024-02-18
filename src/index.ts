@@ -23,7 +23,7 @@ import type {
 } from '@sinclair/typebox'
 import type { RouteFileMeta } from './routes'
 import type {
-  KadreConfig,
+  GalbeConfig,
   Method,
   Schema,
   Hook,
@@ -31,7 +31,7 @@ import type {
   Endpoint,
   Context,
   ErrorHandler,
-  KadrePlugin,
+  GalbePlugin,
   TStream,
   TMultipartProperties,
   TMultipartForm,
@@ -45,13 +45,13 @@ import type {
 
 import { TypeClone, Kind, TypeBuilder, Optional, TypeGuard } from '@sinclair/typebox'
 import server from './server'
-import { KadreRouter } from './router'
+import { GalbeRouter } from './router'
 import { defineRoutes } from './routes'
 import { Stream } from './types'
 import { logRoute } from './util'
 
 const overloadDiscriminer = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
-  kadre: Kadre,
+  galbe: Galbe,
   method: Method,
   path: string,
   arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
@@ -60,19 +60,19 @@ const overloadDiscriminer = <H extends TProperties, P extends TProperties, Q ext
 ) => {
   const defaultSchema = {}
   if (typeof arg2 === 'function') {
-    return kadreMethod(kadre, method, path, defaultSchema, undefined, arg2)
+    return galbeMethod(galbe, method, path, defaultSchema, undefined, arg2)
   } else {
     if (Array.isArray(arg2)) {
-      if (typeof arg3 === 'function') return kadreMethod(kadre, method, path, defaultSchema, arg2, arg3)
+      if (typeof arg3 === 'function') return galbeMethod(galbe, method, path, defaultSchema, arg2, arg3)
     } else {
-      if (Array.isArray(arg3) && arg4) return kadreMethod(kadre, method, path, arg2, arg3, arg4)
-      else if (typeof arg3 === 'function') return kadreMethod(kadre, method, path, arg2, undefined, arg3)
+      if (Array.isArray(arg3) && arg4) return galbeMethod(galbe, method, path, arg2, arg3, arg4)
+      else if (typeof arg3 === 'function') return galbeMethod(galbe, method, path, arg2, undefined, arg3)
     }
   }
   throw new Error('Undefined endpoint signature')
 }
-const kadreMethod = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
-  _kadre: Kadre,
+const galbeMethod = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
+  _galbe: Galbe,
   method: Method,
   path: string,
   schema: Schema<H, P, Q, B> | undefined,
@@ -193,8 +193,8 @@ export class TypeboxTypeBuilder extends TypeBuilder {
   }
 }
 
-class KadreTypeBuilder extends TypeboxTypeBuilder {
-  /** `[Kadre]` Creates an Stream type */
+class GalbeTypeBuilder extends TypeboxTypeBuilder {
+  /** `[Galbe]` Creates an Stream type */
   public Stream<T extends TUrlForm>(
     schema: T
   ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<[string, string | number | boolean]>; params: unknown[] }
@@ -213,11 +213,11 @@ class KadreTypeBuilder extends TypeboxTypeBuilder {
       [Stream]: 'Stream'
     }
   }
-  /** `[Kadre]` Creates an ByteArray type */
+  /** `[Galbe]` Creates an ByteArray type */
   public ByteArray(): TByteArray {
     return this.Create({ [Kind]: 'ByteArray', type: 'byteArray', params: {} })
   }
-  /** `[Kadre]` Creates an MultipartForm type */
+  /** `[Galbe]` Creates an MultipartForm type */
   public MultipartForm<T extends TMultipartProperties>(properties?: T): TMultipartForm {
     if (!properties) return this.Create({ [Kind]: 'MultipartForm', type: 'multipartForm' })
     const propertyKeys = Object.getOwnPropertyNames(properties)
@@ -232,7 +232,7 @@ class KadreTypeBuilder extends TypeboxTypeBuilder {
       properties: clonedProperties
     })
   }
-  /** `[Kadre]` Creates an UrlForm type */
+  /** `[Galbe]` Creates an UrlForm type */
   public UrlForm<T extends TUrlFormProperties>(properties?: T): TUrlForm {
     if (!properties) return this.Create({ [Kind]: 'UrlForm', type: 'urlForm' })
     const propertyKeys = Object.getOwnPropertyNames(properties)
@@ -245,36 +245,36 @@ class KadreTypeBuilder extends TypeboxTypeBuilder {
   }
 }
 
-export const T = new KadreTypeBuilder()
+export const T = new GalbeTypeBuilder()
 
 export { RequestError } from './types'
 
 const indexRoutes: { method: string; path: string }[] = []
 /**
- * #### Kadre Server
- * Instanciate a Kadre web server
+ * #### Galbe Server
+ * Instanciate a Galbe web server
  *
  * ---
  * @example
  * ```typescript
- * import { Kadre } from 'kadre'
- * import config from "./kadre.config"
+ * import { Galbe } from 'galbe'
+ * import config from "./galbe.config"
  *
- * export default new Kadre(config)
+ * export default new Galbe(config)
  * ```
  */
-export class Kadre {
-  config: KadreConfig
+export class Galbe {
+  config: GalbeConfig
   meta?: Array<RouteFileMeta> = []
-  router: KadreRouter
+  router: GalbeRouter
   errorHandler?: ErrorHandler
   listening: boolean = false
   #prepare: boolean = false
   server?: Server
-  plugins: KadrePlugin[] = []
-  constructor(config?: KadreConfig) {
+  plugins: GalbePlugin[] = []
+  constructor(config?: GalbeConfig) {
     this.config = config ?? {}
-    this.router = new KadreRouter(this.config?.basePath || '')
+    this.router = new GalbeRouter(this.config?.basePath || '')
   }
   private add(route: any) {
     this.router.add(route)
@@ -283,7 +283,7 @@ export class Kadre {
       else logRoute(route)
     }
   }
-  async use(plugin: KadrePlugin) {
+  async use(plugin: GalbePlugin) {
     this.plugins.push(plugin)
   }
   async listen(port?: number) {

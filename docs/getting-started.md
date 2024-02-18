@@ -1,5 +1,5 @@
 ### Create a project
 
 ```shell
-    bun create pierre-cm/create-kadre
+    bun create pierre-cm/create-galbe
 ```

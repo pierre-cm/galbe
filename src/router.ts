@@ -41,7 +41,7 @@ const walkRoutes = (path: string[], node: RouteNode, alts: RouteNode[] = []): Ro
   throw new NotFoundError()
 }
 
-export class KadreRouter {
+export class GalbeRouter {
   routes: RouteTree
   prefix: string
   staticRoutes: Map<string, Route>

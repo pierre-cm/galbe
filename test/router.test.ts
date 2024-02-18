@@ -1,10 +1,10 @@
 import { expect, test, describe } from 'bun:test'
-import { Kadre, NotFoundError, type RouteNode } from '../src'
+import { Galbe, NotFoundError, type RouteNode } from '../src'
 
 describe('router', () => {
   test('empty', async () => {
-    const kadre = new Kadre()
-    const router = kadre.router
+    const galbe = new Galbe()
+    const router = galbe.router
 
     expect(router.prefix).toBe('')
     expect(router.routes.GET).toEqual({})
@@ -16,7 +16,7 @@ describe('router', () => {
   })
 
   test('routes, bad syntax', async () => {
-    const kadre = new Kadre()
+    const galbe = new Galbe()
 
     const invalidPaths = [
       '.',
@@ -33,7 +33,7 @@ describe('router', () => {
 
     for (const p of invalidPaths) {
       try {
-        kadre.get(p, () => {})
+        galbe.get(p, () => {})
         expect.unreachable()
       } catch (err) {
         expect(err).toBeInstanceOf(SyntaxError)
@@ -42,12 +42,12 @@ describe('router', () => {
   })
 
   test('chaining routes', async () => {
-    const kadre = new Kadre()
-    const router = kadre.router
+    const galbe = new Galbe()
+    const router = galbe.router
 
     expect(router.routes.GET).toEqual({})
 
-    kadre.get('/', () => {})
+    galbe.get('/', () => {})
     let r: RouteNode | undefined = router.routes.GET
 
     expect(r?.route?.method).toBe('get')
@@ -56,7 +56,7 @@ describe('router', () => {
     expect(r?.children).toBeUndefined()
 
     const mockHandler = () => {}
-    kadre.get('/test', mockHandler)
+    galbe.get('/test', mockHandler)
     r = r?.children?.test
 
     expect(r?.route?.method).toBe('get')
@@ -66,7 +66,7 @@ describe('router', () => {
     expect(r?.route?.handler).toBe(mockHandler)
 
     const mockHandler2 = () => {}
-    kadre.get('/test/:foo', mockHandler2)
+    galbe.get('/test/:foo', mockHandler2)
     r = r?.param
 
     expect(r?.route?.method).toBe('get')
@@ -76,7 +76,7 @@ describe('router', () => {
     expect(r?.route?.handler).toBe(mockHandler2)
 
     const mockHandler3 = () => {}
-    kadre.get('/test/:foo/bar', mockHandler3)
+    galbe.get('/test/:foo/bar', mockHandler3)
 
     expect(r?.children).toHaveProperty('bar')
     expect(r?.param).toBeUndefined()
@@ -84,14 +84,14 @@ describe('router', () => {
   })
 
   test('redefining root', async () => {
-    const kadre = new Kadre()
-    const router = kadre.router
+    const galbe = new Galbe()
+    const router = galbe.router
 
     const [h1, h2, h3] = [() => {}, () => {}, () => {}]
 
-    kadre.get('/', h1)
-    kadre.get('/test', h2)
-    kadre.get('/', h3)
+    galbe.get('/', h1)
+    galbe.get('/test', h2)
+    galbe.get('/', h3)
 
     let r: RouteNode | undefined = router.routes.GET
     expect(router.prefix).toBe('')
@@ -103,8 +103,8 @@ describe('router', () => {
 
     const [h4, h5] = [() => {}, () => {}]
 
-    kadre.get('/foo/bar', h4)
-    kadre.get('/foo', h5)
+    galbe.get('/foo/bar', h4)
+    galbe.get('/foo', h5)
 
     r = router?.routes?.GET?.children?.foo
     expect(r?.route?.method).toBe('get')
@@ -116,14 +116,14 @@ describe('router', () => {
   })
 
   test('find route', async () => {
-    const kadre = new Kadre()
-    const router = kadre.router
+    const galbe = new Galbe()
+    const router = galbe.router
 
     const [h1, h3, h4] = [() => {}, () => {}, () => {}, () => {}]
 
-    kadre.get('/', h1)
-    kadre.get('/test/foo', h3)
-    kadre.get('/test/foo/bar', h4)
+    galbe.get('/', h1)
+    galbe.get('/test/foo', h3)
+    galbe.get('/test/foo/bar', h4)
 
     let r1 = router.find('GET', '/')
     expect(r1.path).toBe('/')
@@ -155,13 +155,13 @@ describe('router', () => {
   })
 
   test('find route param', async () => {
-    const kadre = new Kadre()
-    const router = kadre.router
+    const galbe = new Galbe()
+    const router = galbe.router
 
     const [h1, h2] = [() => {}, () => {}]
 
-    kadre.get('/test/:foo', h1)
-    kadre.get('/test/test', h2)
+    galbe.get('/test/:foo', h1)
+    galbe.get('/test/test', h2)
 
     let r1 = router.find('GET', '/test/42')
     expect(r1.path).toBe('/test/:foo')
@@ -173,16 +173,16 @@ describe('router', () => {
   })
 
   test('wildcard routes', async () => {
-    const kadre = new Kadre()
-    const router = kadre.router
+    const galbe = new Galbe()
+    const router = galbe.router
 
     const [h1, h2, h3, h4] = [() => {}, () => {}, () => {}, () => {}]
 
-    kadre.get('/test/foo/*', h1)
-    kadre.get('/test/foo/bar', h2)
-    kadre.get('/test/foo/:p/bar', h3)
+    galbe.get('/test/foo/*', h1)
+    galbe.get('/test/foo/bar', h2)
+    galbe.get('/test/foo/:p/bar', h3)
 
-    kadre.get('/test/foo/*/lol', h4)
+    galbe.get('/test/foo/*/lol', h4)
 
     let r1 = router.find('GET', '/test/foo/bar/42')
     expect(r1.path).toBe('/test/foo/*')

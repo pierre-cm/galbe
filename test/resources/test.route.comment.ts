@@ -1,4 +1,4 @@
-import type { Kadre } from '../../src'
+import type { Galbe } from '../../src'
 import { T } from '../../src'
 
 /**
@@ -7,7 +7,7 @@ import { T } from '../../src'
  * @tag test
  * ok
  */
-export default (k: Kadre) => {
+export default (g: Galbe) => {
   /**
    * This part
    * here
@@ -18,7 +18,7 @@ export default (k: Kadre) => {
    * @param {path} param1 description
    * @param  {query} param2 description
    */
-  k.get('/test/:param1', _ => {})
+  g.get('/test/:param1', _ => {})
 
   // Comment between enpoints
 
@@ -28,11 +28,11 @@ export default (k: Kadre) => {
    * @description longer description example
    * @body body descripton
    */
-  k.post('/test', { body: T.Object({ foo: T.String() }) }, _ => {})
+  g.post('/test', { body: T.Object({ foo: T.String() }) }, _ => {})
 
   /**
    * @tags tag1, tag2
    * @other Hello Mom!
    */
-  k.put('/test', { body: T.Object({ foo: T.String() }) }, [() => {}], _ => {})
+  g.put('/test', { body: T.Object({ foo: T.String() }) }, [() => {}], _ => {})
 }

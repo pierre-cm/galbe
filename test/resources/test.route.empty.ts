@@ -1,9 +1,9 @@
-import type { Kadre } from '../../src'
+import type { Galbe } from '../../src'
 
-export default (k: Kadre) => {
-  k.get('/one', _ => {})
+export default (g: Galbe) => {
+  g.get('/one', _ => {})
   // Comment between enpoints
-  k.post('/two', _ => {})
+  g.post('/two', _ => {})
 
-  k.put('/three', _ => {})
+  g.put('/three', _ => {})
 }

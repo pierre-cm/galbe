@@ -1,14 +1,14 @@
 import { expect, test, describe } from 'bun:test'
-import { Kadre } from '../src'
+import { Galbe } from '../src'
 
 const port = 7360
 
 describe('hooks', async () => {
-  const kadre = new Kadre()
-  await kadre.listen(port)
+  const galbe = new Galbe()
+  await galbe.listen(port)
 
   test('hooks, empty', async () => {
-    kadre.get('/hooks/empty', [], () => 'handled')
+    galbe.get('/hooks/empty', [], () => 'handled')
 
     let resp = await fetch(`http://localhost:${port}/hooks/empty`, {
       method: 'GET'
@@ -18,7 +18,7 @@ describe('hooks', async () => {
   })
 
   test('hooks, void', async () => {
-    kadre.get('/hooks/void', [(_ctx, _next) => {}], () => 'handled')
+    galbe.get('/hooks/void', [(_ctx, _next) => {}], () => 'handled')
 
     let resp = await fetch(`http://localhost:${port}/hooks/void`, {
       method: 'GET'
@@ -29,7 +29,7 @@ describe('hooks', async () => {
 
   test('hooks, called without next', async () => {
     let hookCalled = 0
-    kadre.get(
+    galbe.get(
       '/hooks/called',
       [
         _ => {
@@ -49,7 +49,7 @@ describe('hooks', async () => {
 
   test('hooks, called with next', async () => {
     let hookCalled = 0
-    kadre.get(
+    galbe.get(
       '/hooks/called',
       [
         async (_, next) => {
@@ -72,7 +72,7 @@ describe('hooks', async () => {
   test('hooks, wrapper hook', async () => {
     let before = 0
     let after = 0
-    kadre.get(
+    galbe.get(
       '/hooks/called',
       [
         async (_, next) => {
@@ -104,7 +104,7 @@ describe('hooks', async () => {
     let after1 = 0
     let before2 = 0
     let after2 = 0
-    kadre.get(
+    galbe.get(
       '/hooks/called',
       [
         async (_, next) => {
@@ -146,7 +146,7 @@ describe('hooks', async () => {
   test('hooks, linear chaining', async () => {
     let hook1 = 0
     let hook2 = 0
-    kadre.get(
+    galbe.get(
       '/hooks/called',
       [
         async _ => {

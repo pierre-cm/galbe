@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeAll } from 'bun:test'
-import { Kadre, T } from '../src'
+import { Galbe, T } from '../src'
 import { decoder } from './test.utils'
 
 const port = 7359
@@ -23,9 +23,9 @@ const rsTxt = (text: string) => {
 
 describe('responses', () => {
   beforeAll(async () => {
-    const kadre = new Kadre()
+    const galbe = new Galbe()
 
-    kadre.post(
+    galbe.post(
       '/response',
       {
         body: T.Optional(T.Object(T.Any())),
@@ -42,15 +42,15 @@ describe('responses', () => {
       }
     )
 
-    kadre.get('/error', _ => {
+    galbe.get('/error', _ => {
       return { next: () => {} }
     })
 
-    kadre.onError(_ => {
+    galbe.onError(_ => {
       throw new Error()
     })
 
-    await kadre.listen(port)
+    await galbe.listen(port)
   })
 
   test('response, string', async () => {

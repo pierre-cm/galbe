@@ -1,10 +1,10 @@
-import type { KadreConfig } from './types'
+import type { GalbeConfig } from './types'
 
 import { readdir, lstat } from 'fs/promises'
 import { extname } from 'path'
 import { parse } from 'acorn'
 import { simple } from 'acorn-walk'
-import { Kadre } from './index'
+import { Galbe } from './index'
 import { transformSync } from '@swc/core'
 import { Glob } from 'bun'
 
@@ -80,7 +80,7 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMeta> => {
   simple(ast, {
     ExportDefaultDeclaration(node) {
       // @ts-ignore
-      let kadreIdentifier = node.declaration.params[0].name
+      let galbeIdentifier = node.declaration.params[0].name
 
       const headerLine = node.loc?.start.line
       const headerCom = headerLine !== undefined && comments?.[headerLine] ? comments[headerLine] : ''
@@ -90,7 +90,7 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMeta> => {
       simple(node.declaration.body, {
         CallExpression(node) {
           // @ts-ignore
-          if (node?.callee?.object?.name === kadreIdentifier) {
+          if (node?.callee?.object?.name === galbeIdentifier) {
             // @ts-ignore
             const path = node.arguments[0].value
             // @ts-ignore
@@ -110,12 +110,12 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMeta> => {
   return meta
 }
 
-const importRoutes = async (filePath: string, kadre: Kadre) => {
+const importRoutes = async (filePath: string, galbe: Galbe) => {
   const routes = (await import(filePath)).default
-  routes(kadre)
+  routes(galbe)
 }
 
-export const defineRoutes = async (options: KadreConfig, kadre: Kadre) => {
+export const defineRoutes = async (options: GalbeConfig, galbe: Galbe) => {
   const routes = options?.routes
   if (!routes) {
     console.log(`\x1b\[38;5;245m    No route file defined\x1b[0m`)
@@ -135,9 +135,9 @@ export const defineRoutes = async (options: KadreConfig, kadre: Kadre) => {
       for (const f of files) {
         try {
           const metadata = await metaAnalysis(f)
-          kadre.meta?.push({ file: path, ...metadata })
+          galbe.meta?.push({ file: path, ...metadata })
           console.log(`\n\x1b\[0;36m    ${f}\x1b[0m`)
-          await importRoutes(f, kadre)
+          await importRoutes(f, galbe)
         } catch (err) {
           // console.log(`\x1b\[0;31m    ${f}\x1b[0m`)
           throw err
@@ -151,7 +151,7 @@ export const defineRoutes = async (options: KadreConfig, kadre: Kadre) => {
     }
   } else if (Array.isArray(routes)) {
     for (const r of routes) {
-      await defineRoutes({ routes: r }, kadre)
+      await defineRoutes({ routes: r }, galbe)
     }
   }
 }

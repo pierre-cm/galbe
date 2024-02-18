@@ -1,5 +1,5 @@
 {
-  "name": "kadre",
+  "name": "galbe",
   "version": "0.0.1",
   "description": "Fast, lightweight and highly customizable JavaScript web framework based on Bun",
   "author": "Pierre Caillaud M (https://github.com/pierre-cm)",
@@ -13,10 +13,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/pierre-cm/kadre"
+    "url": "https://github.com/pierre-cm/galbe"
   },
-  "bugs": "https://github.com/pierre-cm/kadre/issues",
-  "homepage": "https://kadre.dev",
+  "bugs": "https://github.com/pierre-cm/galbe/issues",
+  "homepage": "https://galbe.dev",
   "keywords": [
     "bun",
     "http",

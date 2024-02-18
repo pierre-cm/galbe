@@ -8,7 +8,7 @@ import { mkdir, readdir, rm } from 'fs/promises'
 import { metaAnalysis } from '../src/routes'
 import { randomUUID } from 'crypto'
 import { glob } from 'glob'
-import { Kadre } from '../src'
+import { Galbe } from '../src'
 
 const ROOT = process.cwd()
 const BUILD_ID = randomUUID()
@@ -42,41 +42,41 @@ const parseRoutes = async (routes?: string | string[]): Promise<{ path: string; 
 }
 
 const createBuildIndex = async (indexPath: string, routes: { path: string; meta: RouteMeta }[]) => {
-  const buildPath = resolve(ROOT, '.kadre', 'build', BUILD_ID)
+  const buildPath = resolve(ROOT, '.galbe', 'build', BUILD_ID)
   await mkdir(buildPath, { recursive: true })
   await Bun.write(
     resolve(buildPath, 'index.ts'),
-    `import kadre from '${relative(buildPath, indexPath)}';
+    `import galbe from '${relative(buildPath, indexPath)}';
 ${routes.map((r, idx) => `import _${idx} from '${relative(buildPath, r.path)}'`).join(';\n')}
 ${routes
   .map(
-    (r, idx) => `kadre.routesMetadata = {...${JSON.stringify(r.meta)}}
-_${idx}(kadre)`
+    (r, idx) => `galbe.routesMetadata = {...${JSON.stringify(r.meta)}}
+_${idx}(galbe)`
   )
   .join(';\n')}
-kadre.listen();
+galbe.listen();
 `
   )
   return resolve(buildPath, 'index.ts')
 }
 
-program.name('kadre').description('CLI to execute kadre utilities').version('0.1.0')
+program.name('galbe').description('CLI to execute galbe utilities').version('0.1.0')
 
 program
   .command('dev')
-  .description('Run a dev server running your kadre API')
+  .description('Run a dev server running your galbe API')
   .argument('<string>', 'filename')
   .option('-p, --port <number>', 'port number', '')
   .action(async (fileName, props) => {
     const { port } = props
-    const devRoot = resolve(ROOT, '.kadre', 'dev')
+    const devRoot = resolve(ROOT, '.galbe', 'dev')
     await mkdir(devRoot, { recursive: true })
     await Bun.write(
       resolve(devRoot, 'index.ts'),
-      `import kadre from '${relative(devRoot, fileName)}';kadre.listen(${port});`
+      `import galbe from '${relative(devRoot, fileName)}';galbe.listen(${port});`
     )
     process.on('SIGINT', async () => {
-      await rm(resolve(ROOT, '.kadre', 'dev'), { recursive: true })
+      await rm(resolve(ROOT, '.galbe', 'dev'), { recursive: true })
     })
 
     await $`BUN_ENV=development bun run --watch ${resolve(devRoot, 'index.ts')}`.cwd(ROOT)
@@ -84,14 +84,14 @@ program
 
 program
   .command('build')
-  .description('Build your kadre API')
+  .description('Build your galbe API')
   .argument('<string>', 'filename')
   .option('-o, --out <string>', 'output file', '')
   .option('-c, --compile', 'standalone executable', false)
   .action(async (fileName, props) => {
     const { out, compile } = props
-    const k: Kadre = (await import(resolve(ROOT, fileName))).default
-    const routes = await parseRoutes(k?.config?.routes)
+    const g: Galbe = (await import(resolve(ROOT, fileName))).default
+    const routes = await parseRoutes(g?.config?.routes)
     const buildIndex = await createBuildIndex(fileName, routes)
 
     const cmds = [
@@ -106,7 +106,7 @@ program
       cwd: ROOT,
       stdout: 'inherit',
       async onExit() {
-        await rm(resolve(ROOT, '.kadre', 'build', BUILD_ID), { recursive: true })
+        await rm(resolve(ROOT, '.galbe', 'build', BUILD_ID), { recursive: true })
       }
     })
   })

@@ -18,9 +18,9 @@ import type {
 } from '@sinclair/typebox'
 
 import { Kind } from '@sinclair/typebox'
-import { Kadre } from './index'
+import { Galbe } from './index'
 
-export const Stream = Symbol.for('Kadre.Stream')
+export const Stream = Symbol.for('Galbe.Stream')
 export type TStream<T extends TSchema = TSchema> = T & {
   [Stream]: 'Stream'
 }
@@ -114,23 +114,23 @@ export type Method = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options'
 type MaybePromise<T> = T | Promise<T>
 
 /**
- * #### KadreConfig
- * Instanciate a Kadre web server
+ * #### GalbeConfig
+ * Instanciate a Galbe web server
  *
  * ---
  * @example
  * ```typescript
- * import { Kadre } from 'kadre'
- * const config : KadreConfig = {
+ * import { Galbe } from 'galbe'
+ * const config : GalbeConfig = {
  *   port: 8080,
  *   basePath: "/v1",
  *   routes: "src/**­/*.route.ts"
  * }
  *
- * export default new Kadre(config)
+ * export default new Galbe(config)
  * ```
  */
-export type KadreConfig = {
+export type GalbeConfig = {
   port?: number
   basePath?: string
   routes?: string | string[]
@@ -143,7 +143,7 @@ export type KadreConfig = {
  * ---
  * @example
  * ```typescript
- * import { T, Schema } from 'kadre'
+ * import { T, Schema } from 'galbe'
  * const MyRequestSchema = {
  *   params: {
  *    id: T.Number(),
@@ -249,16 +249,16 @@ export class NotFoundError extends RequestError {
 }
 
 /**
- * #### KadrePlugin
- * Define a plugin for a Kadre server
+ * #### GalbePlugin
+ * Define a plugin for a Galbe server
  *
  * ---
  * @example
  * ```typescript
- * import { KadrePlugin } from 'kadre'
- * const MyPlugin : KadrePlugin = {
+ * import { GalbePlugin } from 'galbe'
+ * const MyPlugin : GalbePlugin = {
  *   name: 'com.example.plugin.name',
- *   init: (config, kadre) => {
+ *   init: (config, galbe) => {
  *     console.log('Plugin initialization')
  *   },
  *   onRoute: (route) => {
@@ -269,9 +269,9 @@ export class NotFoundError extends RequestError {
  * }
  * ```
  */
-export type KadrePlugin = {
+export type GalbePlugin = {
   name: string
-  init?: (config: any, kadre: Kadre) => MaybePromise<void>
+  init?: (config: any, galbe: Galbe) => MaybePromise<void>
   onFetch?: (request: Request) => MaybePromise<Response | void>
   onRoute?: (route: Route) => MaybePromise<Response | void>
   beforeHandle?: (context: Context) => MaybePromise<Response | void>

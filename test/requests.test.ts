@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeAll } from 'bun:test'
-import { Kadre, T } from '../src'
+import { Galbe, T } from '../src'
 import {
   formdata,
   type Case,
@@ -16,19 +16,19 @@ const METHODS = ['get', 'post', 'put', 'patch', 'delete', 'options']
 
 describe('requests', () => {
   beforeAll(async () => {
-    const kadre = new Kadre()
+    const galbe = new Galbe()
 
-    kadre.get('/test', () => {})
-    kadre.post('/test', () => {})
-    kadre.put('/test', () => {})
-    kadre.patch('/test', () => {})
-    kadre.delete('/test', () => {})
-    kadre.options('/test', () => {})
+    galbe.get('/test', () => {})
+    galbe.post('/test', () => {})
+    galbe.put('/test', () => {})
+    galbe.patch('/test', () => {})
+    galbe.delete('/test', () => {})
+    galbe.options('/test', () => {})
 
-    kadre.get('/headers', ctx => {
+    galbe.get('/headers', ctx => {
       return ctx.headers
     })
-    kadre.get(
+    galbe.get(
       '/headers/schema',
       {
         headers: {
@@ -47,10 +47,10 @@ describe('requests', () => {
       }
     )
 
-    kadre.get('/params/:param1/separate/:param2/:param3', ctx => {
+    galbe.get('/params/:param1/separate/:param2/:param3', ctx => {
       return ctx.params
     })
-    kadre.get(
+    galbe.get(
       '/params/schema/:p1/:p2/:p3/:p4',
       {
         params: {
@@ -65,10 +65,10 @@ describe('requests', () => {
       }
     )
 
-    kadre.get('/query/params', ctx => {
+    galbe.get('/query/params', ctx => {
       return ctx.query
     })
-    kadre.get(
+    galbe.get(
       '/query/params/schema',
       {
         query: {
@@ -84,20 +84,20 @@ describe('requests', () => {
       }
     )
 
-    kadre.post('/none', handleBody)
-    kadre.post('/ba', { body: T.ByteArray() }, handleBody)
-    kadre.post('/bool', { body: T.Boolean() }, handleBody)
-    kadre.post('/num', { body: T.Number() }, handleBody)
-    kadre.post('/str', { body: T.String() }, handleBody)
-    kadre.post('/arr', { body: T.Array(T.Any()) }, handleBody)
-    kadre.post('/obj', { body: T.Object(T.Any()) }, handleBody)
+    galbe.post('/none', handleBody)
+    galbe.post('/ba', { body: T.ByteArray() }, handleBody)
+    galbe.post('/bool', { body: T.Boolean() }, handleBody)
+    galbe.post('/num', { body: T.Number() }, handleBody)
+    galbe.post('/str', { body: T.String() }, handleBody)
+    galbe.post('/arr', { body: T.Array(T.Any()) }, handleBody)
+    galbe.post('/obj', { body: T.Object(T.Any()) }, handleBody)
 
-    kadre.post('/form', { body: T.UrlForm(T.Any()) }, handleBody)
-    kadre.post('/mp', { body: T.MultipartForm(T.Any()) }, handleBody)
+    galbe.post('/form', { body: T.UrlForm(T.Any()) }, handleBody)
+    galbe.post('/mp', { body: T.MultipartForm(T.Any()) }, handleBody)
 
-    kadre.post('/stream/ba', { body: T.Stream(T.ByteArray()) }, handleBody)
-    kadre.post('/stream/str', { body: T.Stream(T.String()) }, handleBody)
-    kadre.post('/stream/form', { body: T.Stream(T.UrlForm(T.Any())) }, async ctx => {
+    galbe.post('/stream/ba', { body: T.Stream(T.ByteArray()) }, handleBody)
+    galbe.post('/stream/str', { body: T.Stream(T.String()) }, handleBody)
+    galbe.post('/stream/form', { body: T.Stream(T.UrlForm(T.Any())) }, async ctx => {
       let resp: Record<string, any> = {}
       for await (const [k, v] of ctx.body) {
         if (k in resp) {
@@ -106,7 +106,7 @@ describe('requests', () => {
       }
       return { type: 'object', content: resp }
     })
-    kadre.post('/stream/mp', { body: T.Stream(T.MultipartForm(T.Any())) }, async ctx => {
+    galbe.post('/stream/mp', { body: T.Stream(T.MultipartForm(T.Any())) }, async ctx => {
       let resp: Record<string, any> = {}
       for await (const field of ctx.body) {
         let k = field.headers.name
@@ -119,8 +119,8 @@ describe('requests', () => {
       return { type: 'object', content: resp }
     })
 
-    kadre.post('/obj/schema/base', { body: T.Object(schema_object) }, handleBody)
-    kadre.post(
+    galbe.post('/obj/schema/base', { body: T.Object(schema_object) }, handleBody)
+    galbe.post(
       '/form/schema/base',
       {
         body: T.UrlForm({
@@ -132,7 +132,7 @@ describe('requests', () => {
       },
       handleBody
     )
-    kadre.post(
+    galbe.post(
       '/form/stream/schema/base',
       {
         body: T.Stream(
@@ -147,7 +147,7 @@ describe('requests', () => {
       },
       handleUrlFormStream
     )
-    kadre.post(
+    galbe.post(
       '/mp/schema/base',
       {
         body: T.MultipartForm({
@@ -159,7 +159,7 @@ describe('requests', () => {
       },
       handleBody
     )
-    kadre.post(
+    galbe.post(
       '/mp/stream/schema/base',
       {
         body: T.Stream(
@@ -183,12 +183,12 @@ describe('requests', () => {
       arrayBool: T.Array(T.Boolean())
     }
 
-    kadre.post(
+    galbe.post(
       '/mp/file',
       { body: T.MultipartForm({ imgFile: T.ByteArray(), jsonFile: T.Object(schema_jsonFile) }) },
       handleBody
     )
-    kadre.post(
+    galbe.post(
       '/mp/stream/file',
       { body: T.Stream(T.MultipartForm({ imgFile: T.ByteArray(), jsonFile: T.Object(schema_jsonFile) })) },
       async ctx => {
@@ -204,14 +204,14 @@ describe('requests', () => {
         }
       }
     )
-    kadre.post('/ba/file', { body: T.ByteArray() }, async ctx => {
+    galbe.post('/ba/file', { body: T.ByteArray() }, async ctx => {
       if (ctx?.body instanceof Uint8Array) {
         return { type: 'ByteArray', content: await fileHash(ctx.body) }
       } else {
         return { type: null, content: 'error' }
       }
     })
-    kadre.post('/ba/stream/file', { body: T.Stream(T.ByteArray()) }, async ctx => {
+    galbe.post('/ba/stream/file', { body: T.Stream(T.ByteArray()) }, async ctx => {
       if (isAsyncIterator(ctx.body)) {
         let bytes = new Uint8Array()
         for await (const b of ctx.body) {
@@ -223,7 +223,7 @@ describe('requests', () => {
       }
     })
 
-    await kadre.listen(port)
+    await galbe.listen(port)
   })
 
   test('methods, empty calls', async () => {

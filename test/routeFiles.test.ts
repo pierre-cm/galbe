@@ -1,6 +1,6 @@
 import { expect, test, describe } from 'bun:test'
 import { defineRoutes, metaAnalysis } from '../src/routes'
-import { Kadre } from '../src'
+import { Galbe } from '../src'
 
 describe('routeFiles', () => {
   test('meta analysis, empty', async () => {
@@ -56,7 +56,7 @@ describe('routeFiles', () => {
   })
 
   test('define routes, no route', async () => {
-    const k = new Kadre()
+    const k = new Galbe()
     await defineRoutes({}, k)
     expect(k.router.routes).toEqual({
       GET: {},
@@ -69,7 +69,7 @@ describe('routeFiles', () => {
   })
 
   test('define routes, no route found', async () => {
-    const k = new Kadre()
+    const k = new Galbe()
     await defineRoutes({ routes: 'unexisting_route' }, k)
     expect(k.router.routes).toEqual({
       GET: {},
@@ -82,7 +82,7 @@ describe('routeFiles', () => {
   })
 
   test('define routes, route.empty', async () => {
-    const k = new Kadre()
+    const k = new Galbe()
 
     await defineRoutes({ routes: 'test/resources/test.route.empty.ts' }, k)
 
@@ -122,7 +122,7 @@ describe('routeFiles', () => {
   })
 
   test('define routes, all', async () => {
-    const k = new Kadre()
+    const k = new Galbe()
 
     await defineRoutes({ routes: ['test/resources/test.route.*.ts'] }, k)
 

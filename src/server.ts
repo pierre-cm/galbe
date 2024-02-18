@@ -2,45 +2,45 @@ import type { Context, Route } from './types'
 
 import { NotFoundError, RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
-import { Kadre } from './index'
+import { Galbe } from './index'
 
 const handleInternalError = (error: any) => {
   console.error(error)
   return new RequestError({ status: 500, error: 'Internal Server Error' })
 }
 
-const setupPluginCallbacks = (kadre: Kadre) => ({
-  init: kadre.plugins.reduce((l: { name: string; cb: Function }[], p) => {
+const setupPluginCallbacks = (galbe: Galbe) => ({
+  init: galbe.plugins.reduce((l: { name: string; cb: Function }[], p) => {
     if (p.init) l.push({ name: p.name, cb: p.init })
     return l
   }, []),
-  onFetch: kadre.plugins.reduce((l: Function[], p) => {
+  onFetch: galbe.plugins.reduce((l: Function[], p) => {
     if (p.onFetch) l.push(p.onFetch)
     return l
   }, []),
-  onRoute: kadre.plugins.reduce((l: Function[], p) => {
+  onRoute: galbe.plugins.reduce((l: Function[], p) => {
     if (p.onRoute) l.push(p.onRoute)
     return l
   }, []),
-  beforeHandle: kadre.plugins.reduce((l: Function[], p) => {
+  beforeHandle: galbe.plugins.reduce((l: Function[], p) => {
     if (p.beforeHandle) l.push(p.beforeHandle)
     return l
   }, []),
-  afterHandle: kadre.plugins.reduce((l: Function[], p) => {
+  afterHandle: galbe.plugins.reduce((l: Function[], p) => {
     if (p.afterHandle) l.push(p.afterHandle)
     return l
   }, [])
 })
 
-export default async (kadre: Kadre, port?: number) => {
-  const router = kadre.router
-  if (kadre?.config?.basePath && kadre?.config?.basePath[0] !== '/')
-    kadre.config.basePath = `/${kadre?.config?.basePath}`
-  let pluginsCb = setupPluginCallbacks(kadre)
-  for (const { name, cb } of pluginsCb.init) await cb(kadre?.config?.plugin?.[name], kadre)
+export default async (galbe: Galbe, port?: number) => {
+  const router = galbe.router
+  if (galbe?.config?.basePath && galbe?.config?.basePath[0] !== '/')
+    galbe.config.basePath = `/${galbe?.config?.basePath}`
+  let pluginsCb = setupPluginCallbacks(galbe)
+  for (const { name, cb } of pluginsCb.init) await cb(galbe?.config?.plugin?.[name], galbe)
 
   return Bun.serve({
-    port: port || kadre.config?.port || 3000,
+    port: port || galbe.config?.port || 3000,
     async fetch(req) {
       const context: Context = {
         request: req,
@@ -60,7 +60,7 @@ export default async (kadre: Kadre, port?: number) => {
       let response: any = ''
       try {
         // find route
-        if (!url.pathname.match(new RegExp(`^${kadre.config?.basePath || ''}`))) throw new NotFoundError()
+        if (!url.pathname.match(new RegExp(`^${galbe.config?.basePath || ''}`))) throw new NotFoundError()
         try {
           route = router.find(req.method, url.pathname)
         } catch (error) {
@@ -151,7 +151,7 @@ export default async (kadre: Kadre, port?: number) => {
         return parsedResponse
       } catch (error) {
         context.set.status = error instanceof RequestError ? error.status : 500
-        if (kadre.errorHandler) return kadre.errorHandler(error, context)
+        if (galbe.errorHandler) return galbe.errorHandler(error, context)
         if (error instanceof RequestError) {
           return new Response(JSON.stringify(error.error), {
             status: error.status,

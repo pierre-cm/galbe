@@ -9,15 +9,15 @@ import {
   handleUrlFormStream,
   isAsyncIterator
 } from './test.utils'
-import { Kadre, T } from '../src'
+import { Galbe, T } from '../src'
 
 const port = 7357
 
 describe('parser', () => {
   beforeAll(async () => {
-    const kadre = new Kadre()
+    const galbe = new Galbe()
 
-    kadre.get(
+    galbe.get(
       '/headers/schema',
       {
         headers: {
@@ -36,7 +36,7 @@ describe('parser', () => {
       }
     )
 
-    kadre.get(
+    galbe.get(
       '/params/schema/:p1/:p2/:p3/:p4',
       {
         params: {
@@ -51,7 +51,7 @@ describe('parser', () => {
       }
     )
 
-    kadre.get(
+    galbe.get(
       '/query/params/schema',
       {
         query: {
@@ -66,7 +66,7 @@ describe('parser', () => {
         return ctx.query
       }
     )
-    kadre.get(
+    galbe.get(
       '/query/params/schema/constraints',
       {
         query: {
@@ -82,9 +82,9 @@ describe('parser', () => {
       }
     )
 
-    kadre.post('/obj/schema/base', { body: T.Object(schema_object) }, handleBody)
+    galbe.post('/obj/schema/base', { body: T.Object(schema_object) }, handleBody)
 
-    kadre.post(
+    galbe.post(
       '/form/schema/base',
       {
         body: T.UrlForm({
@@ -96,7 +96,7 @@ describe('parser', () => {
       },
       handleBody
     )
-    kadre.post(
+    galbe.post(
       '/form/stream/schema/base',
       {
         body: T.Stream(
@@ -111,7 +111,7 @@ describe('parser', () => {
       },
       handleUrlFormStream
     )
-    kadre.post(
+    galbe.post(
       '/mp/schema/base',
       {
         body: T.MultipartForm({
@@ -123,7 +123,7 @@ describe('parser', () => {
       },
       handleBody
     )
-    kadre.post(
+    galbe.post(
       '/mp/stream/schema/base',
       {
         body: T.Stream(
@@ -147,12 +147,12 @@ describe('parser', () => {
       arrayBool: T.Array(T.Boolean())
     }
 
-    kadre.post(
+    galbe.post(
       '/mp/file',
       { body: T.MultipartForm({ imgFile: T.ByteArray(), jsonFile: T.Object(schema_jsonFile) }) },
       handleBody
     )
-    kadre.post(
+    galbe.post(
       '/mp/stream/file',
       { body: T.Stream(T.MultipartForm({ imgFile: T.ByteArray(), jsonFile: T.Object(schema_jsonFile) })) },
       async ctx => {
@@ -168,14 +168,14 @@ describe('parser', () => {
         }
       }
     )
-    kadre.post('/ba/file', { body: T.ByteArray() }, async ctx => {
+    galbe.post('/ba/file', { body: T.ByteArray() }, async ctx => {
       if (ctx?.body instanceof Uint8Array) {
         return { type: 'ByteArray', content: await fileHash(ctx.body) }
       } else {
         return { type: null, content: 'error' }
       }
     })
-    kadre.post('/ba/stream/file', { body: T.Stream(T.ByteArray()) }, async ctx => {
+    galbe.post('/ba/stream/file', { body: T.Stream(T.ByteArray()) }, async ctx => {
       if (isAsyncIterator(ctx.body)) {
         let bytes = new Uint8Array()
         for await (const b of ctx.body) {
@@ -187,7 +187,7 @@ describe('parser', () => {
       }
     })
 
-    await kadre.listen(port)
+    await galbe.listen(port)
   })
 
   test('headers', async () => {
