@@ -7,3 +7,5 @@ if (existsSync('.git')) {
   await $`chmod +x .git/hooks/prepare-commit-msg`
   console.log('done')
 }
+
+await $`bun run build`
