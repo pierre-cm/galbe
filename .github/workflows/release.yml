@@ -35,4 +35,5 @@ jobs:
           bun install & bun run build
       - name: Release
         run: |
+          npm config set //registry.npmjs.org/:_authToken $NPM_TOKEN
           bun run release --increment $RELEASE_SCOPE --ci --no-git.requireCleanWorkingDir

@@ -4,6 +4,8 @@
 .env.production.local
 .env.local
 
+.npmrc
+
 node_modules/
 
 dist
