@@ -32,7 +32,7 @@ jobs:
           git config user.name "${GITHUB_ACTOR}"
       - name: Install dependencies & build
         run: |
-          bun install
+          bun install & bun run build
       - name: Release
         run: |
-          bun x release-it --increment $RELEASE_SCOPE --ci --no-git.requireCleanWorkingDir
+          bun run release

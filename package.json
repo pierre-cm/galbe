@@ -30,10 +30,12 @@
     "build": "bun ./scripts/build.ts",
     "clean": "rm -rf dist",
     "test": "bun test",
-    "postinstall": "bun run ./scripts/postinstall.ts"
+    "postinstall": "bun run ./scripts/postinstall.ts",
+    "release": "release-it"
   },
   "devDependencies": {
-    "@types/bun": "^1.0.4"
+    "@types/bun": "^1.0.4",
+    "release-it": "^17.1.1"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
