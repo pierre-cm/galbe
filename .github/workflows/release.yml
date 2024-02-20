@@ -35,4 +35,4 @@ jobs:
           bun install & bun run build
       - name: Release
         run: |
-          bun run release
+          bun run release --increment $RELEASE_SCOPE --ci --no-git.requireCleanWorkingDir
