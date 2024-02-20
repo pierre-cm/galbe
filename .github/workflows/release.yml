@@ -35,4 +35,4 @@ jobs:
           bun install
       - name: Release
         run: |
-          npm run release -- --increment $RELEASE_SCOPE --ci --no-git.requireCleanWorkingDir
+          bun x realease-it --increment $RELEASE_SCOPE --ci --no-git.requireCleanWorkingDir
