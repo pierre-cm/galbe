@@ -68,6 +68,19 @@ describe('routeFiles', () => {
     })
   })
 
+  test('define routes, no route (false)', async () => {
+    const k = new Galbe({ routes: false })
+    await defineRoutes({}, k)
+    expect(k.router.routes).toEqual({
+      GET: {},
+      POST: {},
+      PUT: {},
+      PATCH: {},
+      DELETE: {},
+      OPTIONS: {}
+    })
+  })
+
   test('define routes, no route found', async () => {
     const k = new Galbe()
     await defineRoutes({ routes: 'unexisting_route' }, k)
