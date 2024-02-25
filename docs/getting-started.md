@@ -59,7 +59,7 @@ Open `package.json` file and add the following scripts:
 }
 ```
 
-As you can see, those scripts rely on Galbe CLI to run and build the application. You will find more info about Galbe CLI available options in the next section [Galbe CLI]("getting-started.md#galbe-cli").
+As you can see, those scripts rely on Galbe CLI to run and build the application. You will find more info about Galbe CLI available options in the next section [Galbe CLI](#galbe-cli).
 
 This require your `index.ts` to export a default Galbe instance in order to work. As in the following example:
 
