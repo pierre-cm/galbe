@@ -5,7 +5,7 @@ import type { RouteMeta } from '../src/routes'
 import { program } from 'commander'
 import { relative, resolve } from 'path'
 import { mkdir, readdir, lstat, rm } from 'fs/promises'
-import { metaAnalysis } from '../src/routes'
+import { DEFAULT_ROUTE_PATTERN, metaAnalysis } from '../src/routes'
 import { randomUUID } from 'crypto'
 import { Galbe } from '../src'
 
@@ -14,7 +14,8 @@ const BUILD_ID = randomUUID()
 
 Bun.env.FORCE_COLOR = '1'
 
-const parseRoutes = async (routes?: string | string[]): Promise<{ path: string; meta: RouteMeta }[]> => {
+const parseRoutes = async (routes?: boolean | string | string[]): Promise<{ path: string; meta: RouteMeta }[]> => {
+  routes = routes === true ? DEFAULT_ROUTE_PATTERN : routes
   if (!routes) return []
   let files: { path: string; meta: RouteMeta }[] = []
   if (typeof routes === 'string') {
@@ -61,11 +62,12 @@ program.name('galbe').description('CLI to execute galbe utilities').version('0.1
 
 program
   .command('dev')
-  .description('Run a dev server running your galbe API')
+  .description('Start a dev server running your Galbe application')
   .argument('<string>', 'filename')
   .option('-p, --port <number>', 'port number', '')
+  .option('-w, --watch', 'watch file changes', 'true')
   .action(async (fileName, props) => {
-    const { port } = props
+    const { port, watch } = props
     const devRoot = resolve(ROOT, '.galbe', 'dev')
     await mkdir(devRoot, { recursive: true })
     await Bun.write(
@@ -76,15 +78,15 @@ program
       await rm(resolve(ROOT, '.galbe', 'dev'), { recursive: true })
     })
 
-    await $`BUN_ENV=development bun run --watch ${resolve(devRoot, 'index.ts')}`.cwd(ROOT)
+    await $`BUN_ENV=development bun run ${watch ? '--watch' : ''} ${resolve(devRoot, 'index.ts')}`.cwd(ROOT)
   })
 
 program
   .command('build')
-  .description('Build your galbe API')
+  .description('undle your Galbe application')
   .argument('<string>', 'filename')
-  .option('-o, --out <string>', 'output file', '')
-  .option('-c, --compile', 'standalone executable', false)
+  .option('-o, --out <string>', 'output file/directory', '')
+  .option('-c, --compile', 'create a standalone executable', false)
   .action(async (fileName, props) => {
     const { out, compile } = props
     const g: Galbe = (await import(resolve(ROOT, fileName))).default
@@ -97,7 +99,7 @@ program
       buildIndex,
       '--target',
       'bun',
-      ...(compile ? ['--compile', '--outfile', out ? out : 'api'] : ['--outdir', out ? out : 'dist'])
+      ...(compile ? ['--compile', '--outfile', out ? out : 'app'] : ['--outdir', out ? out : 'dist'])
     ].filter(c => c)
     Bun.spawn(cmds, {
       cwd: ROOT,

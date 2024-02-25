@@ -80,7 +80,7 @@ export default async (galbe: Galbe, port?: number) => {
         let inParams = requestPathParser(url.pathname, route.path)
 
         context.body = await requestBodyParser(req.body, inHeaders, schema.body)
-        context.headers = { ...context.headers, ...inHeaders }
+        context.headers = inHeaders
         context.query = inQuery
         context.params = inParams
 

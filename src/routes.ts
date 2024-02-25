@@ -8,6 +8,8 @@ import { Galbe } from './index'
 import { transformSync } from '@swc/core'
 import { Glob } from 'bun'
 
+export const DEFAULT_ROUTE_PATTERN = 'src/**/*.route.{js,ts}'
+
 export type RouteMeta = {
   header: Record<string, boolean | string | string[]>
   routes: Record<string, Record<string, Record<string, boolean | string | string[]>>>
@@ -116,7 +118,7 @@ const importRoutes = async (filePath: string, galbe: Galbe) => {
 }
 
 export const defineRoutes = async (options: GalbeConfig, galbe: Galbe) => {
-  const routes = options?.routes
+  const routes = options?.routes === true ? DEFAULT_ROUTE_PATTERN : options?.routes
   if (!routes) {
     console.log(`\x1b\[38;5;245m    No route file defined\x1b[0m`)
     return

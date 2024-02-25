@@ -40,7 +40,8 @@ import type {
   TBody,
   TByteArray,
   TStreamable,
-  MultipartFormData
+  MultipartFormData,
+  TParams
 } from './types'
 
 import { TypeClone, Kind, TypeBuilder, Optional, TypeGuard } from '@sinclair/typebox'
@@ -50,13 +51,19 @@ import { defineRoutes } from './routes'
 import { Stream } from './types'
 import { logRoute } from './util'
 
-const overloadDiscriminer = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
+const overloadDiscriminer = <
+  Path extends string,
+  H extends TProperties,
+  P extends Partial<TParams<Path>>,
+  Q extends TProperties,
+  B extends TBody
+>(
   galbe: Galbe,
   method: Method,
-  path: string,
-  arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-  arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-  arg4?: Handler<Schema<H, P, Q, B>>
+  path: Path,
+  arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+  arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+  arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
 ) => {
   const defaultSchema = {}
   if (typeof arg2 === 'function') {
@@ -69,23 +76,29 @@ const overloadDiscriminer = <H extends TProperties, P extends TProperties, Q ext
       else if (typeof arg3 === 'function') return galbeMethod(galbe, method, path, arg2, undefined, arg3)
     }
   }
-  throw new Error('Undefined endpoint signature')
+  throw new Error('Undefined route signature')
 }
-const galbeMethod = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
+const galbeMethod = <
+  Path extends string,
+  H extends TProperties,
+  P extends Partial<TParams<Path>>,
+  Q extends TProperties,
+  B extends TBody
+>(
   _galbe: Galbe,
   method: Method,
-  path: string,
-  schema: Schema<H, P, Q, B> | undefined,
-  hooks: Hook<Schema<H, P, Q, B>>[] | undefined,
-  handler: Handler<Schema<H, P, Q, B>>
+  path: Path,
+  schema: Schema<Path, H, P, Q, B> | undefined,
+  hooks: Hook<Path, Schema<Path, H, P, Q, B>>[] | undefined,
+  handler: Handler<Path, Schema<Path, H, P, Q, B>>
 ) => {
   schema = schema ?? {}
   hooks = hooks || []
-  const context: Context<typeof schema> = {
-    headers: {} as Static<TObject<Exclude<(typeof schema)['headers'], undefined>>>,
-    params: {} as Static<TObject<Exclude<(typeof schema)['params'], undefined>>>,
-    query: {} as Static<TObject<Exclude<(typeof schema)['query'], undefined>>>,
-    body: {} as Static<Exclude<(typeof schema)['body'], undefined>>,
+  const context: Context<Path, typeof schema> = {
+    headers: {} as any,
+    params: {} as any,
+    query: {} as any,
+    body: {} as any,
     request: {} as Request,
     state: {},
     set: {} as {
@@ -274,6 +287,7 @@ export class Galbe {
   plugins: GalbePlugin[] = []
   constructor(config?: GalbeConfig) {
     this.config = config ?? {}
+    this.config.routes = this.config.routes ?? true
     this.router = new GalbeRouter(this.config?.basePath || '')
   }
   private add(route: any) {
@@ -312,41 +326,77 @@ export class Galbe {
   onError(handler: ErrorHandler) {
     this.errorHandler = handler
   }
-  get: Endpoint = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
-    path: string,
-    arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-    arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-    arg4?: Handler<Schema<H, P, Q, B>>
+  get: Endpoint = <
+    Path extends string,
+    H extends TProperties,
+    P extends Partial<TParams<Path>>,
+    Q extends TProperties,
+    B extends TBody
+  >(
+    path: Path,
+    arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+    arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+    arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'get', path, arg2, arg3, arg4))
-  post: Endpoint = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
-    path: string,
-    arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-    arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-    arg4?: Handler<Schema<H, P, Q, B>>
+  post: Endpoint = <
+    Path extends string,
+    H extends TProperties,
+    P extends Partial<TParams<Path>>,
+    Q extends TProperties,
+    B extends TBody
+  >(
+    path: Path,
+    arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+    arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+    arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'post', path, arg2, arg3, arg4))
-  put: Endpoint = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
-    path: string,
-    arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-    arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-    arg4?: Handler<Schema<H, P, Q, B>>
+  put: Endpoint = <
+    Path extends string,
+    H extends TProperties,
+    P extends Partial<TParams<Path>>,
+    Q extends TProperties,
+    B extends TBody
+  >(
+    path: Path,
+    arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+    arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+    arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'put', path, arg2, arg3, arg4))
-  patch: Endpoint = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
-    path: string,
-    arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-    arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-    arg4?: Handler<Schema<H, P, Q, B>>
+  patch: Endpoint = <
+    Path extends string,
+    H extends TProperties,
+    P extends Partial<TParams<Path>>,
+    Q extends TProperties,
+    B extends TBody
+  >(
+    path: Path,
+    arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+    arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+    arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'patch', path, arg2, arg3, arg4))
-  delete: Endpoint = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
-    path: string,
-    arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-    arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-    arg4?: Handler<Schema<H, P, Q, B>>
+  delete: Endpoint = <
+    Path extends string,
+    H extends TProperties,
+    P extends Partial<TParams<Path>>,
+    Q extends TProperties,
+    B extends TBody
+  >(
+    path: Path,
+    arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+    arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+    arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'delete', path, arg2, arg3, arg4))
-  options: Endpoint = <H extends TProperties, P extends TProperties, Q extends TProperties, B extends TBody>(
-    path: string,
-    arg2: Schema<H, P, Q, B> | Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-    arg3?: Hook<Schema<H, P, Q, B>>[] | Handler<Schema<H, P, Q, B>>,
-    arg4?: Handler<Schema<H, P, Q, B>>
+  options: Endpoint = <
+    Path extends string,
+    H extends TProperties,
+    P extends Partial<TParams<Path>>,
+    Q extends TProperties,
+    B extends TBody
+  >(
+    path: Path,
+    arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+    arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
+    arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'options', path, arg2, arg3, arg4))
 }
 
