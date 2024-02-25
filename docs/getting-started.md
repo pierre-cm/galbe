@@ -59,7 +59,7 @@ Open `package.json` file and add the following scripts:
 }
 ```
 
-As you can see, those scripts rely on Galbe CLI to run and build the application. You will find more info about Galbe CLI available options in the next section [Galbe CLI]("#galbe-cli").
+As you can see, those scripts rely on Galbe CLI to run and build the application. You will find more info about Galbe CLI available options in the next section [Galbe CLI]("getting-started.md#galbe-cli").
 
 This require your `index.ts` to export a default Galbe instance in order to work. As in the following example:
 
@@ -75,7 +75,7 @@ export default galbe
 This is the recommended way to proceed but it is not mandatory. Galbe instances also provide a `listen` method that will allow you to manually start your server instance from the code.
 
 > [!WARNING]  
-> In the case you decide to not rely on Galbe CLI to run/build your app, you will not have access to [Automatic Route Analyzer](routes#automatic-route-analyzer) feature.
+> In the case you decide to not rely on Galbe CLI to run/build your app, you will not have access to [Automatic Route Analyzer](routes.md#automatic-route-analyzer) feature.
 
 ### Galbe CLI
 
@@ -131,11 +131,11 @@ The base path is added as a prefix to all the routes created.
 
 #### routes
 
-A Glob Pattern or a list of Glob patterns defining the route files to be analyzed by the [Automatic Route Analyzer](routes#automatic-route-analyzer). Default is `src/**/*.route.{js,ts}`.
+A Glob Pattern or a list of Glob patterns defining the route files to be analyzed by the [Automatic Route Analyzer](routes.md#automatic-route-analyzer). Default is `src/**/*.route.{js,ts}`.
 
 #### plugin
 
-A property that can be used by plugins to add plugin's specific configuration. Every key should correspond to a [Unique Plugin Identifier](plugins).
+A property that can be used by plugins to add plugin's specific configuration. Every key should correspond to a [Unique Plugin Identifier](plugins.md).
 
 ### Examples
 
@@ -173,7 +173,7 @@ export default new Galbe(config)
 
 ## Project Structure
 
-One key aspect of Galbe, is its versatility in terms of project structure. This is partly allowed by the [Automatic Route Analyzer](routes#automatic-route-analyzer) and the `routes` config property which defaults to `src/**/*.route.{js,ts}`.
+One key aspect of Galbe, is its versatility in terms of project structure. This is partly allowed by the [Automatic Route Analyzer](routes.md#automatic-route-analyzer) and the `routes` config property which defaults to `src/**/*.route.{js,ts}`.
 
 Here are two examples of valid project structures by default:
 
@@ -215,9 +215,9 @@ Here are two examples of valid project structures by default:
 └── tsconfig.json
 ```
 
-In both cases, the [Automatic Route Analyzer](routes#automatic-route-analyzer) will analyze `foo.route.ts` and `bar.route.ts` Route Files to find route definitions.
+In both cases, the [Automatic Route Analyzer](routes.md#automatic-route-analyzer) will analyze `foo.route.ts` and `bar.route.ts` Route Files to find route definitions.
 
-You can find more info about Route Files definition under the [Routes](routes) section.
+You can find more info about Route Files definition under the [Routes](routes.md) section.
 
 > [!NOTE]  
 > Those are just examples that will work with the default configuration. You can of course redefine `routes` property with your own pattern(s) to fit your own project structure.
