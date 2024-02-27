@@ -73,8 +73,7 @@ describe('parser', () => {
           default: T.Optional(T.String({ default: 'DEFAULT_VALUE' })),
           int: T.Integer({ exclusiveMinimum: 10, maximum: 42 }),
           num: T.Number({ minimum: 10, exclusiveMaximum: 42 }),
-          str: T.String({ minLength: 4, maxLength: 8, pattern: '^a.*z' }),
-          array: T.Optional(T.Array(T.Integer(), { minItems: 3, maxItems: 5, uniqueItems: true }))
+          str: T.String({ minLength: 4, maxLength: 8, pattern: '^a.*z' })
         }
       },
       ctx => {
@@ -190,7 +189,7 @@ describe('parser', () => {
     await galbe.listen(port)
   })
 
-  test('headers', async () => {
+  test('headers, schema', async () => {
     const cases: any = [
       {
         h: {
@@ -274,7 +273,7 @@ describe('parser', () => {
     }
   })
 
-  test('query params', async () => {
+  test('query params, schema', async () => {
     const cases: any = [
       {
         p: { p1: 'one', p2: '3.14', p3: 'false', p4: '42' },
@@ -1162,12 +1161,12 @@ describe('parser', () => {
   test('type constraints', async () => {
     const cases: any = [
       {
-        p: { int: '11', num: '10', str: 'aaaz', array: ['1', '2', '3'] },
-        expected: { body: { default: 'DEFAULT_VALUE', int: 11, num: 10, str: 'aaaz', array: [1, 2, 3] } }
+        p: { int: '11', num: '10', str: 'aaaz' },
+        expected: { body: { default: 'DEFAULT_VALUE', int: 11, num: 10, str: 'aaaz' } }
       },
       {
-        p: { default: '', int: '42', num: '41.5', str: 'a______z', array: ['1', '2', '3', '4', '5'] },
-        expected: { body: { default: '', int: 42, num: 41.5, str: 'a______z', array: [1, 2, 3, 4, 5] } }
+        p: { default: '', int: '42', num: '41.5', str: 'a______z' },
+        expected: { body: { default: '', int: 42, num: 41.5, str: 'a______z' } }
       },
       {
         p: { int: '10', num: '42.01', str: 'xxxxxxxxxx' },
@@ -1188,6 +1187,7 @@ describe('parser', () => {
       let search = new URLSearchParams()
       for (const [k, v] of Object.entries(p)) search.append(k, v as string)
 
+      console.log(search.toString())
       let resp = await fetch(`http://localhost:${port}/query/params/schema/constraints?${search.toString()}`)
       let body = await resp.json()
 

@@ -35,13 +35,15 @@ import type {
   TStream,
   TMultipartProperties,
   TMultipartForm,
-  TUrlFormProperties,
   TUrlForm,
   TBody,
   TByteArray,
   TStreamable,
-  MultipartFormData,
-  TParams
+  TParams,
+  THeaders,
+  TQuery,
+  TUrlFormProperties,
+  MultipartFormData
 } from './types'
 
 import { TypeClone, Kind, TypeBuilder, Optional, TypeGuard } from '@sinclair/typebox'
@@ -53,9 +55,9 @@ import { logRoute } from './util'
 
 const overloadDiscriminer = <
   Path extends string,
-  H extends TProperties,
+  H extends THeaders,
   P extends Partial<TParams<Path>>,
-  Q extends TProperties,
+  Q extends TQuery,
   B extends TBody
 >(
   galbe: Galbe,
@@ -80,9 +82,9 @@ const overloadDiscriminer = <
 }
 const galbeMethod = <
   Path extends string,
-  H extends TProperties,
+  H extends THeaders,
   P extends Partial<TParams<Path>>,
-  Q extends TProperties,
+  Q extends TQuery,
   B extends TBody
 >(
   _galbe: Galbe,
@@ -95,10 +97,10 @@ const galbeMethod = <
   schema = schema ?? {}
   hooks = hooks || []
   const context: Context<Path, typeof schema> = {
-    headers: {} as any,
+    headers: {} as Static<TObject<Exclude<(typeof schema)['headers'], undefined>>>,
     params: {} as any,
-    query: {} as any,
-    body: {} as any,
+    query: {} as Static<TObject<Exclude<(typeof schema)['query'], undefined>>>,
+    body: {} as Static<Exclude<(typeof schema)['body'], undefined>>,
     request: {} as Request,
     state: {},
     set: {} as {
@@ -109,7 +111,6 @@ const galbeMethod = <
       redirect?: string
     }
   }
-  //@ts-ignore
   return {
     method,
     path,
@@ -250,7 +251,6 @@ class GalbeTypeBuilder extends TypeboxTypeBuilder {
     if (!properties) return this.Create({ [Kind]: 'UrlForm', type: 'urlForm' })
     const propertyKeys = Object.getOwnPropertyNames(properties)
     const clonedProperties = propertyKeys.reduce(
-      //@ts-ignore
       (acc, key) => ({ ...acc, [key]: TypeClone.Type(properties[key]) }),
       {} as TProperties
     )
@@ -328,9 +328,9 @@ export class Galbe {
   }
   get: Endpoint = <
     Path extends string,
-    H extends TProperties,
+    H extends THeaders,
     P extends Partial<TParams<Path>>,
-    Q extends TProperties,
+    Q extends TQuery,
     B extends TBody
   >(
     path: Path,
@@ -340,9 +340,9 @@ export class Galbe {
   ) => this.add(overloadDiscriminer(this, 'get', path, arg2, arg3, arg4))
   post: Endpoint = <
     Path extends string,
-    H extends TProperties,
+    H extends THeaders,
     P extends Partial<TParams<Path>>,
-    Q extends TProperties,
+    Q extends TQuery,
     B extends TBody
   >(
     path: Path,
@@ -352,9 +352,9 @@ export class Galbe {
   ) => this.add(overloadDiscriminer(this, 'post', path, arg2, arg3, arg4))
   put: Endpoint = <
     Path extends string,
-    H extends TProperties,
+    H extends THeaders,
     P extends Partial<TParams<Path>>,
-    Q extends TProperties,
+    Q extends TQuery,
     B extends TBody
   >(
     path: Path,
@@ -364,9 +364,9 @@ export class Galbe {
   ) => this.add(overloadDiscriminer(this, 'put', path, arg2, arg3, arg4))
   patch: Endpoint = <
     Path extends string,
-    H extends TProperties,
+    H extends THeaders,
     P extends Partial<TParams<Path>>,
-    Q extends TProperties,
+    Q extends TQuery,
     B extends TBody
   >(
     path: Path,
@@ -376,9 +376,9 @@ export class Galbe {
   ) => this.add(overloadDiscriminer(this, 'patch', path, arg2, arg3, arg4))
   delete: Endpoint = <
     Path extends string,
-    H extends TProperties,
+    H extends THeaders,
     P extends Partial<TParams<Path>>,
-    Q extends TProperties,
+    Q extends TQuery,
     B extends TBody
   >(
     path: Path,
@@ -388,9 +388,9 @@ export class Galbe {
   ) => this.add(overloadDiscriminer(this, 'delete', path, arg2, arg3, arg4))
   options: Endpoint = <
     Path extends string,
-    H extends TProperties,
+    H extends THeaders,
     P extends Partial<TParams<Path>>,
-    Q extends TProperties,
+    Q extends TQuery,
     B extends TBody
   >(
     path: Path,

@@ -7,7 +7,6 @@ import type {
   TLiteral,
   TArray,
   TObject,
-  TProperties,
   TUnion,
   Static,
   OptionalPropertyKeys,
@@ -90,7 +89,7 @@ export type MultipartEvaluate<T> = T extends infer O
     }
   : never
 
-export type TUrlFormProperties<V = TUrlFormParam> = Record<string, V>
+export type TUrlFormProperties = Record<string, TUrlFormParam>
 export type UrlFormPropertiesReduce<T extends TUrlFormProperties, P extends unknown[]> = UrlFormPropertiesReducer<
   T,
   {
@@ -123,8 +122,14 @@ export type ExtractParams<T extends string> = T extends `/:${infer P}/${infer Re
   ? P
   : never
 
-type TParamsValue = TString | TBoolean | TNumber | TInteger
+type THeadersValue = TString | TBoolean | TNumber | TInteger | TLiteral | TUnion
+export type THeaders = Record<string, THeadersValue>
+
+type TParamsValue = TString | TBoolean | TNumber | TInteger | TLiteral | TUnion
 export type TParams<Path extends string = string> = Record<ExtractParams<Path>, TParamsValue>
+
+type TQueryValue = TString | TBoolean | TNumber | TInteger | TLiteral | TUnion
+export type TQuery = Record<string, TQueryValue>
 
 /**
  * #### GalbeConfig
@@ -171,9 +176,9 @@ export type GalbeConfig = {
  */
 export type Schema<
   Path extends string = string,
-  H extends TProperties = {},
+  H extends THeaders = {},
   P extends Partial<TParams<Path>> = {},
-  Q extends TProperties = {},
+  Q extends TQuery = {},
   B extends TBody = TBody
 > = {
   headers?: H
@@ -217,9 +222,9 @@ export type Handler<Path extends string = string, S extends Schema = Schema> = (
 export type Endpoint = {
   <
     Path extends string,
-    H extends TProperties,
+    H extends THeaders,
     P extends Partial<TParams<Path>>,
-    Q extends TProperties,
+    Q extends TQuery,
     B extends TBody = TObject
   >(
     path: Path,
@@ -229,9 +234,9 @@ export type Endpoint = {
   ): void
   <
     Path extends string,
-    H extends TProperties,
+    H extends THeaders,
     P extends Partial<TParams<Path>>,
-    Q extends TProperties,
+    Q extends TQuery,
     B extends TBody = TObject
   >(
     path: Path,
@@ -240,9 +245,9 @@ export type Endpoint = {
   ): void
   <
     Path extends string,
-    H extends TProperties,
+    H extends THeaders,
     P extends Partial<TParams<Path>>,
-    Q extends TProperties,
+    Q extends TQuery,
     B extends TBody = TObject
   >(
     path: Path,
@@ -251,9 +256,9 @@ export type Endpoint = {
   ): void
   <
     Path extends string,
-    H extends TProperties,
+    H extends THeaders,
     P extends Partial<TParams<Path>>,
-    Q extends TProperties,
+    Q extends TQuery,
     B extends TBody = TObject
   >(
     path: Path,
@@ -280,9 +285,9 @@ export type RouteNode = {
 
 export type Route<
   Path extends string = string,
-  H extends TProperties = {},
+  H extends THeaders = {},
   P extends Partial<TParams<Path>> = {},
-  Q extends TProperties = {},
+  Q extends TQuery = {},
   B extends TBody = TBody
 > = {
   method: Method
