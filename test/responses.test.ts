@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeAll } from 'bun:test'
-import { Galbe, T } from '../src'
+import { Galbe, $T } from '../src'
 import { decoder } from './test.utils'
 
 const port = 7359
@@ -28,8 +28,8 @@ describe('responses', () => {
     galbe.post(
       '/response',
       {
-        body: T.Optional(T.Object(T.Any())),
-        query: { text: T.Optional(T.String()), stream: T.Optional(T.String()) }
+        body: $T.optional($T.object($T.any())),
+        query: { text: $T.optional($T.string()), stream: $T.optional($T.string()) }
       },
       ctx => {
         if (ctx.query.text) {

@@ -1,4 +1,4 @@
-import { T, type Context } from '../src'
+import { $T, type Context } from '../src'
 
 export type Case = {
   body?: any
@@ -22,17 +22,17 @@ export const fileHash = async (ba: any) =>
 export const decoder = new TextDecoder()
 
 export const schema_objectBase = {
-  ba: T.ByteArray(),
-  string: T.String(),
-  number: T.Number(),
-  bool: T.Boolean(),
-  any: T.Any(),
-  optional: T.Optional(T.Any())
+  ba: $T.byteArray(),
+  string: $T.string(),
+  number: $T.number(),
+  bool: $T.boolean(),
+  any: $T.any(),
+  optional: $T.optional($T.any())
 }
 export const schema_object = {
   ...schema_objectBase,
-  object: T.Object(T.Any()),
-  array: T.Array(T.Any())
+  object: $T.object($T.any()),
+  array: $T.array($T.any())
 }
 
 export const isAsyncIterator = (obj: any) => {
@@ -47,12 +47,13 @@ const parseAsyncIterator = async (body: any): Promise<any> => {
   const chunks = []
   let type
   for await (const chunk of body) {
-    if (chunk instanceof Uint8Array) type = 'ByteArray'
+    if (chunk instanceof Uint8Array) type = 'byteArray'
     else if (typeof chunk === 'string') type = 'string'
+    // @ts-ignore
     chunks.push(chunk)
   }
   // @ts-ignore
-  if (type === 'ByteArray') return new Uint8Array(chunks.map(c => Array.from(c)).flat())
+  if (type === 'byteArray') return new Uint8Array(chunks.map(c => Array.from(c)).flat())
   if (type === 'string') return chunks.join('')
   return chunks
 }
@@ -83,7 +84,7 @@ export const handleBody = async (ctx: any) => {
     return { type: 'array', content: ctx.body }
   }
   if (ctx?.body instanceof Uint8Array) {
-    return { type: 'ByteArray', content: decoder.decode(ctx.body) }
+    return { type: 'byteArray', content: decoder.decode(ctx.body) }
   }
   if (isAsyncIterator(ctx.body)) {
     return { type: 'AsyncIterator', content: await parseAsyncIterator(ctx.body) }
@@ -93,6 +94,7 @@ export const handleBody = async (ctx: any) => {
 }
 export const handleUrlFormStream = async (ctx: Context) => {
   let resp: Record<string, any> = {}
+  // @ts-ignore
   for await (const [k, v] of ctx.body) {
     if (k in resp) {
       resp[k] = Array.isArray(resp[k]) ? [...resp[k], v] : [resp[k], v]

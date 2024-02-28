@@ -1,115 +1,34 @@
-import type {
-  TSchema,
-  TBoolean,
-  TNumber,
-  TInteger,
-  TString,
-  TLiteral,
-  TArray,
-  TObject,
-  TUnion,
-  Static,
-  OptionalPropertyKeys,
-  ReadonlyOptionalPropertyKeys,
-  ReadonlyPropertyKeys,
-  RequiredPropertyKeys,
-  TAny,
-  Readonly
-} from '@sinclair/typebox'
-
-import { Kind } from '@sinclair/typebox'
-import { Galbe } from './index'
 import type { ServeOptions, TLSServeOptions } from 'bun'
+import type {
+  STArray,
+  STBoolean,
+  STByteArray,
+  STInteger,
+  STLiteral,
+  STMultipartForm,
+  STNumber,
+  STObject,
+  STStream,
+  STString,
+  STUnion,
+  STUrlForm,
+  Static
+} from './schema'
+import type { Galbe } from './index'
 
-export const Stream = Symbol.for('Galbe.Stream')
-export type TStream<T extends TSchema = TSchema> = T & {
-  [Stream]: 'Stream'
-}
-
-export type TBody =
-  | TByteArray
-  | TString
-  | TBoolean
-  | TNumber
-  | TInteger
-  | TObject
-  | TArray
-  | TUrlForm
-  | TMultipartForm
-  | TUnion
-  | TStream
-export type TStreamable = TByteArray | TString | TUrlForm | TMultipartForm
-export type TUrlFormParam = TString | TByteArray | TBoolean | TNumber | TInteger | TLiteral | TArray | TAny | TUnion
-export type TMultipartFormParam = TByteArray | TUrlFormParam | TObject | TArray
+export type STBody =
+  | STByteArray
+  | STString
+  | STBoolean
+  | STNumber
+  | STInteger
+  | STObject
+  | STArray
+  | STUrlForm
+  | STMultipartForm
+  | STUnion
+  | STStream
 export type MaybeArray<T> = T | T[]
-
-export interface MultipartFormData<
-  K extends string | number | symbol = string,
-  V extends Static<TMultipartFormParam> = any
-> {
-  headers: { type?: string; name: K; filename?: string }
-  content: V
-}
-
-export interface TByteArray extends TSchema {
-  [Kind]: 'ByteArray'
-  static: Uint8Array
-  type: 'byteArray'
-}
-export interface TMultipartForm<T extends TMultipartProperties = TMultipartProperties> extends TSchema {
-  [Kind]: 'MultipartForm'
-  static: MultipartPropertiesReduce<T, this['params']>
-  type: 'multipartForm'
-}
-export interface TUrlForm<T extends TUrlFormProperties = TUrlFormProperties> extends TSchema {
-  [Kind]: 'UrlForm'
-  static: UrlFormPropertiesReduce<T, this['params']>
-  type: 'urlForm'
-}
-
-export type TMultipartProperties<V = TMultipartFormParam> = Record<string, V>
-export type MultipartPropertiesReduce<T extends TMultipartProperties, P extends unknown[]> = MultipartPropertiesReducer<
-  T,
-  {
-    [K in keyof T]: Static<T[K], P>
-  }
->
-export type MultipartPropertiesReducer<
-  T extends TMultipartProperties,
-  R extends Record<keyof any, unknown>
-> = MultipartEvaluate<
-  Readonly<Partial<Pick<R, ReadonlyOptionalPropertyKeys<T>>>> &
-    Readonly<Pick<R, ReadonlyPropertyKeys<T>>> &
-    Partial<Pick<R, OptionalPropertyKeys<T>>> &
-    Required<Pick<R, RequiredPropertyKeys<T>>>
->
-export type MultipartEvaluate<T> = T extends infer O
-  ? {
-      [K in keyof O]: O[K] extends Static<TMultipartFormParam> ? MultipartFormData<K, O[K]> : never
-    }
-  : never
-
-export type TUrlFormProperties = Record<string, TUrlFormParam>
-export type UrlFormPropertiesReduce<T extends TUrlFormProperties, P extends unknown[]> = UrlFormPropertiesReducer<
-  T,
-  {
-    [K in keyof T]: Static<T[K], P>
-  }
->
-export type UrlFormPropertiesReducer<
-  T extends TUrlFormProperties,
-  R extends Record<keyof any, unknown>
-> = UrlFormEvaluate<
-  Readonly<Partial<Pick<R, ReadonlyOptionalPropertyKeys<T>>>> &
-    Readonly<Pick<R, ReadonlyPropertyKeys<T>>> &
-    Partial<Pick<R, OptionalPropertyKeys<T>>> &
-    Required<Pick<R, RequiredPropertyKeys<T>>>
->
-export type UrlFormEvaluate<T> = T extends infer O
-  ? {
-      [K in keyof O]: O[K] extends Static<TUrlFormParam> ? O[K] : never
-    }
-  : never
 
 export type Method = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options'
 type MaybePromise<T> = T | Promise<T>
@@ -122,14 +41,14 @@ export type ExtractParams<T extends string> = T extends `/:${infer P}/${infer Re
   ? P
   : never
 
-type THeadersValue = TString | TBoolean | TNumber | TInteger | TLiteral | TUnion
-export type THeaders = Record<string, THeadersValue>
+type STHeadersValue = STString | STBoolean | STNumber | STInteger | STLiteral | STUnion
+export type STHeaders = Record<string, STHeadersValue>
 
-type TParamsValue = TString | TBoolean | TNumber | TInteger | TLiteral | TUnion
-export type TParams<Path extends string = string> = Record<ExtractParams<Path>, TParamsValue>
+type STParamsValue = STString | STBoolean | STNumber | STInteger | STLiteral | STUnion
+export type STParams<Path extends string = string> = Record<ExtractParams<Path>, STParamsValue>
 
-type TQueryValue = TString | TBoolean | TNumber | TInteger | TLiteral | TUnion
-export type TQuery = Record<string, TQueryValue>
+type STQueryValue = STString | STBoolean | STNumber | STInteger | STLiteral | STUnion
+export type STQuery = Record<string, STQueryValue>
 
 /**
  * #### GalbeConfig
@@ -162,24 +81,24 @@ export type GalbeConfig = {
  * ---
  * @example
  * ```typescript
- * import { T, Schema } from 'galbe'
+ * import { $T } from 'galbe'
  * const MyRequestSchema = {
  *   params: {
- *    id: T.Number(),
+ *    id: $T.number(),
  *   },
- *   body: T.Object({
- *     name: T.String()
- *     age: T.Optional(T.Number({minimum: 0})),
+ *   body: $T.object({
+ *     name: $T.string()
+ *     age: $T.optional($T.number({min: 0})),
  *   })
  * }
  * ```
  */
-export type Schema<
+export type RequestSchema<
   Path extends string = string,
-  H extends THeaders = {},
-  P extends Partial<TParams<Path>> = {},
-  Q extends TQuery = {},
-  B extends TBody = TBody
+  H extends STHeaders = {},
+  P extends Partial<STParams<Path>> = {},
+  Q extends STQuery = {},
+  B extends STBody = STBody
 > = {
   headers?: H
   params?: P
@@ -187,21 +106,21 @@ export type Schema<
   body?: B
 }
 
-type OmitNotDefined<S extends Schema> = {
+type OmitNotDefined<S extends RequestSchema> = {
   [K in keyof Exclude<S['params'], undefined> as Exclude<S['params'], undefined>[K] extends Required<
     Exclude<S['params'], undefined>
   >[K]
     ? K
     : //@ts-ignore
-      never]: Static<TObject<Exclude<S['params'], undefined>>>[K]
+      never]: Static<STObject<Exclude<S['params'], undefined>>>[K]
 }
 
-export type Context<Path extends string = string, S extends Schema = Schema> = {
-  headers: Static<TObject<Exclude<S['headers'], undefined>>>
+export type Context<Path extends string = string, S extends RequestSchema = RequestSchema> = {
+  headers: Static<STObject<Exclude<S['headers'], undefined>>>
   params: {
     [K in ExtractParams<Path>]: K extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[K] : string
   }
-  query: Static<TObject<Exclude<S['query'], undefined>>>
+  query: Static<STObject<Exclude<S['query'], undefined>>>
   body: Static<Exclude<S['body'], undefined>>
   request: Request
   state: Record<string, any>
@@ -214,55 +133,57 @@ export type Context<Path extends string = string, S extends Schema = Schema> = {
   }
 }
 export type Next = () => void | Promise<void>
-export type Hook<Path extends string = string, S extends Schema = Schema> = (
+export type Hook<Path extends string = string, S extends RequestSchema = RequestSchema> = (
   ctx: Context<Path, S>,
   next: Next
 ) => any | Promise<any>
-export type Handler<Path extends string = string, S extends Schema = Schema> = (ctx: Context<Path, S>) => any
+export type Handler<Path extends string = string, S extends RequestSchema = RequestSchema> = (
+  ctx: Context<Path, S>
+) => any
 export type Endpoint = {
   <
     Path extends string,
-    H extends THeaders,
-    P extends Partial<TParams<Path>>,
-    Q extends TQuery,
-    B extends TBody = TObject
+    H extends STHeaders,
+    P extends Partial<STParams<Path>>,
+    Q extends STQuery,
+    B extends STBody = STObject
   >(
     path: Path,
-    schema: Schema<Path, H, P, Q, B>,
-    hooks: Hook<Path, Schema<Path, H, P, Q, B>>[],
-    handler: Handler<Path, Schema<Path, H, P, Q, B>>
+    schema: RequestSchema<Path, H, P, Q, B>,
+    hooks: Hook<Path, RequestSchema<Path, H, P, Q, B>>[],
+    handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
   ): void
   <
     Path extends string,
-    H extends THeaders,
-    P extends Partial<TParams<Path>>,
-    Q extends TQuery,
-    B extends TBody = TObject
+    H extends STHeaders,
+    P extends Partial<STParams<Path>>,
+    Q extends STQuery,
+    B extends STBody = STObject
   >(
     path: Path,
-    schema: Schema<Path, H, P, Q, B>,
-    handler: Handler<Path, Schema<Path, H, P, Q, B>>
+    schema: RequestSchema<Path, H, P, Q, B>,
+    handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
   ): void
   <
     Path extends string,
-    H extends THeaders,
-    P extends Partial<TParams<Path>>,
-    Q extends TQuery,
-    B extends TBody = TObject
+    H extends STHeaders,
+    P extends Partial<STParams<Path>>,
+    Q extends STQuery,
+    B extends STBody = STObject
   >(
     path: Path,
-    hooks: Hook<Path, Schema<Path, H, P, Q, B>>[],
-    handler: Handler<Path, Schema<Path, H, P, Q, B>>
+    hooks: Hook<Path, RequestSchema<Path, H, P, Q, B>>[],
+    handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
   ): void
   <
     Path extends string,
-    H extends THeaders,
-    P extends Partial<TParams<Path>>,
-    Q extends TQuery,
-    B extends TBody = TObject
+    H extends STHeaders,
+    P extends Partial<STParams<Path>>,
+    Q extends STQuery,
+    B extends STBody = STObject
   >(
     path: Path,
-    handler: Handler<Path, Schema<Path, H, P, Q, B>>
+    handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
   ): void
 }
 
@@ -285,17 +206,17 @@ export type RouteNode = {
 
 export type Route<
   Path extends string = string,
-  H extends THeaders = {},
-  P extends Partial<TParams<Path>> = {},
-  Q extends TQuery = {},
-  B extends TBody = TBody
+  H extends STHeaders = {},
+  P extends Partial<STParams<Path>> = {},
+  Q extends STQuery = {},
+  B extends STBody = STBody
 > = {
   method: Method
   path: Path
-  schema: Schema<Path, H, P, Q, B>
-  context: Context<Path, Schema<Path, H, P, Q, B>>
+  schema: RequestSchema<Path, H, P, Q, B>
+  context: Context<Path, RequestSchema<Path, H, P, Q, B>>
   hooks: Hook[]
-  handler: Handler<Path, Schema<Path, H, P, Q, B>>
+  handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
 }
 
 export type RouteTree = {

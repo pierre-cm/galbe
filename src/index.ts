@@ -1,71 +1,43 @@
 import type { Server } from 'bun'
-import type {
-  ArrayOptions,
-  NumericOptions,
-  ObjectOptions,
-  SchemaOptions,
-  Static,
-  StringOptions,
-  TAny,
-  TArray,
-  TBoolean,
-  TInteger,
-  TLiteral,
-  TLiteralValue,
-  TNever,
-  TNumber,
-  TObject,
-  TOptional,
-  TProperties,
-  TSchema,
-  TString,
-  TUnion
-} from '@sinclair/typebox'
 import type { RouteFileMeta } from './routes'
 import type {
   GalbeConfig,
   Method,
-  Schema,
+  RequestSchema,
   Hook,
   Handler,
   Endpoint,
   Context,
   ErrorHandler,
   GalbePlugin,
-  TStream,
-  TMultipartProperties,
-  TMultipartForm,
-  TUrlForm,
-  TBody,
-  TByteArray,
-  TStreamable,
-  TParams,
-  THeaders,
-  TQuery,
-  TUrlFormProperties,
-  MultipartFormData
+  STBody,
+  STParams,
+  STHeaders,
+  STQuery
 } from './types'
 
-import { TypeClone, Kind, TypeBuilder, Optional, TypeGuard } from '@sinclair/typebox'
 import server from './server'
 import { GalbeRouter } from './router'
 import { defineRoutes } from './routes'
-import { Stream } from './types'
 import { logRoute } from './util'
+import { SchemaType, type STObject, type Static } from './schema'
 
 const overloadDiscriminer = <
   Path extends string,
-  H extends THeaders,
-  P extends Partial<TParams<Path>>,
-  Q extends TQuery,
-  B extends TBody
+  H extends STHeaders,
+  P extends Partial<STParams<Path>>,
+  Q extends STQuery,
+  B extends STBody
 >(
   galbe: Galbe,
   method: Method,
   path: Path,
-  arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-  arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-  arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
+  arg2:
+    | RequestSchema<Path, H, P, Q, B>
+    | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
+    | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+  arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+  arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
 ) => {
   const defaultSchema = {}
   if (typeof arg2 === 'function') {
@@ -82,24 +54,24 @@ const overloadDiscriminer = <
 }
 const galbeMethod = <
   Path extends string,
-  H extends THeaders,
-  P extends Partial<TParams<Path>>,
-  Q extends TQuery,
-  B extends TBody
+  H extends STHeaders,
+  P extends Partial<STParams<Path>>,
+  Q extends STQuery,
+  B extends STBody
 >(
   _galbe: Galbe,
   method: Method,
   path: Path,
-  schema: Schema<Path, H, P, Q, B> | undefined,
-  hooks: Hook<Path, Schema<Path, H, P, Q, B>>[] | undefined,
-  handler: Handler<Path, Schema<Path, H, P, Q, B>>
+  schema: RequestSchema<Path, H, P, Q, B> | undefined,
+  hooks: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | undefined,
+  handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
 ) => {
   schema = schema ?? {}
   hooks = hooks || []
   const context: Context<Path, typeof schema> = {
-    headers: {} as Static<TObject<Exclude<(typeof schema)['headers'], undefined>>>,
+    headers: {} as Static<STObject<Exclude<(typeof schema)['headers'], undefined>>>,
     params: {} as any,
-    query: {} as Static<TObject<Exclude<(typeof schema)['query'], undefined>>>,
+    query: {} as Static<STObject<Exclude<(typeof schema)['query'], undefined>>>,
     body: {} as Static<Exclude<(typeof schema)['body'], undefined>>,
     request: {} as Request,
     state: {},
@@ -121,144 +93,7 @@ const galbeMethod = <
   }
 }
 
-export class TypeboxTypeBuilder extends TypeBuilder {
-  /** `[Json]` Creates an Optional property */
-  public Optional<T extends TSchema>(schema: T): TOptional<T> {
-    return { ...TypeClone.Type(schema), [Optional]: 'Optional' }
-  }
-  /** `[Json]` Creates an Any type */
-  public Any(options: SchemaOptions = {}): TAny {
-    return this.Create({ ...options, [Kind]: 'Any' })
-  }
-  /** `[Json]` Creates an Array type */
-  public Array<T extends TSchema>(schema: T, options: ArrayOptions = {}): TArray<T> {
-    return this.Create({ ...options, [Kind]: 'Array', type: 'array', items: TypeClone.Type(schema) })
-  }
-  /** `[Json]` Creates a Boolean type */
-  public Boolean(options: SchemaOptions = {}): TBoolean {
-    return this.Create({ ...options, [Kind]: 'Boolean', type: 'boolean' })
-  }
-  /** `[Json]` Creates an Integer type */
-  public Integer(options: NumericOptions<number> = {}): TInteger {
-    return this.Create({ ...options, [Kind]: 'Integer', type: 'integer' })
-  }
-  /** `[Json]` Creates a Literal type */
-  public Literal<T extends TLiteralValue>(value: T, options: SchemaOptions = {}): TLiteral<T> {
-    return this.Create({
-      ...options,
-      [Kind]: 'Literal',
-      const: value,
-      type: typeof value as 'string' | 'number' | 'boolean'
-    })
-  }
-  /** `[Json]` Creates a Number type */
-  public Number(options: NumericOptions<number> = {}): TNumber {
-    return this.Create({ ...options, [Kind]: 'Number', type: 'number' })
-  }
-  /** `[Json]` Creates an Object type */
-  public Object<T extends TProperties>(properties: T, options: ObjectOptions = {}): TObject<T> {
-    const propertyKeys = Object.getOwnPropertyNames(properties)
-    const optionalKeys = propertyKeys.filter(key => TypeGuard.TOptional(properties[key]))
-    const requiredKeys = propertyKeys.filter(name => !optionalKeys.includes(name))
-    const clonedAdditionalProperties = TypeGuard.TSchema(options.additionalProperties)
-      ? { additionalProperties: TypeClone.Type(options.additionalProperties) }
-      : {}
-    const clonedProperties = propertyKeys.reduce(
-      (acc, key) => ({ ...acc, [key]: TypeClone.Type(properties[key]) }),
-      {} as TProperties
-    )
-    return requiredKeys.length > 0
-      ? this.Create({
-          ...options,
-          ...clonedAdditionalProperties,
-          [Kind]: 'Object',
-          type: 'object',
-          properties: clonedProperties,
-          required: requiredKeys
-        })
-      : this.Create({
-          ...options,
-          ...clonedAdditionalProperties,
-          [Kind]: 'Object',
-          type: 'object',
-          properties: clonedProperties
-        })
-  }
-  /** `[Json]` Creates a String type */
-  public String(options: StringOptions = {}): TString {
-    return this.Create({ ...options, [Kind]: 'String', type: 'string' })
-  }
-  /** `[Json]` Creates a Union type */
-  public Union(anyOf: [], options?: SchemaOptions): TNever
-  /** `[Json]` Creates a Union type */
-  public Union<T extends [TSchema]>(anyOf: [...T], options?: SchemaOptions): T[0]
-  /** `[Json]` Creates a Union type */
-  public Union<T extends TSchema[]>(anyOf: [...T], options?: SchemaOptions): TUnion<T>
-  /** `[Json]` Creates a Union type */
-  public Union(union: TSchema[], options: SchemaOptions = {}) {
-    // prettier-ignore
-    return (() => {
-        const anyOf = union
-        if (anyOf.length === 0) throw new Error("Union type must decalre at least one schema")
-        if (anyOf.length === 1) return this.Create(TypeClone.Type(anyOf[0], options))
-        const clonedAnyOf = TypeClone.Rest(anyOf)
-        return this.Create({ ...options, [Kind]: 'Union', anyOf: clonedAnyOf })
-      })()
-  }
-}
-
-class GalbeTypeBuilder extends TypeboxTypeBuilder {
-  /** `[Galbe]` Creates an Stream type */
-  public Stream<T extends TUrlForm>(
-    schema: T
-  ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<[string, string | number | boolean]>; params: unknown[] }
-  public Stream<T extends TMultipartForm>(
-    schema: T
-  ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<MultipartFormData, void, unknown>; params: unknown[] }
-  public Stream<T extends TByteArray>(
-    schema: T
-  ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<Uint8Array>; params: unknown[] }
-  public Stream<T extends TString>(
-    schema: T
-  ): Omit<TStream<T>, 'static'> & { static: AsyncGenerator<string>; params: unknown[] }
-  public Stream<T extends TStreamable>(schema: T): TStream<T> {
-    return {
-      ...TypeClone.Type(schema),
-      [Stream]: 'Stream'
-    }
-  }
-  /** `[Galbe]` Creates an ByteArray type */
-  public ByteArray(): TByteArray {
-    return this.Create({ [Kind]: 'ByteArray', type: 'byteArray', params: {} })
-  }
-  /** `[Galbe]` Creates an MultipartForm type */
-  public MultipartForm<T extends TMultipartProperties>(properties?: T): TMultipartForm {
-    if (!properties) return this.Create({ [Kind]: 'MultipartForm', type: 'multipartForm' })
-    const propertyKeys = Object.getOwnPropertyNames(properties)
-    const clonedProperties = propertyKeys.reduce(
-      //@ts-ignore
-      (acc, key) => ({ ...acc, [key]: TypeClone.Type(properties[key]) }),
-      {} as TProperties
-    )
-    return this.Create({
-      [Kind]: 'MultipartForm',
-      type: 'multipartForm',
-      properties: clonedProperties
-    })
-  }
-  /** `[Galbe]` Creates an UrlForm type */
-  public UrlForm<T extends TUrlFormProperties>(properties?: T): TUrlForm {
-    if (!properties) return this.Create({ [Kind]: 'UrlForm', type: 'urlForm' })
-    const propertyKeys = Object.getOwnPropertyNames(properties)
-    const clonedProperties = propertyKeys.reduce(
-      (acc, key) => ({ ...acc, [key]: TypeClone.Type(properties[key]) }),
-      {} as TProperties
-    )
-    return this.Create({ [Kind]: 'UrlForm', type: 'urlForm', properties: clonedProperties })
-  }
-}
-
-export const T = new GalbeTypeBuilder()
+export const $T = new SchemaType()
 
 export { RequestError } from './types'
 
@@ -328,75 +163,93 @@ export class Galbe {
   }
   get: Endpoint = <
     Path extends string,
-    H extends THeaders,
-    P extends Partial<TParams<Path>>,
-    Q extends TQuery,
-    B extends TBody
+    H extends STHeaders,
+    P extends Partial<STParams<Path>>,
+    Q extends STQuery,
+    B extends STBody
   >(
     path: Path,
-    arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-    arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-    arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
+    arg2:
+      | RequestSchema<Path, H, P, Q, B>
+      | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
+      | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'get', path, arg2, arg3, arg4))
   post: Endpoint = <
     Path extends string,
-    H extends THeaders,
-    P extends Partial<TParams<Path>>,
-    Q extends TQuery,
-    B extends TBody
+    H extends STHeaders,
+    P extends Partial<STParams<Path>>,
+    Q extends STQuery,
+    B extends STBody
   >(
     path: Path,
-    arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-    arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-    arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
+    arg2:
+      | RequestSchema<Path, H, P, Q, B>
+      | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
+      | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'post', path, arg2, arg3, arg4))
   put: Endpoint = <
     Path extends string,
-    H extends THeaders,
-    P extends Partial<TParams<Path>>,
-    Q extends TQuery,
-    B extends TBody
+    H extends STHeaders,
+    P extends Partial<STParams<Path>>,
+    Q extends STQuery,
+    B extends STBody
   >(
     path: Path,
-    arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-    arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-    arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
+    arg2:
+      | RequestSchema<Path, H, P, Q, B>
+      | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
+      | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'put', path, arg2, arg3, arg4))
   patch: Endpoint = <
     Path extends string,
-    H extends THeaders,
-    P extends Partial<TParams<Path>>,
-    Q extends TQuery,
-    B extends TBody
+    H extends STHeaders,
+    P extends Partial<STParams<Path>>,
+    Q extends STQuery,
+    B extends STBody
   >(
     path: Path,
-    arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-    arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-    arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
+    arg2:
+      | RequestSchema<Path, H, P, Q, B>
+      | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
+      | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'patch', path, arg2, arg3, arg4))
   delete: Endpoint = <
     Path extends string,
-    H extends THeaders,
-    P extends Partial<TParams<Path>>,
-    Q extends TQuery,
-    B extends TBody
+    H extends STHeaders,
+    P extends Partial<STParams<Path>>,
+    Q extends STQuery,
+    B extends STBody
   >(
     path: Path,
-    arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-    arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-    arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
+    arg2:
+      | RequestSchema<Path, H, P, Q, B>
+      | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
+      | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'delete', path, arg2, arg3, arg4))
   options: Endpoint = <
     Path extends string,
-    H extends THeaders,
-    P extends Partial<TParams<Path>>,
-    Q extends TQuery,
-    B extends TBody
+    H extends STHeaders,
+    P extends Partial<STParams<Path>>,
+    Q extends STQuery,
+    B extends STBody
   >(
     path: Path,
-    arg2: Schema<Path, H, P, Q, B> | Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-    arg3?: Hook<Path, Schema<Path, H, P, Q, B>>[] | Handler<Path, Schema<Path, H, P, Q, B>>,
-    arg4?: Handler<Path, Schema<Path, H, P, Q, B>>
+    arg2:
+      | RequestSchema<Path, H, P, Q, B>
+      | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
+      | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
+    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
   ) => this.add(overloadDiscriminer(this, 'options', path, arg2, arg3, arg4))
 }
 

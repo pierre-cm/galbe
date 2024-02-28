@@ -9,7 +9,7 @@ import {
   handleUrlFormStream,
   isAsyncIterator
 } from './test.utils'
-import { Galbe, T } from '../src'
+import { Galbe, $T } from '../src'
 
 const port = 7357
 
@@ -21,14 +21,14 @@ describe('parser', () => {
       '/headers/schema',
       {
         headers: {
-          string: T.String(),
-          zero: T.Number(),
-          number: T.Number(),
-          'neg-number': T.Number(),
-          float: T.Number(),
-          integer: T.Integer(),
-          'boolean-true': T.Boolean(),
-          'boolean-false': T.Boolean()
+          string: $T.string(),
+          zero: $T.number(),
+          number: $T.number(),
+          'neg-number': $T.number(),
+          float: $T.number(),
+          integer: $T.integer(),
+          'boolean-true': $T.boolean(),
+          'boolean-false': $T.boolean()
         }
       },
       ctx => {
@@ -40,10 +40,10 @@ describe('parser', () => {
       '/params/schema/:p1/:p2/:p3/:p4',
       {
         params: {
-          p1: T.String(),
-          p2: T.Number(),
-          p3: T.Integer(),
-          p4: T.Boolean()
+          p1: $T.string(),
+          p2: $T.number(),
+          p3: $T.integer(),
+          p4: $T.boolean()
         }
       },
       ctx => {
@@ -55,11 +55,11 @@ describe('parser', () => {
       '/query/params/schema',
       {
         query: {
-          p1: T.String(),
-          p2: T.Number(),
-          p3: T.Boolean(),
-          p4: T.Union([T.Number(), T.Boolean()]),
-          p5: T.Optional(T.String())
+          p1: $T.string(),
+          p2: $T.number(),
+          p3: $T.boolean(),
+          p4: $T.union([$T.number(), $T.boolean()]),
+          p5: $T.optional($T.string())
         }
       },
       ctx => {
@@ -70,10 +70,10 @@ describe('parser', () => {
       '/query/params/schema/constraints',
       {
         query: {
-          default: T.Optional(T.String({ default: 'DEFAULT_VALUE' })),
-          int: T.Integer({ exclusiveMinimum: 10, maximum: 42 }),
-          num: T.Number({ minimum: 10, exclusiveMaximum: 42 }),
-          str: T.String({ minLength: 4, maxLength: 8, pattern: '^a.*z' })
+          default: $T.optional($T.string({ default: 'DEFAULT_VALUE' })),
+          int: $T.integer({ exclusiveMin: 10, max: 42 }),
+          num: $T.number({ min: 10, exclusiveMax: 42 }),
+          str: $T.string({ minLength: 4, maxLength: 8, pattern: /^a.*z/ })
         }
       },
       ctx => {
@@ -81,16 +81,16 @@ describe('parser', () => {
       }
     )
 
-    galbe.post('/obj/schema/base', { body: T.Object(schema_object) }, handleBody)
+    galbe.post('/obj/schema/base', { body: $T.object(schema_object) }, handleBody)
 
     galbe.post(
       '/form/schema/base',
       {
-        body: T.UrlForm({
+        body: $T.urlForm({
           ...schema_objectBase,
-          union: T.Optional(T.Union([T.Number(), T.Boolean()])),
-          literal: T.Optional(T.Literal('x')),
-          array: T.Array(T.Any())
+          union: $T.optional($T.union([$T.number(), $T.boolean()])),
+          literal: $T.optional($T.literal('x')),
+          array: $T.array($T.any())
         })
       },
       handleBody
@@ -98,13 +98,13 @@ describe('parser', () => {
     galbe.post(
       '/form/stream/schema/base',
       {
-        body: T.Stream(
-          T.UrlForm({
+        body: $T.stream(
+          $T.urlForm({
             ...schema_objectBase,
-            union: T.Optional(T.Union([T.Number(), T.Boolean()])),
-            literal: T.Optional(T.Literal('x')),
-            array: T.Array(T.Any()),
-            numArray: T.Optional(T.Array(T.Number()))
+            union: $T.optional($T.union([$T.number(), $T.boolean()])),
+            literal: $T.optional($T.literal('x')),
+            array: $T.array($T.any()),
+            numArray: $T.optional($T.array($T.number()))
           })
         )
       },
@@ -113,11 +113,11 @@ describe('parser', () => {
     galbe.post(
       '/mp/schema/base',
       {
-        body: T.MultipartForm({
+        body: $T.multipartForm({
           ...schema_objectBase,
-          union: T.Optional(T.Union([T.Number(), T.Boolean()])),
-          literal: T.Optional(T.Literal('x')),
-          array: T.Array(T.Any())
+          union: $T.optional($T.union([$T.number(), $T.boolean()])),
+          literal: $T.optional($T.literal('x')),
+          array: $T.array($T.any())
         })
       },
       handleBody
@@ -125,12 +125,12 @@ describe('parser', () => {
     galbe.post(
       '/mp/stream/schema/base',
       {
-        body: T.Stream(
-          T.MultipartForm({
+        body: $T.stream(
+          $T.multipartForm({
             ...schema_objectBase,
-            union: T.Optional(T.Union([T.Number(), T.Boolean()])),
-            literal: T.Optional(T.Literal('x')),
-            array: T.Array(T.Any())
+            union: $T.optional($T.union([$T.number(), $T.boolean()])),
+            literal: $T.optional($T.literal('x')),
+            array: $T.array($T.any())
           })
         )
       },
@@ -138,28 +138,29 @@ describe('parser', () => {
     )
 
     let schema_jsonFile = {
-      string: T.String(),
-      number: T.Number(),
-      bool: T.Boolean(),
-      arrayStr: T.Array(T.String()),
-      arrayNumber: T.Array(T.Number()),
-      arrayBool: T.Array(T.Boolean())
+      string: $T.string(),
+      number: $T.number(),
+      bool: $T.boolean(),
+      arrayStr: $T.array($T.string()),
+      arrayNumber: $T.array($T.number()),
+      arrayBool: $T.array($T.boolean())
     }
 
     galbe.post(
       '/mp/file',
-      { body: T.MultipartForm({ imgFile: T.ByteArray(), jsonFile: T.Object(schema_jsonFile) }) },
+      { body: $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }) },
       handleBody
     )
     galbe.post(
       '/mp/stream/file',
-      { body: T.Stream(T.MultipartForm({ imgFile: T.ByteArray(), jsonFile: T.Object(schema_jsonFile) })) },
+      { body: $T.stream($T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })) },
       async ctx => {
         if (isAsyncIterator(ctx.body)) {
           const chunks: any[] = []
           for await (const chunk of ctx.body) {
-            if (chunk.content instanceof Uint8Array) chunk.content = await fileHash(chunk.content)
-            chunks.push(chunk)
+            const c = { ...chunk } as any
+            if (chunk.content instanceof Uint8Array) c.content = await fileHash(chunk.content)
+            chunks.push(c)
           }
           return { type: 'AsyncIterator', content: chunks }
         } else {
@@ -167,14 +168,14 @@ describe('parser', () => {
         }
       }
     )
-    galbe.post('/ba/file', { body: T.ByteArray() }, async ctx => {
+    galbe.post('/ba/file', { body: $T.byteArray() }, async ctx => {
       if (ctx?.body instanceof Uint8Array) {
-        return { type: 'ByteArray', content: await fileHash(ctx.body) }
+        return { type: 'byteArray', content: await fileHash(ctx.body) }
       } else {
         return { type: null, content: 'error' }
       }
     })
-    galbe.post('/ba/stream/file', { body: T.Stream(T.ByteArray()) }, async ctx => {
+    galbe.post('/ba/stream/file', { body: $T.stream($T.byteArray()) }, async ctx => {
       if (isAsyncIterator(ctx.body)) {
         let bytes = new Uint8Array()
         for await (const b of ctx.body) {
@@ -376,7 +377,7 @@ describe('parser', () => {
           status: 400,
           resp: {
             body: {
-              ba: 'Not a valid ByteArray',
+              ba: 'Not a valid byteArray',
               string: '42 is not a valid string',
               number: 'a is not a valid number',
               bool: "x is not a valid boolean. Should be 'true' or 'false'",
@@ -474,7 +475,7 @@ describe('parser', () => {
               number: 'aaa is not a valid number',
               bool: "1 is not a valid boolean. Should be 'true' or 'false'",
               literal: 'y is not a valid value',
-              union: 'X could not be parsed to any of Number, Boolean'
+              union: 'X could not be parsed to any of number, boolean'
             }
           }
         }
@@ -760,7 +761,7 @@ describe('parser', () => {
               number: 'aaa is not a valid number',
               bool: "1 is not a valid boolean. Should be 'true' or 'false'",
               literal: 'y is not a valid value',
-              union: 'X could not be parsed to any of: Number, Boolean'
+              union: 'X could not be parsed to any of: number, boolean'
             }
           }
         }
@@ -1041,7 +1042,7 @@ describe('parser', () => {
         schema: '/ba/file',
         expected: {
           status: 200,
-          type: 'ByteArray',
+          type: 'byteArray',
           resp: await fileHash(imgFileBytes)
         }
       }
@@ -1176,7 +1177,7 @@ describe('parser', () => {
             query: {
               int: '10 is less or equal to 10',
               num: '42.01 is greater or equal to 42',
-              str: ['xxxxxxxxxx length is too large (8 char max)', 'xxxxxxxxxx does not match pattern ^a.*z']
+              str: ['xxxxxxxxxx length is too large (8 char max)', 'xxxxxxxxxx does not match pattern /^a.*z/']
             }
           }
         }
@@ -1187,7 +1188,6 @@ describe('parser', () => {
       let search = new URLSearchParams()
       for (const [k, v] of Object.entries(p)) search.append(k, v as string)
 
-      console.log(search.toString())
       let resp = await fetch(`http://localhost:${port}/query/params/schema/constraints?${search.toString()}`)
       let body = await resp.json()
 

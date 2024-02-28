@@ -1,29 +1,28 @@
-import type { TProperties, TSchema } from '@sinclair/typebox'
+import type { STSchema, STProps, STUnion } from './schema'
+import { Kind, Optional } from './schema'
 
-import { Kind, Optional } from '@sinclair/typebox'
-
-export const validate = (elt: any, schema: TSchema, parse = false): any => {
+export const validate = (elt: any, schema: STSchema, parse = false): any => {
   type ValidationError = string | string[] | { [key: string]: ValidationError }
   const errors: ValidationError[] = []
   const iElt = elt
 
-  if (schema[Kind] === 'Boolean') {
+  if (schema[Kind] === 'boolean') {
     if (parse && typeof elt === 'string') elt = elt === 'true' ? true : elt === 'false' ? false : null
     if (elt !== true && elt !== false) throw `${iElt} is not a valid boolean. Should be 'true' or 'false'`
-  } else if (schema[Kind] === 'Integer') {
+  } else if (schema[Kind] === 'integer') {
     if (parse && typeof elt === 'string') elt = Number(elt)
     if (!Number.isInteger(elt)) throw `${iElt} is not a valid integer`
     schemaValidation(elt, schema)
-  } else if (schema[Kind] === 'Number') {
+  } else if (schema[Kind] === 'number') {
     if (parse && typeof elt === 'string') elt = Number(elt)
     if (!Number.isFinite(elt)) throw `${iElt} is not a valid number`
     schemaValidation(elt, schema)
-  } else if (schema[Kind] === 'String') {
+  } else if (schema[Kind] === 'string') {
     if (!(typeof elt === 'string')) throw `${iElt} is not a valid string`
     schemaValidation(elt, schema)
-  } else if (schema[Kind] === 'Literal') {
-    if (elt !== schema.const) throw `${iElt} is not a valid value`
-  } else if (schema[Kind] === 'Object') {
+  } else if (schema[Kind] === 'literal') {
+    if (elt !== schema.value) throw `${iElt} is not a valid value`
+  } else if (schema[Kind] === 'object') {
     if (parse && typeof elt === 'string') {
       try {
         elt = JSON.parse(elt)
@@ -34,9 +33,9 @@ export const validate = (elt: any, schema: TSchema, parse = false): any => {
     if (typeof elt !== 'object') throw `${iElt} is not a valid object`
     if (Array.isArray(elt)) throw `Expected an object, not an array`
     const err: ValidationError = {}
-    Object.entries(schema.properties as TProperties).forEach(([k, s]) => {
+    Object.entries(schema.props as STProps).forEach(([k, s]) => {
       if (!(k in elt)) {
-        if (!s[Optional]) err[k] = 'Required'
+        if (!s?.[Optional]) err[k] = 'Required'
         return
       }
       try {
@@ -46,7 +45,7 @@ export const validate = (elt: any, schema: TSchema, parse = false): any => {
       }
     })
     if (Object.keys(err).length) errors.push(err)
-  } else if (schema[Kind] === 'Array') {
+  } else if (schema[Kind] === 'array') {
     if (parse && typeof elt === 'string') {
       try {
         elt = JSON.parse(elt)
@@ -56,16 +55,16 @@ export const validate = (elt: any, schema: TSchema, parse = false): any => {
     }
     if (!Array.isArray(elt)) throw 'Not a valid array'
     schemaValidation(elt, schema)
-  } else if (schema[Kind] === 'ByteArray') {
+  } else if (schema[Kind] === 'byteArray') {
     if (parse && typeof elt === 'string') elt = Uint8Array.from(elt, c => c.charCodeAt(0))
     else if (parse && Array.isArray(elt)) elt = new Uint8Array(elt)
-    if (!(elt instanceof Uint8Array)) throw 'Not a valid ByteArray'
-  } else if (schema[Kind] === 'Union') {
-    const union = Object.values(schema.anyOf)
+    if (!(elt instanceof Uint8Array)) throw 'Not a valid byteArray'
+  } else if (schema[Kind] === 'union') {
+    const union = Object.values((schema as STUnion).anyOf)
     let valid = false
     for (const u of union) {
       try {
-        elt = validate(elt, u as TSchema, parse)
+        elt = validate(elt, u as STSchema, parse)
         valid = true
         break
       } catch (err) {
@@ -73,8 +72,8 @@ export const validate = (elt: any, schema: TSchema, parse = false): any => {
       }
     }
     // @ts-ignore
-    if (!valid) throw `${elt} could not be parsed to any of: ${union.map(u => u?.const ?? u[Kind]).join(', ')}`
-  } else if (schema[Kind] === 'Any') {
+    if (!valid) throw `${elt} could not be parsed to any of: ${union.map(u => u?.value ?? u[Kind]).join(', ')}`
+  } else if (schema[Kind] === 'any') {
   } else {
     throw `Unsupported schema type ${schema[Kind]}`
   }
@@ -85,32 +84,31 @@ export const validate = (elt: any, schema: TSchema, parse = false): any => {
   return elt
 }
 
-const schemaValidation = (value: any, schema: TSchema) => {
+const schemaValidation = (value: any, schema: STSchema) => {
   const errors = []
-  if (schema[Kind] === 'Integer' || schema[Kind] === 'Number') {
-    if (schema.exclusiveMinimum !== undefined)
-      if ((value as number) <= schema.exclusiveMinimum)
-        errors.push(`${value} is less or equal to ${schema.exclusiveMinimum}`)
-    if (schema.exclusiveMaximum !== undefined)
-      if ((value as number) >= schema.exclusiveMaximum)
-        errors.push(`${value} is greater or equal to ${schema.exclusiveMaximum}`)
+  if (schema[Kind] === 'integer' || schema[Kind] === 'number') {
+    if (schema.exclusiveMin !== undefined)
+      if ((value as number) <= schema.exclusiveMin) errors.push(`${value} is less or equal to ${schema.exclusiveMin}`)
+    if (schema.exclusiveMax !== undefined)
+      if ((value as number) >= schema.exclusiveMax)
+        errors.push(`${value} is greater or equal to ${schema.exclusiveMax}`)
     if (schema.minimum !== undefined)
-      if ((value as number) < schema.minimum) errors.push(`${value} is less than ${schema.minimum}`)
+      if ((value as number) < schema.min) errors.push(`${value} is less than ${schema.min}`)
     if (schema.maximum !== undefined)
-      if ((value as number) > schema.maximum) errors.push(`${value} is greater than ${schema.maximum}`)
-  } else if (schema[Kind] === 'String') {
+      if ((value as number) > schema.max) errors.push(`${value} is greater than ${schema.max}`)
+  } else if (schema[Kind] === 'string') {
     if (schema.minLength !== undefined && (value as string).length < schema.minLength)
       errors.push(`${value} length is too small (${schema.minLength} char min)`)
     if (schema.maxLength !== undefined && (value as string).length > schema.maxLength)
       errors.push(`${value} length is too large (${schema.maxLength} char max)`)
-    if (schema.pattern !== undefined && !(value as string).match(new RegExp(schema.pattern)))
+    if (schema.pattern !== undefined && !(value as string).match(schema.pattern))
       errors.push(`${value} does not match pattern ${schema.pattern}`)
-  } else if (schema[Kind] === 'Array') {
+  } else if (schema[Kind] === 'array') {
     if (schema.minItems !== undefined && (value as any[]).length < schema.minItems)
       errors.push(`Must contain at least ${schema.minItems} item${schema.minItems > 1 ? 's' : ''}`)
     if (schema.maxItems !== undefined && (value as any[]).length > schema.maxItems)
       errors.push(`Must contain at most (${schema.maxItems} item${schema.maxItems > 1 ? 's' : ''}`)
-    if (schema.uniqueItems === true && new Set(value as any[]).size !== (value as any[]).length)
+    if (schema.unique === true && new Set(value as any[]).size !== (value as any[]).length)
       errors.push(`Has duplicate values`)
   }
   if (errors.length) throw Array.isArray(errors) && errors.length === 1 ? errors[0] : errors

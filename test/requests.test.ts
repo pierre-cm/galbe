@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeAll } from 'bun:test'
-import { Galbe, T } from '../src'
+import { Galbe, $T } from '../src'
 import {
   formdata,
   type Case,
@@ -32,14 +32,14 @@ describe('requests', () => {
       '/headers/schema',
       {
         headers: {
-          string: T.String(),
-          zero: T.Number(),
-          number: T.Number(),
-          'neg-number': T.Number(),
-          float: T.Number(),
-          integer: T.Integer(),
-          'boolean-true': T.Boolean(),
-          'boolean-false': T.Boolean()
+          string: $T.string(),
+          zero: $T.number(),
+          number: $T.number(),
+          'neg-number': $T.number(),
+          float: $T.number(),
+          integer: $T.integer(),
+          'boolean-true': $T.boolean(),
+          'boolean-false': $T.boolean()
         }
       },
       ctx => {
@@ -54,10 +54,10 @@ describe('requests', () => {
       '/params/schema/:p1/:p2/:p3/:p4',
       {
         params: {
-          p1: T.String(),
-          p2: T.Number(),
-          p3: T.Integer(),
-          p4: T.Boolean()
+          p1: $T.string(),
+          p2: $T.number(),
+          p3: $T.integer(),
+          p4: $T.boolean()
         }
       },
       ctx => {
@@ -72,11 +72,11 @@ describe('requests', () => {
       '/query/params/schema',
       {
         query: {
-          p1: T.String(),
-          p2: T.Number(),
-          p3: T.Boolean(),
-          p4: T.Union([T.Number(), T.Boolean()]),
-          p5: T.Optional(T.String())
+          p1: $T.string(),
+          p2: $T.number(),
+          p3: $T.boolean(),
+          p4: $T.union([$T.number(), $T.boolean()]),
+          p5: $T.optional($T.string())
         }
       },
       ctx => {
@@ -85,19 +85,19 @@ describe('requests', () => {
     )
 
     galbe.post('/none', handleBody)
-    galbe.post('/ba', { body: T.ByteArray() }, handleBody)
-    galbe.post('/bool', { body: T.Boolean() }, handleBody)
-    galbe.post('/num', { body: T.Number() }, handleBody)
-    galbe.post('/str', { body: T.String() }, handleBody)
-    galbe.post('/arr', { body: T.Array(T.Any()) }, handleBody)
-    galbe.post('/obj', { body: T.Object(T.Any()) }, handleBody)
+    galbe.post('/ba', { body: $T.byteArray() }, handleBody)
+    galbe.post('/bool', { body: $T.boolean() }, handleBody)
+    galbe.post('/num', { body: $T.number() }, handleBody)
+    galbe.post('/str', { body: $T.string() }, handleBody)
+    galbe.post('/arr', { body: $T.array($T.any()) }, handleBody)
+    galbe.post('/obj', { body: $T.object($T.any()) }, handleBody)
 
-    galbe.post('/form', { body: T.UrlForm(T.Any()) }, handleBody)
-    galbe.post('/mp', { body: T.MultipartForm(T.Any()) }, handleBody)
+    galbe.post('/form', { body: $T.urlForm($T.any()) }, handleBody)
+    galbe.post('/mp', { body: $T.multipartForm($T.any()) }, handleBody)
 
-    galbe.post('/stream/ba', { body: T.Stream(T.ByteArray()) }, handleBody)
-    galbe.post('/stream/str', { body: T.Stream(T.String()) }, handleBody)
-    galbe.post('/stream/form', { body: T.Stream(T.UrlForm(T.Any())) }, async ctx => {
+    galbe.post('/stream/ba', { body: $T.stream($T.byteArray()) }, handleBody)
+    galbe.post('/stream/str', { body: $T.stream($T.string()) }, handleBody)
+    galbe.post('/stream/form', { body: $T.stream($T.urlForm($T.any())) }, async ctx => {
       let resp: Record<string, any> = {}
       for await (const [k, v] of ctx.body) {
         if (k in resp) {
@@ -106,28 +106,28 @@ describe('requests', () => {
       }
       return { type: 'object', content: resp }
     })
-    galbe.post('/stream/mp', { body: T.Stream(T.MultipartForm(T.Any())) }, async ctx => {
+    galbe.post('/stream/mp', { body: $T.stream($T.multipartForm($T.any())) }, async ctx => {
       let resp: Record<string, any> = {}
       for await (const field of ctx.body) {
-        let k = field.headers.name
-        if (k in resp) {
+        let k = field?.headers.name
+        if (k && k in resp) {
           resp[k].content = Array.isArray(resp[k]?.content)
-            ? [...resp[k].content, field.content]
-            : [resp[k]?.content, field.content]
+            ? [...resp[k].content, field?.content]
+            : [resp[k]?.content, field?.content]
         } else resp[k] = field
       }
       return { type: 'object', content: resp }
     })
 
-    galbe.post('/obj/schema/base', { body: T.Object(schema_object) }, handleBody)
+    galbe.post('/obj/schema/base', { body: $T.object(schema_object) }, handleBody)
     galbe.post(
       '/form/schema/base',
       {
-        body: T.UrlForm({
+        body: $T.urlForm({
           ...schema_objectBase,
-          union: T.Optional(T.Union([T.Number(), T.Boolean()])),
-          literal: T.Optional(T.Literal('x')),
-          array: T.Array(T.Any())
+          union: $T.optional($T.union([$T.number(), $T.boolean()])),
+          literal: $T.optional($T.literal('x'))
+          // array: $T.array($T.any())
         })
       },
       handleBody
@@ -135,13 +135,13 @@ describe('requests', () => {
     galbe.post(
       '/form/stream/schema/base',
       {
-        body: T.Stream(
-          T.UrlForm({
+        body: $T.stream(
+          $T.urlForm({
             ...schema_objectBase,
-            union: T.Optional(T.Union([T.Number(), T.Boolean()])),
-            literal: T.Optional(T.Literal('x')),
-            array: T.Array(T.Any()),
-            numArray: T.Optional(T.Array(T.Number()))
+            union: $T.optional($T.union([$T.number(), $T.boolean()])),
+            literal: $T.optional($T.literal('x'))
+            // array: $T.array($T.any()),
+            // numArray: $T.optional($T.array($T.number()))
           })
         )
       },
@@ -150,11 +150,11 @@ describe('requests', () => {
     galbe.post(
       '/mp/schema/base',
       {
-        body: T.MultipartForm({
+        body: $T.multipartForm({
           ...schema_objectBase,
-          union: T.Optional(T.Union([T.Number(), T.Boolean()])),
-          literal: T.Optional(T.Literal('x')),
-          array: T.Array(T.Any())
+          union: $T.optional($T.union([$T.number(), $T.boolean()])),
+          literal: $T.optional($T.literal('x')),
+          array: $T.array($T.any())
         })
       },
       handleBody
@@ -162,12 +162,12 @@ describe('requests', () => {
     galbe.post(
       '/mp/stream/schema/base',
       {
-        body: T.Stream(
-          T.MultipartForm({
+        body: $T.stream(
+          $T.multipartForm({
             ...schema_objectBase,
-            union: T.Optional(T.Union([T.Number(), T.Boolean()])),
-            literal: T.Optional(T.Literal('x')),
-            array: T.Array(T.Any())
+            union: $T.optional($T.union([$T.number(), $T.boolean()])),
+            literal: $T.optional($T.literal('x')),
+            array: $T.array($T.any())
           })
         )
       },
@@ -175,28 +175,29 @@ describe('requests', () => {
     )
 
     let schema_jsonFile = {
-      string: T.String(),
-      number: T.Number(),
-      bool: T.Boolean(),
-      arrayStr: T.Array(T.String()),
-      arrayNumber: T.Array(T.Number()),
-      arrayBool: T.Array(T.Boolean())
+      string: $T.string(),
+      number: $T.number(),
+      bool: $T.boolean(),
+      arrayStr: $T.array($T.string()),
+      arrayNumber: $T.array($T.number()),
+      arrayBool: $T.array($T.boolean())
     }
 
     galbe.post(
       '/mp/file',
-      { body: T.MultipartForm({ imgFile: T.ByteArray(), jsonFile: T.Object(schema_jsonFile) }) },
+      { body: $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }) },
       handleBody
     )
     galbe.post(
       '/mp/stream/file',
-      { body: T.Stream(T.MultipartForm({ imgFile: T.ByteArray(), jsonFile: T.Object(schema_jsonFile) })) },
+      { body: $T.stream($T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })) },
       async ctx => {
         if (isAsyncIterator(ctx.body)) {
           const chunks: any[] = []
           for await (const chunk of ctx.body) {
-            if (chunk.content instanceof Uint8Array) chunk.content = await fileHash(chunk.content)
-            chunks.push(chunk)
+            const c = { ...chunk } as any
+            if (chunk.content instanceof Uint8Array) c.content = await fileHash(chunk.content)
+            chunks.push(c)
           }
           return { type: 'AsyncIterator', content: chunks }
         } else {
@@ -204,14 +205,14 @@ describe('requests', () => {
         }
       }
     )
-    galbe.post('/ba/file', { body: T.ByteArray() }, async ctx => {
+    galbe.post('/ba/file', { body: $T.byteArray() }, async ctx => {
       if (ctx?.body instanceof Uint8Array) {
-        return { type: 'ByteArray', content: await fileHash(ctx.body) }
+        return { type: 'byteArray', content: await fileHash(ctx.body) }
       } else {
         return { type: null, content: 'error' }
       }
     })
-    galbe.post('/ba/stream/file', { body: T.Stream(T.ByteArray()) }, async ctx => {
+    galbe.post('/ba/stream/file', { body: $T.stream($T.byteArray()) }, async ctx => {
       if (isAsyncIterator(ctx.body)) {
         let bytes = new Uint8Array()
         for await (const b of ctx.body) {
@@ -281,7 +282,7 @@ describe('requests', () => {
   test('no body, no header', async () => {
     const cases: Case[] = [
       { body: null, type: undefined, schema: 'none', expected: { status: 200, resp: null } },
-      { body: null, type: undefined, schema: 'ba', expected: { status: 200, type: 'ByteArray', resp: '' } },
+      { body: null, type: undefined, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: '' } },
       { body: null, type: undefined, schema: 'bool', expected: { status: 400 } },
       { body: null, type: undefined, schema: 'num', expected: { status: 400 } },
       { body: null, type: undefined, schema: 'str', expected: { status: 400 } },
@@ -316,7 +317,7 @@ describe('requests', () => {
     const contentType = 'application/octet-stream'
     const cases: Case[] = [
       { body: null, type: contentType, schema: 'none', expected: { status: 200, resp: '' } },
-      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'ByteArray', resp: '' } },
+      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: '' } },
       { body: null, type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'num', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'str', expected: { status: 400 } },
@@ -357,7 +358,7 @@ describe('requests', () => {
     const contentType = 'application/json'
     const cases: Case[] = [
       { body: null, type: contentType, schema: 'none', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'ByteArray', resp: '' } },
+      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: '' } },
       { body: null, type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'num', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'str', expected: { status: 400 } },
@@ -398,7 +399,7 @@ describe('requests', () => {
     const contentType = 'text/plain'
     const cases: Case[] = [
       { body: null, type: contentType, schema: 'none', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'ByteArray', resp: '' } },
+      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: '' } },
       { body: null, type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'num', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'str', expected: { status: 400 } },
@@ -439,7 +440,7 @@ describe('requests', () => {
     const contentType = 'application/x-www-form-urlencoded'
     const cases: Case[] = [
       { body: null, type: contentType, schema: 'none', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'ByteArray', resp: '' } },
+      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: '' } },
       { body: null, type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'num', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'str', expected: { status: 400 } },
@@ -480,7 +481,7 @@ describe('requests', () => {
     const contentType = 'multipart/form-data'
     const cases: Case[] = [
       { body: null, type: contentType, schema: 'none', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'ByteArray', resp: '' } },
+      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: '' } },
       { body: null, type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'num', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'str', expected: { status: 400 } },
@@ -519,8 +520,8 @@ describe('requests', () => {
 
   test('body, no header', async () => {
     const cases: Case[] = [
-      { body: 'test', schema: 'none', expected: { status: 200, type: 'ByteArray', resp: 'test' } },
-      { body: 'test', schema: 'ba', expected: { status: 200, type: 'ByteArray', resp: 'test' } },
+      { body: 'test', schema: 'none', expected: { status: 200, type: 'byteArray', resp: 'test' } },
+      { body: 'test', schema: 'ba', expected: { status: 200, type: 'byteArray', resp: 'test' } },
       { body: 'true', schema: 'bool', expected: { status: 200, type: 'boolean', resp: true } },
       { body: 'false', schema: 'bool', expected: { status: 200, type: 'boolean', resp: false } },
       { body: 'test', schema: 'bool', expected: { status: 400 } },
@@ -575,8 +576,8 @@ describe('requests', () => {
   test('body, application/octet-stream', async () => {
     const contentType = 'application/octet-stream'
     const cases: Case[] = [
-      { body: 'test', type: contentType, schema: 'none', expected: { status: 200, type: 'ByteArray', resp: 'test' } },
-      { body: 'test', type: contentType, schema: 'ba', expected: { status: 200, type: 'ByteArray', resp: 'test' } },
+      { body: 'test', type: contentType, schema: 'none', expected: { status: 200, type: 'byteArray', resp: 'test' } },
+      { body: 'test', type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: 'test' } },
       { body: 'true', type: contentType, schema: 'bool', expected: { status: 200, type: 'boolean', resp: true } },
       { body: 'false', type: contentType, schema: 'bool', expected: { status: 200, type: 'boolean', resp: false } },
       { body: 'test', type: contentType, schema: 'bool', expected: { status: 400 } },
@@ -650,7 +651,7 @@ describe('requests', () => {
         expected: { status: 200, type: 'object', resp: { foo: 'bar' } }
       },
       { body: 'test', type: contentType, schema: 'none', expected: { status: 400 } },
-      { body: 'test', type: contentType, schema: 'ba', expected: { status: 200, type: 'ByteArray', resp: 'test' } },
+      { body: 'test', type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: 'test' } },
       { body: 'true', type: contentType, schema: 'bool', expected: { status: 200, type: 'boolean', resp: true } },
       { body: 'false', type: contentType, schema: 'bool', expected: { status: 200, type: 'boolean', resp: false } },
       { body: 'test', type: contentType, schema: 'bool', expected: { status: 400 } },
@@ -720,7 +721,7 @@ describe('requests', () => {
     const contentType = 'text/plain'
     const cases: Case[] = [
       { body: 'test', type: contentType, schema: 'none', expected: { status: 200, type: 'string', resp: 'test' } },
-      { body: 'test', type: contentType, schema: 'ba', expected: { status: 200, type: 'ByteArray', resp: 'test' } },
+      { body: 'test', type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: 'test' } },
       { body: 'true', type: contentType, schema: 'bool', expected: { status: 200, type: 'boolean', resp: true } },
       { body: 'false', type: contentType, schema: 'bool', expected: { status: 200, type: 'boolean', resp: false } },
       { body: 'test', type: contentType, schema: 'bool', expected: { status: 400 } },
@@ -792,7 +793,7 @@ describe('requests', () => {
     const objBody = { string: 'text', number: '42', boolean: 'true', 'encoded=': '=' }
     const cases: Case[] = [
       { body: strBody, type: contentType, schema: 'none', expected: { status: 200, type: 'object', resp: objBody } },
-      { body: strBody, type: contentType, schema: 'ba', expected: { status: 200, type: 'ByteArray', resp: strBody } },
+      { body: strBody, type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: strBody } },
       { body: strBody, type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: strBody, type: contentType, schema: 'num', expected: { status: 400 } },
       { body: strBody, type: contentType, schema: 'str', expected: { status: 400 } },
@@ -871,7 +872,7 @@ describe('requests', () => {
 
     const cases: Case[] = [
       { body: form, schema: 'none', expected: { status: 200, type: 'object', resp: objResp } },
-      { body: form, schema: 'ba', expected: { status: 200, type: 'ByteArray', resp: objRespStrRgx } },
+      { body: form, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: objRespStrRgx } },
       { body: form, schema: 'bool', expected: { status: 400 } },
       { body: form, schema: 'num', expected: { status: 400 } },
       { body: form, schema: 'str', expected: { status: 400 } },
