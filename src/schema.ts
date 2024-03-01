@@ -49,7 +49,18 @@ export interface STSchema extends Options {
   static: unknown
   [key: string]: any
 }
-export type STProps = Record<string | number, STSchema>
+export type STPropsValue =
+  | STBoolean
+  | STByteArray
+  | STNumber
+  | STInteger
+  | STString
+  | STLiteral
+  | STArray
+  | STObject
+  | STUnion
+  | STAny
+export type STProps = Record<string | number, STPropsValue>
 
 type Evaluate<T> = T extends infer O ? { [K in keyof O]: O[K] } : never
 export type Static<T extends STSchema, P extends unknown[] = unknown[]> = (T & { params: P })['static']
@@ -159,14 +170,15 @@ type RequiredPropertyKeys<T extends STProps> = keyof Omit<T, OptionalPropertyKey
 type ObjectStaticProps<T extends STProps, R extends Record<keyof any, unknown>> = Evaluate<
   Partial<Pick<R, OptionalPropertyKeys<T>>> & Required<Pick<R, RequiredPropertyKeys<T>>>
 >
-function _Object<T extends STProps>(properties: T, options: Options = {}): STObject<T extends STAny ? any : T> {
+function _Object<T extends STProps>(properties?: T, options: Options = {}): STObject<T> {
+  if (!properties) return { ...options, [Kind]: 'object' } as unknown as STObject<T>
   const propertyKeys = globalThis.Object.getOwnPropertyNames(properties)
   const optionalKeys = propertyKeys.filter(key => properties[key]?.[Optional])
   const requiredKeys = propertyKeys.filter(name => !optionalKeys.includes(name))
   const clonedProperties = propertyKeys.reduce((acc, key) => ({ ...acc, [key]: { ...properties[key] } }), {} as STProps)
   return (requiredKeys.length > 0
     ? { ...options, [Kind]: 'object', props: clonedProperties, required: requiredKeys }
-    : { ...options, [Kind]: 'object', props: clonedProperties }) as unknown as STObject<T extends STAny ? any : T>
+    : { ...options, [Kind]: 'object', props: clonedProperties }) as unknown as STObject<T>
 }
 
 // UrlForm
@@ -184,13 +196,11 @@ export type STUrlFormValues =
 export type STUrlFormProps = Record<string, STUrlFormValues>
 export interface STUrlForm<T extends STUrlFormProps = STUrlFormProps> extends STSchema {
   [Kind]: 'urlForm'
-  static: ObjectStatic<T, this['params']>
+  static: T extends undefined ? Record<string, any> : ObjectStatic<T, this['params']>
   props: T
 }
-function _UrlForm<T extends STUrlFormProps>(
-  properties: T,
-  options: Options = {}
-): STUrlForm<T extends STAny ? any : T> {
+function _UrlForm<T extends STUrlFormProps>(properties?: T, options: Options = {}): STUrlForm<T> {
+  if (!properties) return { ...options, [Kind]: 'urlForm' } as unknown as STUrlForm<T>
   const propertyKeys = globalThis.Object.getOwnPropertyNames(properties)
   const optionalKeys = propertyKeys.filter(key => properties[key]?.[Optional])
   const requiredKeys = propertyKeys.filter(name => !optionalKeys.includes(name))
@@ -200,7 +210,7 @@ function _UrlForm<T extends STUrlFormProps>(
   )
   return (requiredKeys.length > 0
     ? { ...options, [Kind]: 'urlForm', props: clonedProperties, required: requiredKeys }
-    : { ...options, [Kind]: 'urlForm', props: clonedProperties }) as unknown as STUrlForm<T extends STAny ? any : T>
+    : { ...options, [Kind]: 'urlForm', props: clonedProperties }) as unknown as STUrlForm<T>
 }
 
 // MultipartForm
@@ -211,22 +221,18 @@ export interface MultipartFormData<K extends string = string, V extends Static<S
 }
 export interface STMultipartForm<T extends STProps = STProps> extends STSchema {
   [Kind]: 'multipartForm'
-  static: ObjectStatic<T, this['params']>
+  static: T extends undefined ? Record<string, any> : ObjectStatic<T, this['params']>
   props: T
 }
-function _MultipartForm<T extends STProps>(
-  properties: T,
-  options: Options = {}
-): STMultipartForm<T extends STAny ? any : T> {
+function _MultipartForm<T extends STProps>(properties?: T, options: Options = {}): STMultipartForm<T> {
+  if (!properties) return { ...options, [Kind]: 'multipartForm' } as unknown as STMultipartForm<T>
   const propertyKeys = globalThis.Object.getOwnPropertyNames(properties)
   const optionalKeys = propertyKeys.filter(key => properties[key]?.[Optional])
   const requiredKeys = propertyKeys.filter(name => !optionalKeys.includes(name))
   const clonedProperties = propertyKeys.reduce((acc, key) => ({ ...acc, [key]: { ...properties[key] } }), {} as STProps)
   return (requiredKeys.length > 0
     ? { ...options, [Kind]: 'multipartForm', props: clonedProperties, required: requiredKeys }
-    : { ...options, [Kind]: 'multipartForm', props: clonedProperties }) as unknown as STMultipartForm<
-    T extends STAny ? any : T
-  >
+    : { ...options, [Kind]: 'multipartForm', props: clonedProperties }) as unknown as STMultipartForm<T>
 }
 
 // Array
@@ -235,12 +241,12 @@ export interface STArray<T extends STSchema = STSchema> extends STSchema {
   static: Static<T>[]
   items: T
 }
-export function _Array<T extends STSchema>(schema: T, options: ArrayOptions = {}): STArray<T> {
+export function _Array<T extends STSchema>(schema?: T, options: ArrayOptions = {}): STArray<T | STAny> {
   return {
     ...options,
     [Kind]: 'array',
-    items: schema
-  } as unknown as STArray<T>
+    items: schema ?? _Any()
+  } as unknown as T extends undefined ? STArray<STAny> : STArray<T>
 }
 
 // Union
@@ -304,26 +310,23 @@ export class SchemaType {
     return _Any(options)
   }
   /** Creates an Object Schema Type */
-  public object<T extends STProps>(properties: T, options: Options = {}): STObject<T extends STAny ? any : T> {
+  public object<T extends STProps>(properties?: T, options: Options = {}): STObject<T> {
     return _Object(properties, options)
   }
   /** Alias for Object Schema Type */
-  public json<T extends STProps>(properties: T, options: Options = {}): STObject<T extends STAny ? any : T> {
+  public json<T extends STProps>(properties?: T, options: Options = {}): STObject<T> {
     return _Object(properties, options)
   }
   /** Creates an UrlForm Schema Type */
-  public urlForm<T extends STUrlFormProps>(properties: T, options: Options = {}): STUrlForm<T extends STAny ? any : T> {
+  public urlForm<T extends STUrlFormProps>(properties?: T, options: Options = {}): STUrlForm<T> {
     return _UrlForm(properties, options)
   }
   /** Creates an MultipartForm Schema Type */
-  public multipartForm<T extends STProps>(
-    properties: T,
-    options: Options = {}
-  ): STMultipartForm<T extends STAny ? any : T> {
+  public multipartForm<T extends STProps>(properties?: T, options: Options = {}): STMultipartForm<T> {
     return _MultipartForm(properties, options)
   }
   /** Crates an Array Schema Type */
-  public array<T extends STSchema>(schema: T, options: Options = {}): STArray<T> {
+  public array<T extends STSchema>(schema?: T, options: Options = {}): STArray<T | STAny> {
     return _Array(schema, options)
   }
   /** Crates an Union Schema Type */
@@ -334,19 +337,30 @@ export class SchemaType {
   public stream<T extends STUrlForm>(
     schema: T
   ): Omit<STStream<T>, 'static'> & {
-    static: AsyncGenerator<{ [K in keyof T['props']]: [K, Static<T['props'][K]>] }[keyof T['props']]>
+    static: AsyncGenerator<
+      T['props'] extends undefined
+        ? { [k: string]: Static<STUrlFormValues> }
+        : { [K in keyof T['props']]: [K, Static<T['props'][K]>] }[keyof T['props']]
+    >
     params: unknown[]
   }
   public stream<T extends STMultipartForm>(
     schema: T
   ): Omit<STStream<T>, 'static'> & {
     static: AsyncGenerator<
-      {
-        [K in keyof T['props']]: {
-          headers: { type?: string; name: K; filename?: string }
-          content: Static<T['props'][K]>
-        }
-      }[keyof T['props']],
+      T['props'] extends undefined
+        ? {
+            [k: string]: {
+              headers: { type?: string; name: string; filename?: string }
+              content: Static<STMultipartFormValues>
+            }
+          }
+        : {
+            [K in keyof T['props']]: {
+              headers: { type?: string; name: K; filename?: string }
+              content: Static<T['props'][K]>
+            }
+          }[keyof T['props']],
       void,
       unknown
     >
@@ -362,15 +376,3 @@ export class SchemaType {
     return _Stream(schema)
   }
 }
-
-const $T = new SchemaType()
-
-// const test = $T.stream(
-//   $T.multipartForm({
-//     test: $T.string(),
-//     titi: $T.boolean()
-//   })
-// )
-const test = $T.object($T.number())
-
-type Test = Static<typeof test>

@@ -47,7 +47,7 @@ galbe.get('/foo', ctx => 'Hello World!')
 ```js
 galbe.get(
   '/foo/:bar',
-  { params: { bar: T.String() } },
+  { params: { bar: $T.string() } },
   ctx => `Hello ${ctx.params.bar} !`
 )
 ```
@@ -69,7 +69,7 @@ galbe.get(
 ```js
 galbe.get(
   '/foo/:bar',
-  { params: { bar: T.String() } },
+  { params: { bar: $T.string() } },
   [() => console.log('Hook')],
   ctx => `Hello ${ctx.params.bar} !`
 )

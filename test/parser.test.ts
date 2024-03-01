@@ -90,7 +90,7 @@ describe('parser', () => {
           ...schema_objectBase,
           union: $T.optional($T.union([$T.number(), $T.boolean()])),
           literal: $T.optional($T.literal('x')),
-          array: $T.array($T.any())
+          array: $T.array()
         })
       },
       handleBody

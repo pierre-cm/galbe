@@ -89,15 +89,15 @@ describe('requests', () => {
     galbe.post('/bool', { body: $T.boolean() }, handleBody)
     galbe.post('/num', { body: $T.number() }, handleBody)
     galbe.post('/str', { body: $T.string() }, handleBody)
-    galbe.post('/arr', { body: $T.array($T.any()) }, handleBody)
+    galbe.post('/arr', { body: $T.array() }, handleBody)
     galbe.post('/obj', { body: $T.object($T.any()) }, handleBody)
 
-    galbe.post('/form', { body: $T.urlForm($T.any()) }, handleBody)
-    galbe.post('/mp', { body: $T.multipartForm($T.any()) }, handleBody)
+    galbe.post('/form', { body: $T.urlForm() }, handleBody)
+    galbe.post('/mp', { body: $T.multipartForm() }, handleBody)
 
     galbe.post('/stream/ba', { body: $T.stream($T.byteArray()) }, handleBody)
     galbe.post('/stream/str', { body: $T.stream($T.string()) }, handleBody)
-    galbe.post('/stream/form', { body: $T.stream($T.urlForm($T.any())) }, async ctx => {
+    galbe.post('/stream/form', { body: $T.stream($T.urlForm()) }, async ctx => {
       let resp: Record<string, any> = {}
       for await (const [k, v] of ctx.body) {
         if (k in resp) {
@@ -106,7 +106,7 @@ describe('requests', () => {
       }
       return { type: 'object', content: resp }
     })
-    galbe.post('/stream/mp', { body: $T.stream($T.multipartForm($T.any())) }, async ctx => {
+    galbe.post('/stream/mp', { body: $T.stream($T.multipartForm()) }, async ctx => {
       let resp: Record<string, any> = {}
       for await (const field of ctx.body) {
         let k = field?.headers.name
@@ -118,61 +118,6 @@ describe('requests', () => {
       }
       return { type: 'object', content: resp }
     })
-
-    galbe.post('/obj/schema/base', { body: $T.object(schema_object) }, handleBody)
-    galbe.post(
-      '/form/schema/base',
-      {
-        body: $T.urlForm({
-          ...schema_objectBase,
-          union: $T.optional($T.union([$T.number(), $T.boolean()])),
-          literal: $T.optional($T.literal('x'))
-          // array: $T.array($T.any())
-        })
-      },
-      handleBody
-    )
-    galbe.post(
-      '/form/stream/schema/base',
-      {
-        body: $T.stream(
-          $T.urlForm({
-            ...schema_objectBase,
-            union: $T.optional($T.union([$T.number(), $T.boolean()])),
-            literal: $T.optional($T.literal('x'))
-            // array: $T.array($T.any()),
-            // numArray: $T.optional($T.array($T.number()))
-          })
-        )
-      },
-      handleUrlFormStream
-    )
-    galbe.post(
-      '/mp/schema/base',
-      {
-        body: $T.multipartForm({
-          ...schema_objectBase,
-          union: $T.optional($T.union([$T.number(), $T.boolean()])),
-          literal: $T.optional($T.literal('x')),
-          array: $T.array($T.any())
-        })
-      },
-      handleBody
-    )
-    galbe.post(
-      '/mp/stream/schema/base',
-      {
-        body: $T.stream(
-          $T.multipartForm({
-            ...schema_objectBase,
-            union: $T.optional($T.union([$T.number(), $T.boolean()])),
-            literal: $T.optional($T.literal('x')),
-            array: $T.array($T.any())
-          })
-        )
-      },
-      handleBody
-    )
 
     let schema_jsonFile = {
       string: $T.string(),
