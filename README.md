@@ -12,7 +12,9 @@ Galbe is a fast, lightweight and highly customizable JavaScript web framework ba
 ## Getting started
 
 ```bash
-bun create galbe
+bun create galbe app
+cd app
+bun install && bun dev
 ```
 
 ## Documentation
