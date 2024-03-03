@@ -23,15 +23,15 @@ There are two special segments:
 
 **schema** (Schema) _Optional_
 
-See [Schemas](schemas) section.
+See [Schemas](schemas.md) section.
 
 **hooks** (Hook[]) _Optional_
 
-See [Hooks](hooks) section.
+See [Hooks](hooks.md) section.
 
 **handler** (Handler)
 
-See [Handler](handler) section.
+See [Handler](handler.md) section.
 
 ### Examples
 
@@ -78,11 +78,11 @@ galbe.get(
 ## Automatic Route Analyzer
 
 > [!NOTE]
-> This feature is only available if you run/build the app via the [Galbe CLI](), which is the case by default if you created your app following the [Automatic Installation]() step or properly configured your package.json to do so.
+> This feature is only available if you run/build the app via the [Galbe CLI](getting-started.md#galbe-cli), which is the case by default if you created your app following the [Automatic Installation](getting-started.md#automatic-installation) step or properly configured your package.json to do so.
 
 The Automatic Route Analyzer is in charge of analyzing all the Route Files of your project and set up the routes defintions to your Glabe server automatically.
 
-By default, the analyzer will search for route files matching paths like `'src/**/*.route.{js,ts}'`. This can be configured by modifying the value of `routes` property of your Galbe configuration. A value of `false` will disable the analyzer.
+By default, the analyzer will search for Route Files matching paths like `'src/**/*.route.{js,ts}'`. This can be configured by modifying the value of `routes` property of your Galbe configuration. A value of `false` will disable the analyzer.
 
 ### Route Files
 
@@ -103,7 +103,7 @@ export default (g: Galbe) => {
 }
 ```
 
-The Automatic Route Analyzer is also capable of collecting metadata about your Routefile and your routes by analyzing multiline comments. This can be used by some plugins to perform specific tasks. Here is an example of Routefile with multiline comments metadata.
+The Automatic Route Analyzer is also capable of collecting metadata about your Routefile and your routes by analyzing multiline comments. This can be used by some plugins to perform specific tasks. Here is an example of Route File with multiline comments metadata.
 
 ```js
 /**
@@ -121,4 +121,4 @@ export default g => {
 }
 ```
 
-You will find more information about comment's metadata and how to use them along with examples in a plugin in the [Plugin](plugins) section.
+You will find more information about comment's metadata and how to use them along with examples in the [Plugin](plugins.md) section.

@@ -80,7 +80,7 @@ const optionalSchema = $T.optional($T.string())
 
 ## Request Schema definition
 
-The Request Schema definition allows you to define a schema for your request on your [Route Definition](). It must be defined right after the [path]() of your route.
+The Request Schema definition allows you to define a schema for your request on your [Route Definition](routes.md#route-defintion). It must be defined right after the path of your route.
 
 ```js
 const schema = {}
@@ -127,7 +127,7 @@ const schema = {
 ```
 
 > [!WARNING]
-> Every key should match an existing [route path]() parameter. Otherwise Typescript will show you an error.
+> Every key should match an existing [route path](routes.md#route-defintion) parameter. Otherwise Typescript will show you an error.
 >
 > By default, if no schema is defined for a given parameter. Galbe will assume it is of type `string`.
 
@@ -152,8 +152,10 @@ const schema = {
 
 ### body
 
+<!-- prettier-ignore -->
 ```ts
-body: STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | STObject | STMulripartForm | STUrlForm
+body: STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | 
+      STObject | STMulripartForm | STUrlForm
 ```
 
 #### Json

@@ -26,12 +26,12 @@ Now you can start the dev server by running:
 bun dev
 ```
 
-This will start a web server on `loclahost:3000`.
+This will start a web server on `localhost:3000`.
 
-To verify that the project was setup correctly and is running, try to reach `loclahost:3000/hello` endpoint, this should return following greeting message:
+To verify that the project was setup correctly and is running, try to reach `localhost:3000/hello` endpoint, this should return following greeting message:
 
 ```bash
-$ curl localhost:3000/hello
+curl localhost:3000/hello
 Hello from Galbe!
 ```
 
@@ -217,7 +217,7 @@ Here are two examples of valid project structures by default:
 
 In both cases, the [Automatic Route Analyzer](routes.md#automatic-route-analyzer) will analyze `foo.route.ts` and `bar.route.ts` Route Files to find route definitions.
 
-You can find more info about Route Files definition under the [Routes](routes.md) section.
+You can find more info about Route Files definition under the [Routes Files](routes.md#route-files) section.
 
-> [!NOTE]  
+> [!NOTE]
 > Those are just examples that will work with the default configuration. You can of course redefine `routes` property with your own pattern(s) to fit your own project structure.
