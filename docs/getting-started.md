@@ -1,8 +1,8 @@
 # Getting started
 
-Galbe is a Javascript web framework to build fast and versatile backend servers with Bun.
+Galbe is a Javascript web framework for building fast and versatile backend servers with Bun.
 
-It was designed with simplicity in mind, allowing you to quickly create and setup a project. In addition, Galbe also offers usefull features, allowing you to focus on your application logic rather than the rest.
+Designed with simplicity in mind, Galbe allows you to quickly create and set up a project. In addition to its ease of use, Galbe also offers a range of useful features that help you focus on the core logic of your application.
 
 ## Requirements
 
@@ -74,7 +74,7 @@ export default galbe
 
 This is the recommended way to proceed but it is not mandatory. Galbe instances also provide a `listen` method that will allow you to manually start your server instance from the code.
 
-> [!WARNING]  
+> [!WARNING]
 > In the case you decide to not rely on Galbe CLI to run/build your app, you will not have access to [Automatic Route Analyzer](routes.md#automatic-route-analyzer) feature.
 
 ### Galbe CLI
@@ -139,7 +139,7 @@ A property that can be used by plugins to add plugin's specific configuration. E
 
 ### Examples
 
-An common way to handle server configuration is to create new file a `galbe.config.(js|ts|json)` at the root of your project directory and import it in your code. Here is an example:
+A common way to handle server configuration is to create new file `galbe.config.(js|ts|json)` at the root of your project directory and import it in your code. Here is an example:
 
 galbe.config.js
 
@@ -217,7 +217,7 @@ Here are two examples of valid project structures by default:
 
 In both cases, the [Automatic Route Analyzer](routes.md#automatic-route-analyzer) will analyze `foo.route.ts` and `bar.route.ts` Route Files to find route definitions.
 
-You can find more info about Route Files definition under the [Routes Files](routes.md#route-files) section.
+You can find more info about Route Files definition in the [Routes Files](routes.md#route-files) section.
 
 > [!NOTE]
-> Those are just examples that will work with the default configuration. You can of course redefine `routes` property with your own pattern(s) to fit your own project structure.
+> The examples provided above will work with the default configuration, but you can easily customize the routes property to fit your own project structure. Simply redefine the `routes` property with your own pattern(s) to to fit your own project structure.

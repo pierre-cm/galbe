@@ -1,12 +1,10 @@
 # Shemas
 
-Galbe offers a custom Schema Type processor that provides type safety along with data parsing and validation.
-
-The prime intention of that features is to offer an easy way to manage automatically request inputs validation and error handling. Moreover, it also greatly improve developper's experience by infering static Typescript types from schema definitions.
+Galbe provides a custom Schema Type processor that offers type safety, data parsing, and validation. The primary purpose of this feature is to simplify request input validation and error handling automatically. Additionally, it enhances the developer's experience by inferring static TypeScript types from schema definitions.
 
 ## Schema Types
 
-To get started with Schema defintion, just import `$T` from `galbe` library:
+To start using Schema definitions, import `$T` from the `galbe` library:
 
 ```js
 import { $T } from 'galbe'
@@ -62,20 +60,20 @@ Schema Type matching `array` values.
 const arraySchema = $T.array($T.any(), options)
 ```
 
-#### Union
+#### Optional
 
-Creates an union of Schema Types. .
-
-```ts
-const unionSchema = $T.union([$T.string(), $T.number()])
-```
-
-#### TOptional
-
-Makes any type optional. In practice, this allows for `undefined` values.
+Makes any type optional. This allows for `undefined` values.
 
 ```ts
 const optionalSchema = $T.optional($T.string())
+```
+
+#### Union
+
+Creates an union of Schema Types.
+
+```ts
+const unionSchema = $T.union([$T.string(), $T.number()])
 ```
 
 ## Request Schema definition
@@ -87,7 +85,7 @@ const schema = {}
 galbe.get('/foo/:bar', schema, ctx => {})
 ```
 
-The Request Schema has 4 optional properties
+The Request Schema has four optional properties:
 
 ### headers
 
@@ -95,7 +93,7 @@ The Request Schema has 4 optional properties
 headers: { [key: string]: STString | STBoolean | STNumber | STInteger | STLiteral }
 ```
 
-This is a key-value object where each key represents a request `header` name and the value the Schema associated.
+This is a key-value object where each key represents a request header name, and the value is the associated Schema.
 
 **Example**:
 
@@ -113,7 +111,7 @@ const schema = {
 params: { [key: string]: STString | STBoolean | STNumber | STInteger | STLiteral }
 ```
 
-This is a key-value object where each key represents a request `path parameter` name and the value the Schema associated.
+This is a key-value object where each key represents a request path parameter name, and the value is the associated Schema.
 
 **Example**:
 
@@ -127,7 +125,7 @@ const schema = {
 ```
 
 > [!WARNING]
-> Every key should match an existing [route path](routes.md#route-defintion) parameter. Otherwise Typescript will show you an error.
+> Every key should match an existing [route path](routes.md#route-defintion) parameter. Otherwise Typescript will show an error.
 >
 > By default, if no schema is defined for a given parameter. Galbe will assume it is of type `string`.
 
@@ -137,7 +135,7 @@ const schema = {
 query: { [key: string]: STString | STBoolean | STNumber | STInteger | STLiteral }
 ```
 
-This is a key-value object where each key represents a request `query parameter` name and the value the Schema associated.
+This is a key-value object where each key represents a request query parameter name, and the value is the associated Schema.
 
 **Example**:
 
@@ -160,7 +158,7 @@ body: STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral |
 
 #### Json
 
-To define an `application/json` request body. You must use `STObject` Schema Type. Example:
+To define an `application/json` request body, use `STObject` Schema Type. Example:
 
 ```ts
 const jsonBody = $T.object({
@@ -171,7 +169,7 @@ const jsonBody = $T.object({
 
 #### Multipart
 
-To define a `multipart/form-data` request body. You must use `TMultipartForm` Schema Type. Example:
+To define a `multipart/form-data` request body, use `TMultipartForm` Schema Type. Example:
 
 ```ts
 const multipartBody = $T.multipartForm({
@@ -182,7 +180,7 @@ const multipartBody = $T.multipartForm({
 
 #### Url Form
 
-To define an `application/x-www-form-urlencoded` request body. You must use `TUrlForm` Schema Type. Example:
+To define an `application/x-www-form-urlencoded` request body, use `TUrlForm` Schema Type. Example:
 
 ```ts
 const urlBody = $T.urlForm({
@@ -193,11 +191,9 @@ const urlBody = $T.urlForm({
 
 #### Stream
 
-Some body request types can be streamed by using `STStream` Schema Type wrapper. Streamable Schema Types are `STByteArray`, `STString`, `STUrlForm` and `STMultipartForm`.
+Some body request types can be streamed by using `STStream` Schema Type wrapper. The streamable Schema Types are `STByteArray`, `STString`, `STUrlForm` and `STMultipartForm`. This can be usefull to imporve performances in case you have heavy body payloads and you want to perform early validations on the body.
 
-This can be usefull to imporve performances in case you have heavy body payloads and you want to perform early validations on the body.
-
-Let's see a concrete example where that could be usefull. Imagine you want a `multipart/form-data` body request that has two properties `username` and `heavyImageFile`. In the normal case you would define something like that:
+Let's look at a concrete example where this could be useful. Imagine you want a `multipart/form-data` body request that has two properties: `username` and `heavyImageFile`. In a normal case, you would define something like this:
 
 ```ts
 galbe.post(
@@ -217,11 +213,9 @@ galbe.post(
 })
 ```
 
-This means that in the case where the username wouldn't pass the validation, the full request body including the `heavyImageFile` would have been processed for nothing as it is not used. Inducing unnecessary time and resource consumption.
+This means that in the case where the username wouldn't pass the validation, the full request body, including the `heavyImageFile`, would have been processed for nothing, as it is not used. This would induce unnecessary time and resource consumption.
 
-The `STStream` Schema Type wrapper was created to remediate to that issue. In practice it allows you to perform validations on the fly.
-
-Now in your handler, instead of receiving an object as ctx.body, you'll receive an [AsyncGenerator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncGenerator).
+The `STStream` Schema Type wrapper was created to remediate to remediate this issue. In practice it allows you to perform validations on the fly. Now in your handler, instead of receiving an object as `ctx.body`, you will receive an [AsyncGenerator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncGenerator).
 
 ```ts
 galbe.post(

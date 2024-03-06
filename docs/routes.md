@@ -1,5 +1,7 @@
 # Routes
 
+Routes are the entry points for handling client requests in a Galbe application. In this section, we'll cover how to define routes, the various options available for route definitions, and how to use the Automatic Route Analyzer to simplify route setup.
+
 ## Route Definition
 
 Here is how to define routes in Galbe.
@@ -78,15 +80,13 @@ galbe.get(
 ## Automatic Route Analyzer
 
 > [!NOTE]
-> This feature is only available if you run/build the app via the [Galbe CLI](getting-started.md#galbe-cli), which is the case by default if you created your app following the [Automatic Installation](getting-started.md#automatic-installation) step or properly configured your package.json to do so.
+> This feature is only available if you run/build the app via the [Galbe CLI](getting-started.md#galbe-cli), which is the case by default if you created your app following the [Automatic Installation](getting-started.md#automatic-installation) step or if you configured your package.json to do so.
 
-The Automatic Route Analyzer is in charge of analyzing all the Route Files of your project and set up the routes defintions to your Glabe server automatically.
-
-By default, the analyzer will search for Route Files matching paths like `'src/**/*.route.{js,ts}'`. This can be configured by modifying the value of `routes` property of your Galbe configuration. A value of `false` will disable the analyzer.
+The Automatic Route Analyzer is responsible for analyzing all the Route Files of your project and setting up the route definitions for your Galbe server automatically. By default, the analyzer will search for Route Files matching paths like `src/**/*.route.{js,ts}`. This can be configured by modifying the value of `routes` property of your Galbe configuration. A value of `false` will disable the analyzer.
 
 ### Route Files
 
-In order to be properly analyzed, Route Files must export a default function that takes a Galbe instance as unique argument. Your routes should be defined using that Galbe instance. Here a basic js example:
+In order to be properly analyzed, Route Files must export a default function that takes a Galbe instance as unique argument. Your routes should be defined using that Galbe instance. Here's a basic example in JavaScript:
 
 ```ts
 export default g => {
@@ -94,7 +94,7 @@ export default g => {
 }
 ```
 
-The same example using Typescript:
+The same example in Typescript:
 
 ```ts
 import type { Galbe } from 'galbe'
@@ -103,7 +103,7 @@ export default (g: Galbe) => {
 }
 ```
 
-The Automatic Route Analyzer is also capable of collecting metadata about your Routefile and your routes by analyzing multiline comments. This can be used by some plugins to perform specific tasks. Here is an example of Route File with multiline comments metadata.
+The Automatic Route Analyzer can also collect metadata about your Route File and your routes by analyzing multiline comments. This can be used by some plugins to perform specific tasks. Here's an example of a Route File with multiline comment metadata:
 
 ```js
 /**
@@ -121,4 +121,4 @@ export default g => {
 }
 ```
 
-You will find more information about comment's metadata and how to use them along with examples in the [Plugin](plugins.md) section.
+You will find more information about comment metadata and how to use them along with examples in the [Plugin](plugins.md) section.
