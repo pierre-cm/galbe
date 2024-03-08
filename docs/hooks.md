@@ -16,7 +16,7 @@ The hook takes only two arguments, a `context` object and a `next` function.
 
 **context**
 
-The `context` object contains the request information along with a state property that is modifiable and preserved across all hooks and the handler. It is useful for sharing information or objects across hooks and handler. You can find more information about it in the [Context]() section.
+The `context` object contains the request information along with a state property that is modifiable and preserved across all hooks and the handler. It is useful for sharing information or objects across hooks and handler. You can find more information about it in the [Context](context.md) section.
 
 **next**
 
@@ -27,13 +27,13 @@ The `next` function calls the next hook in the hook list or the handler if the c
 
 ## Hooks Declaration
 
-Hooks should be declared just before the handler method in the [Route Definition]() method as a list of Hooks.
+Hooks should be declared just before the handler method in the [Route Definition](routes.md#route-defintion) method as a list of Hooks.
 
 ```ts
 galbe.get('foo', [ hook1, hook2, ... ], ctx => {})
 ```
 
-Hooks are called just before the [Handler]() in the order that they have been declared in the hook list of the [Route Definition](). To get a better understanding of hooks execution during the request lifecycle, you can refer to the [Lifecycle]() section.
+Hooks are called just before the [Handler](handler.md) in the order that they have been declared in the hook list of the [Route Definition](routes.md#route-defintion). To get a better understanding of hooks execution during the request lifecycle, you can refer to the [Lifecycle](lifecycle) section.
 
 ### Examples
 
