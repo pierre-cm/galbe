@@ -127,7 +127,11 @@ export default async (galbe: Galbe, port?: number) => {
           call: async () => {
             let nextCalled = false
             let next = async () => {
-              await callChain[idx + 1].call()
+              if (nextCalled) console.error('Hook already called - ignored')
+              else {
+                nextCalled = true
+                await callChain[idx + 1].call()
+              }
             }
             await hook(context, next)
             if (!nextCalled && !handlerCalled) await next()
