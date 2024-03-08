@@ -8,7 +8,7 @@ Designed with simplicity in mind, Galbe allows you to quickly create and set up 
 
 To start developing your Galbe project, you first need to install [Bun](https://bun.sh).
 
-## Automatic Installation
+## Automatic installation
 
 This is the recommended way of setting up a Galbe project.
 
@@ -38,7 +38,7 @@ Hello from Galbe!
 > [!TIP]  
 > By default, the dev server automatically reloads on every file change.
 
-## Manual Installation
+## Manual installation
 
 Init a new Bun project and add Galbe as dependency:
 
@@ -171,7 +171,7 @@ export default new Galbe(config)
 > export default config
 > ```
 
-## Project Structure
+## Project structure
 
 One key aspect of Galbe, is its versatility in terms of project structure. This is partly allowed by the [Automatic Route Analyzer](routes.md#automatic-route-analyzer) and the `routes` config property which defaults to `src/**/*.route.{js,ts}`.
 

@@ -2,7 +2,7 @@
 
 Routes are the entry points for handling client requests in a Galbe application. In this section, we'll cover how to define routes, the various options available for route definitions, and how to use the Automatic Route Analyzer to simplify route setup.
 
-## Route Definition
+## Route definition
 
 Here is how to define routes in Galbe.
 
