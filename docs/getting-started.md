@@ -85,7 +85,7 @@ galbe <command> <argument> [options]
 
 Here are the available commands:
 
-#### dev
+**dev**
 
 Start a dev server running your Galbe application.
 
@@ -98,7 +98,7 @@ _options_
 - `--port` or `-p`: port number (default: 3000)
 - `--watch` or `-w`: watch file changes (default: true)
 
-#### build
+**build**
 
 Bundle your Galbe application.
 
@@ -121,19 +121,19 @@ const galbe = new Galbe(configuration)
 
 ### Properties
 
-#### port
+**port**
 
 The port number that the server will be listening on. Default is `3000`.
 
-#### basePath
+**basePath**
 
 The base path is added as a prefix to all the routes created.
 
-#### routes
+**routes**
 
 A Glob Pattern or a list of Glob patterns defining the route files to be analyzed by the [Automatic Route Analyzer](routes.md#automatic-route-analyzer). Default is `src/**/*.route.{js,ts}`.
 
-#### plugin
+**plugin**
 
 A property that can be used by plugins to add plugin's specific configuration. Every key should correspond to a [Unique Plugin Identifier](plugins.md).
 
