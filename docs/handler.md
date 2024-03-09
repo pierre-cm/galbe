@@ -101,5 +101,5 @@ async function* generator(array) {
   }
 }
 
-g.get('/example', ctx => generator(['one', 'two', 'three']))
+galbe.get('/example', ctx => generator(['one', 'two', 'three']))
 ```
