@@ -631,7 +631,7 @@ export const responseParser = (response: any, ctx: Context) => {
           let data = `id:${id}\ndata:${r}\n\n`
           try {
             await controller.write(data)
-            // await controller.flush()
+            await controller.flush()
           } catch (err) {
             console.error(err)
           }
