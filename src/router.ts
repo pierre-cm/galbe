@@ -89,10 +89,7 @@ export class GalbeRouter {
   find(method: string, path: string) {
     const staticRoute = this.staticRoutes.get(`[${method}]${path}`)
     if (staticRoute !== undefined) return staticRoute
-    let parts = path
-      .replace(/\/+/g, '/')
-      .replace(/^\/$(.*)\/?$/, '$1')
-      .split('/')
+    let parts = path.split('/')
     const route = walkRoutes(parts, this.routes[method]).route
     if (!route) throw new NotFoundError()
     return route

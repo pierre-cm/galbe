@@ -141,7 +141,7 @@ describe('router', () => {
     } catch (err: any) {
       expect(err).toBeInstanceOf(NotFoundError)
       expect(err.status).toBe(404)
-      expect(err.error).toBe('Not found')
+      expect(err.payload).toBe('Not found')
     }
 
     try {
@@ -150,7 +150,7 @@ describe('router', () => {
     } catch (err: any) {
       expect(err).toBeInstanceOf(NotFoundError)
       expect(err.status).toBe(404)
-      expect(err.error).toBe('Not found')
+      expect(err.payload).toBe('Not found')
     }
   })
 
@@ -187,10 +187,6 @@ describe('router', () => {
     let r1 = router.find('GET', '/test/foo/bar/42')
     expect(r1.path).toBe('/test/foo/*')
     expect(r1.handler).toBe(h1)
-
-    let r2 = router.find('GET', '/test//foo/bar')
-    expect(r2.path).toBe('/test/foo/bar')
-    expect(r2.handler).toBe(h2)
 
     let r3 = router.find('GET', '/test/foo/bar/bar')
     expect(r3.path).toBe('/test/foo/:p/bar')

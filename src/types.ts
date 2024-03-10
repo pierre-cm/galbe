@@ -189,10 +189,10 @@ export type Endpoint = {
 
 export class RequestError {
   status: number
-  error: any
-  constructor(options: { status?: number; error?: any }) {
+  payload: any
+  constructor(options: { status?: number; payload?: any }) {
     this.status = options.status ?? 500
-    this.error = options.error ?? 'Internal server error'
+    this.payload = options.payload ?? 'Internal server error'
   }
 }
 
@@ -225,7 +225,7 @@ export type RouteTree = {
 
 export class NotFoundError extends RequestError {
   constructor(message?: string) {
-    super({ status: 404, error: message ?? 'Not found' })
+    super({ status: 404, payload: message ?? 'Not found' })
   }
 }
 

@@ -1,12 +1,12 @@
 import type { Context, Route } from './types'
 
-import { NotFoundError, RequestError } from './types'
+import { RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
 import { Galbe } from './index'
 
 const handleInternalError = (error: any) => {
   console.error(error)
-  return new RequestError({ status: 500, error: 'Internal Server Error' })
+  return new RequestError({ status: 500, payload: 'Internal Server Error' })
 }
 
 const setupPluginCallbacks = (galbe: Galbe) => ({
@@ -60,7 +60,6 @@ export default async (galbe: Galbe, port?: number) => {
       let response: any = ''
       try {
         // find route
-        if (!url.pathname.match(new RegExp(`^${galbe.config?.basePath || ''}`))) throw new NotFoundError()
         try {
           route = router.find(req.method, url.pathname)
         } catch (error) {
@@ -75,8 +74,10 @@ export default async (galbe: Galbe, port?: number) => {
 
         // parse request
         const schema = route.schema
-        let inHeaders = Object.fromEntries(req.headers.entries())
-        let inQuery = Object.fromEntries(url.searchParams.entries())
+        const inHeaders: Record<string, any> = {}
+        for (let [k, v] of req.headers) inHeaders[k] = v
+        let inQuery: Record<string, any> = {}
+        for (let [k, v] of url.searchParams) inQuery[k] = v
         let inParams = requestPathParser(url.pathname, route.path)
 
         context.body = await requestBodyParser(req.body, inHeaders, schema.body)
@@ -109,7 +110,7 @@ export default async (galbe: Galbe, port?: number) => {
           else throw handleInternalError(error)
         }
         if (errors.length) {
-          throw new RequestError({ status: 400, error: errors.reduce((acc, c) => ({ ...acc, ...c.error }), {}) })
+          throw new RequestError({ status: 400, payload: errors.reduce((acc, c) => ({ ...acc, ...c.payload }), {}) })
         }
 
         for (const cb of pluginsCb.beforeHandle) {
@@ -145,6 +146,7 @@ export default async (galbe: Galbe, port?: number) => {
         })
         if (callChain.length > 1) await callChain[0].call()
         else response = await handlerWrapper(context)
+
         const parsedResponse = responseParser(response, context)
 
         for (const cb of pluginsCb.afterHandle) {
@@ -155,9 +157,11 @@ export default async (galbe: Galbe, port?: number) => {
         return parsedResponse
       } catch (error) {
         context.set.status = error instanceof RequestError ? error.status : 500
-        if (galbe.errorHandler) return galbe.errorHandler(error, context)
+        let customError
+        if (galbe.errorHandler) customError = responseParser(galbe.errorHandler(error, context), context)
+        if (customError) return customError
         if (error instanceof RequestError) {
-          return new Response(JSON.stringify(error.error), {
+          return new Response(JSON.stringify(error.payload), {
             status: error.status,
             headers: { 'Content-Type': 'application/json' }
           })
