@@ -80,9 +80,35 @@ The set property contains modifiable properties which purpose are to give inform
 - `status`: Set the response status
 - `headers`: Set the response headers
 
+```js
+galbe.get('/example', ctx => {
+  ctx.set.status = 418
+  return "I don't do coffee"
+})
+```
+
 **state**
 
-The state property purpose is to carry custom user object accross request lifecycle. In general it is used to share informations between the [hooks](#hooks.md) and the [handler](#handler.md).
+The state property purpose is to carry custom user object accross request lifecycle. In general it is used to share informations between the [hooks](hooks.md) and the [handler](handler.md).
 
 - key (string): user defined key
 - value (any): user defined object
+
+```js
+galbe.get(
+  '/example',
+  [
+    ctx => {
+      ctx.state['foo'] = 'bar'
+    }
+  ],
+  ctx => {
+    return ctx.state.foo
+  }
+)
+```
+
+```bash
+$ curl http://localhost:3000/example
+bar
+```
