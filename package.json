@@ -11,14 +11,6 @@
     ".": "./dist/index.js",
     "./*": "./dist/*.js"
   },
-  "files": [
-    "dist/",
-    "bin/",
-    "src/",
-    "package.json",
-    "README.md",
-    "LICENSE"
-  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/pierre-cm/galbe"
@@ -38,6 +30,7 @@
     "build": "bun ./scripts/build.ts",
     "clean": "rm -rf dist",
     "test": "bun test",
+    "postinstall": "bun run ./scripts/postinstall.ts",
     "release": "release-it"
   },
   "devDependencies": {
