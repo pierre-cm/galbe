@@ -32,7 +32,7 @@ jobs:
           git config user.name "${GITHUB_ACTOR}"
       - name: Install dependencies & build
         run: |
-          bun install & bun run build
+          bun install && bun run build
       - name: Release
         run: |
           npm config set //registry.npmjs.org/:_authToken $NPM_TOKEN
