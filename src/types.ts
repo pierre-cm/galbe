@@ -129,7 +129,6 @@ export type Context<Path extends string = string, S extends RequestSchema = Requ
       [header: string]: string
     }
     status?: number
-    redirect?: string
   }
 }
 export type Next = () => void | Promise<void>
@@ -146,7 +145,7 @@ export type Endpoint = {
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody = STObject
+    B extends STBody = any
   >(
     path: Path,
     schema: RequestSchema<Path, H, P, Q, B>,
@@ -158,7 +157,7 @@ export type Endpoint = {
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody = STObject
+    B extends STBody = any
   >(
     path: Path,
     schema: RequestSchema<Path, H, P, Q, B>,
@@ -169,7 +168,7 @@ export type Endpoint = {
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody = STObject
+    B extends STBody = any
   >(
     path: Path,
     hooks: Hook<Path, RequestSchema<Path, H, P, Q, B>>[],
@@ -180,7 +179,7 @@ export type Endpoint = {
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody = STObject
+    B extends STBody = any
   >(
     path: Path,
     handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
@@ -226,6 +225,12 @@ export type RouteTree = {
 export class NotFoundError extends RequestError {
   constructor(message?: string) {
     super({ status: 404, payload: message ?? 'Not found' })
+  }
+}
+
+export class InternalError extends RequestError {
+  constructor(message?: string) {
+    super({ status: 500, payload: message ?? 'Internal Server Error' })
   }
 }
 

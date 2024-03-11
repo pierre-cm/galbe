@@ -174,4 +174,27 @@ describe('hooks', async () => {
     expect(resp.status).toBe(200)
     expect(await resp?.text()).toBe('handled')
   })
+
+  test('hooks, early response', async () => {
+    let hook = 0
+    galbe.get(
+      '/hooks',
+      [
+        async _ => {
+          hook++
+          return 'hook'
+        }
+      ],
+      () => {
+        expect.unreachable()
+      }
+    )
+    expect(hook).toBe(0)
+    let resp = await fetch(`http://localhost:${port}/hooks`, {
+      method: 'GET'
+    })
+    expect(hook).toBe(1)
+    expect(resp.status).toBe(200)
+    expect(await resp?.text()).toBe('hook')
+  })
 })

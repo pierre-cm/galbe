@@ -16,7 +16,7 @@ import type {
 import { readableStreamToArrayBuffer } from 'bun'
 import { Kind, Optional, Stream } from './schema'
 import { validate } from './validator'
-import { RequestError } from './index'
+import { InternalError, RequestError } from './index'
 
 const textDecoder = new TextDecoder()
 const textEncoder = new TextEncoder()
@@ -670,7 +670,7 @@ export const responseParser = (response: any, ctx: Context) => {
       return new Response(JSON.stringify(response), details)
     } catch (error) {
       console.error(error)
-      throw new RequestError({ status: 500, payload: 'Internal Server Error' })
+      throw new InternalError()
     }
   }
 }

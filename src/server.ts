@@ -1,12 +1,12 @@
 import type { Context, Route } from './types'
 
-import { RequestError } from './types'
+import { InternalError, RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
 import { Galbe } from './index'
 
 const handleInternalError = (error: any) => {
   console.error(error)
-  return new RequestError({ status: 500, payload: 'Internal Server Error' })
+  return new InternalError()
 }
 
 const setupPluginCallbacks = (galbe: Galbe) => ({
@@ -124,7 +124,7 @@ export default async (galbe: Galbe, port?: number) => {
           handlerCalled = true
           return route.handler(context)
         }
-        const callChain = route.hooks.map((hook, idx) => ({
+        const callChain: { call: () => any }[] = route.hooks.map((hook, idx) => ({
           call: async () => {
             let nextCalled = false
             let next = async () => {
@@ -134,7 +134,8 @@ export default async (galbe: Galbe, port?: number) => {
                 await callChain[idx + 1].call()
               }
             }
-            await hook(context, next)
+            let r = await hook(context, next)
+            if (r) return r
             if (!nextCalled && !handlerCalled) await next()
           }
         }))
@@ -144,8 +145,10 @@ export default async (galbe: Galbe, port?: number) => {
             context.set.status = response instanceof Response ? response.status : 200
           }
         })
-        if (callChain.length > 1) await callChain[0].call()
-        else response = await handlerWrapper(context)
+        if (callChain.length > 1) {
+          let r = await callChain[0].call()
+          if (r) response = r
+        } else response = await handlerWrapper(context)
 
         const parsedResponse = responseParser(response, context)
 
@@ -166,15 +169,20 @@ export default async (galbe: Galbe, port?: number) => {
             headers: { 'Content-Type': 'application/json' }
           })
         }
-        return new Response('Internal Server Error', { status: 500 })
+        return new Response('"Internal Server Error"', {
+          status: 500,
+          headers: {
+            'content-type': 'application/json'
+          }
+        })
       }
     },
     error(error) {
       console.error(error)
-      return new Response('Internal Server Error', {
+      return new Response('"Internal Server Error"', {
         status: 500,
         headers: {
-          'Content-Type': 'text/plain'
+          'content-type': 'application/json'
         }
       })
     }

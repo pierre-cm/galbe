@@ -80,7 +80,6 @@ const galbeMethod = <
         [header: string]: string
       }
       status?: number
-      redirect?: string
     }
   }
   return {
