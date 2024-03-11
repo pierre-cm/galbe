@@ -55,7 +55,7 @@ galbe.get('example', [hook1, hook2], ctx => {
 ```
 
 ```bash
-curl http://localhost:3000/example
+$ curl http://localhost:3000/example
 hook1
 hook2
 handler
@@ -81,7 +81,7 @@ galbe.get('example', [hook1, hook2], ctx => {
 ```
 
 ```bash
-curl http://localhost:3000/example
+$ curl http://localhost:3000/example
 hook1 start
 hook2 start
 handler

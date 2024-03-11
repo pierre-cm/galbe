@@ -13,9 +13,9 @@ To start developing your Galbe project, you first need to install [Bun](https://
 This is the recommended way of setting up a Galbe project.
 
 ```bash
-bun create galbe app
-cd app
-bun install
+$ bun create galbe app
+$ cd app
+$ bun install
 ```
 
 This will create a new project under `app` directory and install it.
@@ -23,7 +23,7 @@ This will create a new project under `app` directory and install it.
 Now you can start the dev server by running:
 
 ```bash
-bun dev
+$ bun dev
 ```
 
 This will start a web server on `localhost:3000`.
@@ -31,7 +31,7 @@ This will start a web server on `localhost:3000`.
 To verify that the project was setup correctly and is running, try to reach `localhost:3000/hello` endpoint, this should return following greeting message:
 
 ```bash
-curl localhost:3000/hello
+$ curl localhost:3000/hello
 Hello from Galbe!
 ```
 
@@ -43,8 +43,8 @@ Hello from Galbe!
 Init a new Bun project and add Galbe as dependency:
 
 ```bash
-bun init
-bun add galbe
+$ bun init
+$ bun add galbe
 ```
 
 Open `package.json` file and add the following scripts:
@@ -80,7 +80,7 @@ This is the recommended way to proceed but it is not mandatory. Galbe instances 
 ### Galbe CLI
 
 ```bash
-galbe <command> <argument> [options]
+$ galbe <command> <argument> [options]
 ```
 
 Here are the available commands:

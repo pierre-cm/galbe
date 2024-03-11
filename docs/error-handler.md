@@ -45,7 +45,7 @@ galbe.get('/coffee', () => throw new RequestError({ status: 418, payload: '🫖'
 When called, above endpoint should respond:
 
 ```bash
-curl -i http://localhost:3000/coffee
+$ curl -i http://localhost:3000/coffee
 HTTP/1.1 418 I'm a Teapot
 Content-Type: application/json
 Content-Length: 6
