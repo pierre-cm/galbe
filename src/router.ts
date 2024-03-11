@@ -44,19 +44,21 @@ const walkRoutes = (path: string[], node: RouteNode, alts: RouteNode[] = []): Ro
 export class GalbeRouter {
   routes: RouteTree
   prefix: string
-  staticRoutes: Map<string, Route>
-  constructor(prefix?: string) {
+  cacheEnabled: boolean
+  cachedRoutes: Map<string, Route | null>
+  constructor(options?: { prefix?: string; cacheEnabled?: boolean }) {
     this.routes = { GET: {}, POST: {}, PUT: {}, PATCH: {}, DELETE: {}, OPTIONS: {} }
-    prefix = prefix || ''
+    let prefix = options?.prefix || ''
     if (prefix && !prefix.match(/^\//)) prefix = `/${prefix}`
     this.prefix = prefix
-    this.staticRoutes = new Map()
+    this.cachedRoutes = new Map()
+    this.cacheEnabled = options?.cacheEnabled ?? false
   }
   add(route: Route) {
     route.path = route?.path?.[0] === '/' ? route.path : `/${route.path}`
     if (!route.path.match(ROUTE_REGEX)) throw new SyntaxError(`${route.path} is not a valid route path.`)
     const isStatic = !route.path.match(/(:[\w\d-]+|\*)/)
-    if (isStatic) this.staticRoutes.set(`[${route.method.toUpperCase()}]${route.path}`, route)
+    if (isStatic) this.cachedRoutes.set(`[${route.method.toUpperCase()}]${route.path}`, route)
     route.path = `${this.prefix || ''}${route.path}`
     let path = route.path.replace(/^\/$(.*)\/?$/, '$1').split('/')
     path.shift()
@@ -87,11 +89,16 @@ export class GalbeRouter {
     }
   }
   find(method: string, path: string) {
-    const staticRoute = this.staticRoutes.get(`[${method}]${path}`)
+    const staticRoute = this.cachedRoutes.get(`[${method}]${path}`)
+    if (staticRoute === null) throw new NotFoundError()
     if (staticRoute !== undefined) return staticRoute
     let parts = path.split('/')
     const route = walkRoutes(parts, this.routes[method]).route
-    if (!route) throw new NotFoundError()
+    if (!route) {
+      if (this.cacheEnabled) this.cachedRoutes.set(`[${method}]${path}`, null)
+      throw new NotFoundError()
+    }
+    if (this.cacheEnabled) this.cachedRoutes.set(`[${method}]${path}`, route)
     return route
   }
 }

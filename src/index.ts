@@ -122,7 +122,10 @@ export class Galbe {
   constructor(config?: GalbeConfig) {
     this.config = config ?? {}
     this.config.routes = this.config.routes ?? true
-    this.router = new GalbeRouter(this.config?.basePath || '')
+    this.router = new GalbeRouter({
+      prefix: this.config?.basePath || '',
+      cacheEnabled: this.config?.router?.cacheEnabled
+    })
   }
   private add(route: any) {
     this.router.add(route)

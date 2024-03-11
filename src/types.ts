@@ -72,6 +72,7 @@ export type GalbeConfig = {
   basePath?: string
   server?: Exclude<ServeOptions, 'port'> | TLSServeOptions
   routes?: boolean | string | string[]
+  router?: { cacheEnabled: boolean }
   plugin?: Record<string, any>
 }
 /**
