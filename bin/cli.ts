@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 
 import { $, Glob } from 'bun'
-import type { RouteMeta } from '../src/routes'
+import type { RouteMeta } from '../dist/routes'
 import { program } from 'commander'
 import { relative, resolve } from 'path'
 import { mkdir, readdir, lstat, rm } from 'fs/promises'
-import { DEFAULT_ROUTE_PATTERN, metaAnalysis } from '../src/routes'
+import { DEFAULT_ROUTE_PATTERN, metaAnalysis } from '../dist/routes'
 import { randomUUID } from 'crypto'
-import { Galbe } from '../src'
+import { Galbe } from '../dist'
 
 const ROOT = process.cwd()
 const BUILD_ID = randomUUID()
