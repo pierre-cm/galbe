@@ -10,26 +10,11 @@ const handleInternalError = (error: any) => {
 }
 
 const setupPluginCallbacks = (galbe: Galbe) => ({
-  init: galbe.plugins.reduce((l: { name: string; cb: Function }[], p) => {
-    if (p.init) l.push({ name: p.name, cb: p.init })
-    return l
-  }, []),
-  onFetch: galbe.plugins.reduce((l: Function[], p) => {
-    if (p.onFetch) l.push(p.onFetch)
-    return l
-  }, []),
-  onRoute: galbe.plugins.reduce((l: Function[], p) => {
-    if (p.onRoute) l.push(p.onRoute)
-    return l
-  }, []),
-  beforeHandle: galbe.plugins.reduce((l: Function[], p) => {
-    if (p.beforeHandle) l.push(p.beforeHandle)
-    return l
-  }, []),
-  afterHandle: galbe.plugins.reduce((l: Function[], p) => {
-    if (p.afterHandle) l.push(p.afterHandle)
-    return l
-  }, [])
+  init: galbe.plugins.filter(p => p.init),
+  onFetch: galbe.plugins.filter(p => p.onFetch),
+  onRoute: galbe.plugins.filter(p => p.onRoute),
+  beforeHandle: galbe.plugins.filter(p => p.beforeHandle),
+  afterHandle: galbe.plugins.filter(p => p.afterHandle)
 })
 
 export default async (galbe: Galbe, port?: number) => {
@@ -37,7 +22,8 @@ export default async (galbe: Galbe, port?: number) => {
   if (galbe?.config?.basePath && galbe?.config?.basePath[0] !== '/')
     galbe.config.basePath = `/${galbe?.config?.basePath}`
   let pluginsCb = setupPluginCallbacks(galbe)
-  for (const { name, cb } of pluginsCb.init) await cb(galbe?.config?.plugin?.[name], galbe)
+  //@ts-ignore
+  for (const p of pluginsCb.init) await p.init(galbe?.config?.plugin?.[p.name], galbe)
 
   return Bun.serve({
     port: port || galbe.config?.port || 3000,
@@ -51,8 +37,9 @@ export default async (galbe: Galbe, port?: number) => {
         body: {},
         state: {}
       }
-      for (const cb of pluginsCb.onFetch) {
-        const r = await cb(req)
+      for (const p of pluginsCb.onFetch) {
+        //@ts-ignore
+        const r = await p.onFetch(context)
         if (r) return r
       }
       const url = new URL(req.url)
@@ -66,9 +53,11 @@ export default async (galbe: Galbe, port?: number) => {
           if (error instanceof RequestError) throw error
           else throw handleInternalError(error)
         }
+        context.route = route
 
-        for (const cb of pluginsCb.onRoute) {
-          const r = await cb(route)
+        for (const p of pluginsCb.onRoute) {
+          //@ts-ignore
+          const r = await p.onRoute(context)
           if (r) return r
         }
 
@@ -113,8 +102,9 @@ export default async (galbe: Galbe, port?: number) => {
           throw new RequestError({ status: 400, payload: errors.reduce((acc, c) => ({ ...acc, ...c.payload }), {}) })
         }
 
-        for (const cb of pluginsCb.beforeHandle) {
-          const r = await cb(context)
+        for (const p of pluginsCb.beforeHandle) {
+          //@ts-ignore
+          const r = await p.beforeHandle(context)
           if (r) return r
         }
 
@@ -152,8 +142,9 @@ export default async (galbe: Galbe, port?: number) => {
 
         const parsedResponse = responseParser(response, context)
 
-        for (const cb of pluginsCb.afterHandle) {
-          const r = await cb(parsedResponse)
+        for (const p of pluginsCb.afterHandle) {
+          //@ts-ignore
+          const r = await p.afterHandle(parsedResponse, context)
           if (r) return r
         }
 

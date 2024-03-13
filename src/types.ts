@@ -124,6 +124,7 @@ export type Context<Path extends string = string, S extends RequestSchema = Requ
   query: Static<STObject<Exclude<S['query'], undefined>>>
   body: Static<Exclude<S['body'], undefined>>
   request: Request
+  route?: Route
   state: Record<string, any>
   set: {
     headers: {
@@ -259,8 +260,8 @@ export class InternalError extends RequestError {
 export type GalbePlugin = {
   name: string
   init?: (config: any, galbe: Galbe) => MaybePromise<void>
-  onFetch?: (request: Request) => MaybePromise<Response | void>
-  onRoute?: (route: Route) => MaybePromise<Response | void>
+  onFetch?: (context: Context) => MaybePromise<Response | void>
+  onRoute?: (context: Context) => MaybePromise<Response | void>
   beforeHandle?: (context: Context) => MaybePromise<Response | void>
-  afterHandle?: (response: Response) => MaybePromise<Response | void>
+  afterHandle?: (response: Response, context: Context) => MaybePromise<Response | void>
 }

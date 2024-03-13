@@ -39,8 +39,8 @@ describe('plugins', async () => {
     let request: any = null
     const plugin: GalbePlugin = {
       name: 'dev.galbe.test.init',
-      onFetch: mock(req => {
-        request = req
+      onFetch: mock(ctx => {
+        request = ctx.request
       })
     }
 
@@ -86,7 +86,7 @@ describe('plugins', async () => {
     const plugin: GalbePlugin = {
       name: 'dev.galbe.test.init',
       onRoute: mock(r => {
-        route = r
+        route = r.route
       })
     }
 
