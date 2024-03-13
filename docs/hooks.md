@@ -35,7 +35,7 @@ Hooks should be declared just before the handler method in the [Route Definition
 galbe.get('foo', [ hook1, hook2, ... ], ctx => {})
 ```
 
-Hooks are called just before the [Handler](handler.md) in the order that they have been declared in the hook list of the [Route Definition](routes.md#route-defintion). To get a better understanding of hooks execution during the request lifecycle, you can refer to the [Lifecycle](lifecycle.md) section.
+Hooks are called just before the [Handler](handler.md) in the order that they have been declared in the hook list of the [Route Definition](routes.md#route-defintion). To get a better understanding of hooks execution during the request lifecycle, you can refer to the [Lifecycle](https://galbe.dev/documentation/lifecycle) section.
 
 ### Examples
 

@@ -1,7 +1,7 @@
 # Context
 
 An instance of the context object is created when a new request is initiated and carrieds out along durring all the request lifecycle.
-See the [Lifecycle](lifecycle) section to get more details.
+See the [Lifecycle](https://galbe.dev/documentation/lifecycle) section to get more details.
 
 Its purpose is to carrie all the relevent information about the request and to allow sharing informations between each step of the request lifecycle.
 

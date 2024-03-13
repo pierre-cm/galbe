@@ -10,7 +10,7 @@ The handler should be declared as last argument of the [Route Definition](routes
 galbe.get('foo', schema, [hook1, hook2], ctx => {})
 ```
 
-Handler are called after the last hook call, or right after the request parsing if no hook is declared. To get a better understanding of the request lifecycle, you can refer to the [Lifecycle](lifecycle.md) section.
+Handler are called after the last hook call, or right after the request parsing if no hook is declared. To get a better understanding of the request lifecycle, you can refer to the [Lifecycle](https://galbe.dev/documentation/lifecycle) section.
 
 ## Handler definition
 
