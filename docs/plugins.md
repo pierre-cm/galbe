@@ -68,9 +68,7 @@ import { Galbe, type Context, type Route } from 'galbe'
 class MyPlugin {
   name = 'dev.galbe.example'
   deprecated: Record<string, string[]> = {}
-  /**
-   * Retrieve and store all route with a @deprecated flag metadata
-   */
+  // Retrieve and store all route with a @deprecated flag metadata
   init(config: any, galbe: Galbe) {
     if (config?.enabled && galbe.meta) {
       for (const f of galbe.meta) {
@@ -85,9 +83,7 @@ class MyPlugin {
       }
     }
   }
-  /**
-   * Check if the current route is deprecated, flags it as is and logs it
-   */
+  // Check if the current route is deprecated; if so, flag it as such and log it
   onRoute(context: Context) {
     let route = context.route
     if (this.deprecated?.[route.method]?.includes(route.path)) {
@@ -95,9 +91,7 @@ class MyPlugin {
       console.warn(`Call to deprecated route [${route.method}]${route.path}`)
     }
   }
-  /**
-   * Adds a header if the request has previously been flagged as deprecated
-   */
+  // Add a header if the request has previously been flagged as deprecated
   afterHandle(response: Response, context: Context) {
     if (context.state?.[this.name]?.deprecated) {
       response.headers.set('x-deprecated', 'true')

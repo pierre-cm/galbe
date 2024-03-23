@@ -49,7 +49,7 @@ const hook2 = context => {
   console.log('hook2 called')
 }
 
-galbe.get('example', [hook1, hook2], ctx => {
+galbe.get('/example', [hook1, hook2], ctx => {
   console.log('handler')
 })
 ```
@@ -64,18 +64,18 @@ handler
 Nested hooks declaration:
 
 ```ts
-const hook1 = (context, next) => {
+const hook1 = async (context, next) => {
   console.log('hook1 start')
   await next()
   console.log('hook1 end')
 }
-const hook2 = context => {
+const hook2 = async (context, next) => {
   console.log('hook2 start')
   await next()
   console.log('hook2 end')
 }
 
-galbe.get('example', [hook1, hook2], ctx => {
+galbe.get('/example', [hook1, hook2], ctx => {
   console.log('handler')
 })
 ```
