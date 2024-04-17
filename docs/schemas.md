@@ -152,8 +152,7 @@ const schema = {
 
 <!-- prettier-ignore -->
 ```ts
-body: STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | 
-      STObject | STMulripartForm | STUrlForm
+body: STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | STObject | STArray | STMulripartForm | STUrlForm | STStream
 ```
 
 #### Json
@@ -237,4 +236,22 @@ galbe.post(
     ctx.set.status = 201
   }
 })
+```
+
+### response
+
+<!-- prettier-ignore -->
+```ts
+response: Record<number, STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | STObject | STArray | STStream>
+```
+
+Same as for request body validation but to validate handler responses. Every schema type must be associated to a specific response status.
+
+#### Example
+
+```ts
+const response = {
+  200: $T.object({ data: $T.array($T.number()) })
+  404: $T.literal("Not found")
+}
 ```

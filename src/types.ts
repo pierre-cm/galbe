@@ -22,12 +22,27 @@ export type STBody =
   | STBoolean
   | STNumber
   | STInteger
+  | STLiteral
   | STObject
   | STArray
   | STUrlForm
   | STMultipartForm
   | STUnion
   | STStream
+
+export type STResponseValue =
+  | STByteArray
+  | STString
+  | STBoolean
+  | STNumber
+  | STInteger
+  | STLiteral
+  | STObject
+  | STArray
+  | STUnion
+  | STStream
+export type STResponse = Record<number, STResponseValue>
+
 export type MaybeArray<T> = T | T[]
 
 export type Method = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options'
@@ -74,6 +89,8 @@ export type GalbeConfig = {
   routes?: boolean | string | string[]
   router?: { cacheEnabled: boolean }
   plugin?: Record<string, any>
+  requestValidator?: { enabled: boolean }
+  responseValidator?: { enabled: boolean }
 }
 /**
  * #### Schema
@@ -96,15 +113,17 @@ export type GalbeConfig = {
  */
 export type RequestSchema<
   Path extends string = string,
-  H extends STHeaders = {},
-  P extends Partial<STParams<Path>> = {},
-  Q extends STQuery = {},
-  B extends STBody = STBody
+  H extends STHeaders = STHeaders,
+  P extends Partial<STParams<Path>> = Partial<STParams<Path>>,
+  Q extends STQuery = STQuery,
+  B extends STBody = STBody,
+  R extends STResponse = STResponse
 > = {
   headers?: H
   params?: P
   query?: Q
   body?: B
+  response?: R
 }
 
 type OmitNotDefined<S extends RequestSchema> = {
@@ -147,44 +166,48 @@ export type Endpoint = {
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody = any
+    B extends STBody = any,
+    R extends STResponse = STResponse
   >(
     path: Path,
-    schema: RequestSchema<Path, H, P, Q, B>,
-    hooks: Hook<Path, RequestSchema<Path, H, P, Q, B>>[],
-    handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+    schema: RequestSchema<Path, H, P, Q, B, R>,
+    hooks: Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[],
+    handler: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
   ): void
   <
     Path extends string,
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody = any
+    B extends STBody = any,
+    R extends STResponse = STResponse
   >(
     path: Path,
-    schema: RequestSchema<Path, H, P, Q, B>,
-    handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+    schema: RequestSchema<Path, H, P, Q, B, R>,
+    handler: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
   ): void
   <
     Path extends string,
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody = any
+    B extends STBody = any,
+    R extends STResponse = STResponse
   >(
     path: Path,
-    hooks: Hook<Path, RequestSchema<Path, H, P, Q, B>>[],
-    handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+    hooks: Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[],
+    handler: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
   ): void
   <
     Path extends string,
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody = any
+    B extends STBody = any,
+    R extends STResponse = STResponse
   >(
     path: Path,
-    handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+    handler: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
   ): void
 }
 
@@ -193,7 +216,7 @@ export class RequestError {
   payload: any
   constructor(options: { status?: number; payload?: any }) {
     this.status = options.status ?? 500
-    this.payload = options.payload ?? 'Internal server error'
+    this.payload = options.payload
   }
 }
 
@@ -210,14 +233,15 @@ export type Route<
   H extends STHeaders = {},
   P extends Partial<STParams<Path>> = {},
   Q extends STQuery = {},
-  B extends STBody = STBody
+  B extends STBody = STBody,
+  R extends STResponse = STResponse
 > = {
   method: Method
   path: Path
-  schema: RequestSchema<Path, H, P, Q, B>
-  context: Context<Path, RequestSchema<Path, H, P, Q, B>>
+  schema: RequestSchema<Path, H, P, Q, B, R>
+  context: Context<Path, RequestSchema<Path, H, P, Q, B, R>>
   hooks: Hook[]
-  handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+  handler: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
 }
 
 export type RouteTree = {
@@ -225,13 +249,13 @@ export type RouteTree = {
 }
 
 export class NotFoundError extends RequestError {
-  constructor(message?: string) {
+  constructor(message?: any) {
     super({ status: 404, payload: message ?? 'Not found' })
   }
 }
 
 export class InternalError extends RequestError {
-  constructor(message?: string) {
+  constructor(message?: any) {
     super({ status: 500, payload: message ?? 'Internal Server Error' })
   }
 }

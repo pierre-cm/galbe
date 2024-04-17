@@ -21,12 +21,14 @@ const rsTxt = (text: string) => {
   })
 }
 
+const handleResp = ctx => ctx.body
+
 describe('responses', () => {
   beforeAll(async () => {
     const galbe = new Galbe()
 
     galbe.post(
-      '/response',
+      '/none',
       {
         body: $T.optional($T.object($T.any())),
         query: { text: $T.optional($T.string()), stream: $T.optional($T.string()) }
@@ -42,20 +44,25 @@ describe('responses', () => {
       }
     )
 
-    galbe.get('/error', _ => {
-      return { next: () => {} }
-    })
+    galbe.post('', { response: { test: '' } }, () => {})
 
-    galbe.onError(_ => {
-      throw new Error()
-    })
+    galbe.post('/ba', { response: { 200: $T.byteArray() } }, handleResp)
+    galbe.post('/bool', { response: { 200: $T.boolean() } }, handleResp)
+    galbe.post('/num', { response: { 200: $T.number() } }, handleResp)
+    galbe.post('/str', { response: { 200: $T.string() } }, handleResp)
+    galbe.post('/arr', { response: { 200: $T.array() } }, handleResp)
+    galbe.post('/obj', { response: { 200: $T.object($T.any()) } }, handleResp)
+    galbe.post('/stream/ba', { response: { 200: $T.stream($T.byteArray()) } }, ctx =>
+      ctx.body ? genTxt(ctx.body) : ''
+    )
+    galbe.post('/stream/str', { response: { 200: $T.stream($T.string()) } }, ctx => (ctx.body ? genTxt(ctx.body) : 42))
 
     await galbe.listen(port)
   })
 
-  test('response, string', async () => {
+  test('response, no schema, string', async () => {
     const reqTxt = 'Hello Mom!'
-    let resp = await fetch(`http://localhost:${port}/response?text=${reqTxt}`, {
+    let resp = await fetch(`http://localhost:${port}/none?text=${reqTxt}`, {
       method: 'POST'
     })
 
@@ -66,9 +73,9 @@ describe('responses', () => {
     expect(body).toBe(reqTxt)
   })
 
-  test('response, object', async () => {
+  test('response, no schema, object', async () => {
     const reqBody = { foo: 'bar' }
-    let resp = await fetch(`http://localhost:${port}/response`, {
+    let resp = await fetch(`http://localhost:${port}/none`, {
       method: 'POST',
       body: JSON.stringify(reqBody),
       headers: {
@@ -83,12 +90,12 @@ describe('responses', () => {
     expect(body).toEqual(reqBody)
   })
 
-  test('response, stream', async () => {
+  test('response, no schema, stream', async () => {
     const reqTxt = 'Hello Mom!'
     const cases = [{ stream: 'generatorFunction' }, { stream: 'readableStream' }]
 
     for (const c of cases) {
-      let resp = await fetch(`http://localhost:${port}/response?text=${reqTxt}&stream=${c.stream}`, {
+      let resp = await fetch(`http://localhost:${port}/none?text=${reqTxt}&stream=${c.stream}`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json'
@@ -105,5 +112,273 @@ describe('responses', () => {
       expect(resp.headers.get('content-type')).toBe('text/event-stream')
       expect(body).toMatch(new RegExp(`id:${UUID_RGX}\ndata:Hello\n\nid:${UUID_RGX}\ndata:Mom!\n\n`))
     }
+  })
+
+  test('response, ba, validation OK', async () => {
+    let bodyStr = 'Hello mom!'
+    let reqBody = new TextEncoder().encode(bodyStr)
+
+    let resp = await fetch(`http://localhost:${port}/ba`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'application/octet-stream'
+      }
+    })
+
+    const body = await resp.json()
+
+    expect(resp.status).toBe(200)
+    expect(resp.headers.get('content-type')).toBe('application/json')
+    expect(body).toEqual(reqBody)
+  })
+
+  test('response, ba, validation failed', async () => {
+    let bodyStr = 'Hello mom!'
+
+    let resp = await fetch(`http://localhost:${port}/ba`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'text/plain'
+      }
+    })
+
+    expect(resp.status).toBe(500)
+  })
+
+  test('response, bool, validation OK', async () => {
+    let bodyStr = 'true'
+    let reqBody = true
+
+    let resp = await fetch(`http://localhost:${port}/bool`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'application/json'
+      }
+    })
+
+    const body = await resp.json()
+
+    expect(resp.status).toBe(200)
+    expect(resp.headers.get('content-type')).toBe('application/json')
+    expect(body).toEqual(reqBody)
+  })
+
+  test('response, bool, validation failed', async () => {
+    let bodyStr = 'true'
+
+    let resp = await fetch(`http://localhost:${port}/bool`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'text/plain'
+      }
+    })
+
+    expect(resp.status).toBe(500)
+  })
+
+  test('response, num, validation OK', async () => {
+    let bodyStr = '42'
+    let reqBody = 42
+
+    let resp = await fetch(`http://localhost:${port}/num`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'application/json'
+      }
+    })
+
+    const body = await resp.json()
+
+    expect(resp.status).toBe(200)
+    expect(resp.headers.get('content-type')).toBe('application/json')
+    expect(body).toEqual(reqBody)
+  })
+
+  test('response, num, validation failed', async () => {
+    let bodyStr = '"test"'
+
+    let resp = await fetch(`http://localhost:${port}/num`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'application/json'
+      }
+    })
+
+    expect(resp.status).toBe(500)
+  })
+
+  test('response, str, validation OK', async () => {
+    let bodyStr = 'Hello Mom!'
+
+    let resp = await fetch(`http://localhost:${port}/str`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'text/plain'
+      }
+    })
+
+    const body = await resp.text()
+
+    expect(resp.status).toBe(200)
+    expect(resp.headers.get('content-type')).toBe('text/plain')
+    expect(body).toEqual(bodyStr)
+  })
+
+  test('response, str, validation failed', async () => {
+    let bodyStr = '3.14'
+
+    let resp = await fetch(`http://localhost:${port}/str`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'application/json'
+      }
+    })
+
+    expect(resp.status).toBe(500)
+  })
+
+  test('response, array, validation OK', async () => {
+    let bodyStr = '[false, "one", 2]'
+    let reqBody = [false, 'one', 2]
+
+    let resp = await fetch(`http://localhost:${port}/arr`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'application/json'
+      }
+    })
+
+    const body = await resp.json()
+
+    expect(resp.status).toBe(200)
+    expect(resp.headers.get('content-type')).toBe('application/json')
+    expect(body).toEqual(reqBody)
+  })
+
+  test('response, array, validation failed', async () => {
+    let bodyStr = '0'
+
+    let resp = await fetch(`http://localhost:${port}/arr`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'application/json'
+      }
+    })
+
+    expect(resp.status).toBe(500)
+  })
+
+  test('response, object, validation OK', async () => {
+    let bodyStr = '{"str":"str", "num":0, "arr":[1,2,3], "nested": {"foo":"bar"}}'
+    let reqBody = { str: 'str', num: 0, arr: [1, 2, 3], nested: { foo: 'bar' } }
+
+    let resp = await fetch(`http://localhost:${port}/obj`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'application/json'
+      }
+    })
+
+    const body = await resp.json()
+
+    expect(resp.status).toBe(200)
+    expect(resp.headers.get('content-type')).toBe('application/json')
+    expect(body).toEqual(reqBody)
+  })
+
+  test('response, object, validation failed', async () => {
+    let bodyStr = '"This"'
+
+    let resp = await fetch(`http://localhost:${port}/obj`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'application/json'
+      }
+    })
+
+    expect(resp.status).toBe(500)
+  })
+
+  test('response, stream ba, validation OK', async () => {
+    let bodyStr = 'Hello Mom!'
+
+    let resp = await fetch(`http://localhost:${port}/stream/ba`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'text/plain'
+      }
+    })
+
+    const reader = resp.body?.getReader()
+    let body = ''
+    while (reader) {
+      const { value, done } = await reader.read()
+      if (done) break
+      body += decoder.decode(value)
+    }
+    expect(resp.status).toBe(200)
+    expect(resp.headers.get('content-type')).toBe('text/event-stream')
+    expect(body).toMatch(new RegExp(`id:${UUID_RGX}\ndata:Hello\n\nid:${UUID_RGX}\ndata:Mom!\n\n`))
+  })
+
+  test('response, stream ba, validation failed', async () => {
+    let bodyStr = ''
+
+    let resp = await fetch(`http://localhost:${port}/stream/ba`, {
+      method: 'POST',
+      body: bodyStr
+    })
+
+    expect(resp.status).toBe(500)
+  })
+
+  test('response, stream str, validation OK', async () => {
+    let bodyStr = 'Hello Mom!'
+
+    let resp = await fetch(`http://localhost:${port}/stream/str`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'text/plain'
+      }
+    })
+
+    const reader = resp.body?.getReader()
+    let body = ''
+    while (reader) {
+      const { value, done } = await reader.read()
+      if (done) break
+      body += decoder.decode(value)
+    }
+    expect(resp.status).toBe(200)
+    expect(resp.headers.get('content-type')).toBe('text/event-stream')
+    expect(body).toMatch(new RegExp(`id:${UUID_RGX}\ndata:Hello\n\nid:${UUID_RGX}\ndata:Mom!\n\n`))
+  })
+
+  test('response, stream str, validation failed', async () => {
+    let bodyStr = '0'
+
+    let resp = await fetch(`http://localhost:${port}/stream/str`, {
+      method: 'POST',
+      body: bodyStr,
+      headers: {
+        'content-type': 'application/json'
+      }
+    })
+
+    expect(resp.status).toBe(500)
   })
 })

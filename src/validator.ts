@@ -1,5 +1,7 @@
+import { InternalError, type STResponse } from './index'
 import type { STSchema, STProps, STUnion } from './schema'
-import { Kind, Optional } from './schema'
+import { Kind, Optional, Stream } from './schema'
+import { isIterator } from './util'
 
 export const validate = (elt: any, schema: STSchema, parse = false): any => {
   type ValidationError = string | string[] | { [key: string]: ValidationError }
@@ -7,7 +9,10 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
   const iElt = elt
 
   if (schema[Kind] === 'boolean') {
-    if (parse && typeof elt === 'string') elt = elt === 'true' ? true : elt === 'false' ? false : null
+    if (typeof elt === 'string') {
+      if (parse) elt = elt === 'true' ? true : elt === 'false' ? false : null
+      else throw `Expected boolean, got string.`
+    }
     if (elt !== true && elt !== false) throw `${iElt} is not a valid boolean. Should be 'true' or 'false'`
   } else if (schema[Kind] === 'integer') {
     if (parse && typeof elt === 'string') elt = Number(elt)
@@ -84,6 +89,22 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
   return elt
 }
 
+export const validateResponse = (response: any, schema: STResponse, status: number) => {
+  if (!(status in schema)) return
+  const s = schema[status]
+  if (response instanceof ReadableStream) {
+    if (!s[Stream]) throw new InternalError(`Expected ${s[Kind]} response, but got ReadableStream`)
+  } else if (isIterator(response)) {
+    if (!s[Stream]) throw new InternalError(`Expected ${s[Kind]} response, but got Iterator`)
+  } else {
+    try {
+      validate(response, s)
+    } catch (error) {
+      throw new InternalError({ ResponseValidationError: error })
+    }
+  }
+}
+
 const schemaValidation = (value: any, schema: STSchema) => {
   const errors = []
   if (schema[Kind] === 'integer' || schema[Kind] === 'number') {
@@ -92,9 +113,8 @@ const schemaValidation = (value: any, schema: STSchema) => {
     if (schema.exclusiveMax !== undefined)
       if ((value as number) >= schema.exclusiveMax)
         errors.push(`${value} is greater or equal to ${schema.exclusiveMax}`)
-    if (schema.minimum !== undefined)
-      if ((value as number) < schema.min) errors.push(`${value} is less than ${schema.min}`)
-    if (schema.maximum !== undefined)
+    if (schema.min !== undefined) if ((value as number) < schema.min) errors.push(`${value} is less than ${schema.min}`)
+    if (schema.max !== undefined)
       if ((value as number) > schema.max) errors.push(`${value} is greater than ${schema.max}`)
   } else if (schema[Kind] === 'string') {
     if (schema.minLength !== undefined && (value as string).length < schema.minLength)

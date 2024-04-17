@@ -17,6 +17,7 @@ import { readableStreamToArrayBuffer } from 'bun'
 import { Kind, Optional, Stream } from './schema'
 import { validate } from './validator'
 import { InternalError, RequestError } from './index'
+import { isIterator } from './util'
 
 const textDecoder = new TextDecoder()
 const textEncoder = new TextEncoder()
@@ -594,7 +595,7 @@ export const requestPathParser = (input: string, path: string) => {
 }
 
 export const parseEntry = <T extends STProps>(
-  params: { [key: string]: string | string[] },
+  params: { [key: string]: any },
   schema: T,
   options?: { name?: string; i?: boolean }
 ): Static<STObject<T>> => {
@@ -628,8 +629,6 @@ export const parseEntry = <T extends STProps>(
 
   return parsedParams as Static<STObject<T>>
 }
-
-const isIterator = (obj: any) => typeof obj?.next === 'function'
 
 export const responseParser = (response: any, ctx: Context) => {
   const details = {

@@ -1,7 +1,7 @@
 import type { GalbeConfig } from './types'
 
 import { readdir, lstat } from 'fs/promises'
-import { extname } from 'path'
+import { extname, relative } from 'path'
 import { parse } from 'acorn'
 import { simple } from 'acorn-walk'
 import { Galbe } from './index'
@@ -81,13 +81,15 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMeta> => {
   })
   simple(ast, {
     ExportDefaultDeclaration(node) {
-      // @ts-ignore
-      let galbeIdentifier = node.declaration.params[0].name
-
       const headerLine = node.loc?.start.line
       const headerCom = headerLine !== undefined && comments?.[headerLine] ? comments[headerLine] : ''
       const headerRef = parseComment(headerCom)
       meta.header = headerRef
+
+      // @ts-ignore
+      let galbeIdentifier = node.declaration?.params?.[0]?.name
+      if (!galbeIdentifier) return meta
+
       // @ts-ignore
       simple(node.declaration.body, {
         CallExpression(node) {
@@ -113,7 +115,10 @@ export const metaAnalysis = async (filePath: string): Promise<RouteMeta> => {
 }
 
 const importRoutes = async (filePath: string, galbe: Galbe) => {
-  const routes = (await import(filePath)).default
+  const imported = await import(filePath)
+  if (!imported?.default) throw new Error('No default export function')
+  if (typeof imported.default !== 'function') throw new Error('Default export must be a function')
+  const routes = imported.default
   routes(galbe)
 }
 
@@ -138,16 +143,14 @@ export const defineRoutes = async (options: GalbeConfig, galbe: Galbe) => {
         try {
           const metadata = await metaAnalysis(f)
           galbe.meta?.push({ file: path, ...metadata })
-          console.log(`\n\x1b\[0;36m    ${f}\x1b[0m`)
+          console.log(`\n\x1b\[0;36m    ${relative('.', f)}\x1b[0m`)
           await importRoutes(f, galbe)
-        } catch (err) {
-          // console.log(`\x1b\[0;31m    ${f}\x1b[0m`)
-          throw err
+        } catch (err: any) {
+          console.log(`\x1b\[0;31m    Error: ${err?.message}\x1b[0m`)
         }
       }
     }
     if (noRouteFound) {
-      process.stdout.write('\r\x1b[K')
       console.log(`\x1b\[38;5;245m    No route found\x1b[0m`)
       return
     }

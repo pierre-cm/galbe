@@ -137,6 +137,14 @@ A Glob Pattern or a list of Glob patterns defining the route files to be analyze
 
 A property that can be used by plugins to add plugin's specific configuration. Every key should correspond to a [Unique Plugin Identifier](plugins.md).
 
+**requestValidator.enabled**
+
+Enable or disable the _request_ schema validation (See [Request Schema definition](schemas.md#request-schema-definition)). Default value is `true`.
+
+**responseValidator.enabled**
+
+Enable or disable the _response_ schema validation (See [Request Schema definition](schemas.md#request-schema-definition)). Default value is `true`.
+
 ### Examples
 
 A common way to handle server configuration is to create new file `galbe.config.(js|ts|json)` at the root of your project directory and import it in your code. Here is an example:

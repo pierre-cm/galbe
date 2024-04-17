@@ -63,6 +63,16 @@ export type STPropsValue =
 export type STProps = Record<string | number, STPropsValue>
 
 type Evaluate<T> = T extends infer O ? { [K in keyof O]: O[K] } : never
+
+/**
+ * Infer the static TypeScript type from a {@link https://galbe.dev/documentation/schemas#schema-types Schema Type}
+ * @example
+ * ```ts
+ * const schema = $T.object({ foo: $T.string() })
+ * type T = Static<typeof schema>
+ * //   ^? type T = { foo: string }
+ * ```
+ */
 export type Static<T extends STSchema, P extends unknown[] = unknown[]> = (T & { params: P })['static']
 
 // Utils

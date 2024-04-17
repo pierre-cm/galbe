@@ -11,6 +11,7 @@ import type {
   ErrorHandler,
   GalbePlugin,
   STBody,
+  STResponse,
   STParams,
   STHeaders,
   STQuery
@@ -19,7 +20,7 @@ import type {
 import server from './server'
 import { GalbeRouter } from './router'
 import { defineRoutes } from './routes'
-import { logRoute } from './util'
+import { extractMetaRoute, logRoute } from './util'
 import { SchemaType, type STObject, type Static } from './schema'
 
 const overloadDiscriminer = <
@@ -27,17 +28,18 @@ const overloadDiscriminer = <
   H extends STHeaders,
   P extends Partial<STParams<Path>>,
   Q extends STQuery,
-  B extends STBody
+  B extends STBody,
+  R extends STResponse
 >(
   galbe: Galbe,
   method: Method,
   path: Path,
   arg2:
-    | RequestSchema<Path, H, P, Q, B>
-    | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
-    | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-  arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-  arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+    | RequestSchema<Path, H, P, Q, B, R>
+    | Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[]
+    | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+  arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+  arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
 ) => {
   const defaultSchema = {}
   if (typeof arg2 === 'function') {
@@ -57,14 +59,15 @@ const galbeMethod = <
   H extends STHeaders,
   P extends Partial<STParams<Path>>,
   Q extends STQuery,
-  B extends STBody
+  B extends STBody,
+  R extends STResponse
 >(
   _galbe: Galbe,
   method: Method,
   path: Path,
-  schema: RequestSchema<Path, H, P, Q, B> | undefined,
-  hooks: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | undefined,
-  handler: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+  schema: RequestSchema<Path, H, P, Q, B, R> | undefined,
+  hooks: Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[] | undefined,
+  handler: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
 ) => {
   schema = schema ?? {}
   hooks = hooks || []
@@ -92,6 +95,7 @@ const galbeMethod = <
   }
 }
 
+/** Galbe Schema Type builder. See {@link https://galbe.dev/documentation/schemas#schema-types Schema Types} */
 export const $T = new SchemaType()
 
 export { RequestError } from './types'
@@ -126,12 +130,14 @@ export class Galbe {
       prefix: this.config?.basePath || '',
       cacheEnabled: this.config?.router?.cacheEnabled
     })
+    this.config.requestValidator = config?.requestValidator ?? { enabled: true }
+    this.config.responseValidator = config?.responseValidator ?? { enabled: true }
   }
   private add(route: any) {
     this.router.add(route)
     if (Bun.env.BUN_ENV === 'development') {
       if (!this.#prepare) indexRoutes.push({ method: route.method, path: route.path })
-      else logRoute(route)
+      else logRoute(route, extractMetaRoute(route, this.meta))
     }
   }
   async use(plugin: GalbePlugin) {
@@ -144,7 +150,7 @@ export class Galbe {
     if (Bun.env.BUN_ENV === 'development') {
       this.#prepare = true
       console.log('🏗️  \x1b[1;30mConstructing routes\x1b[0m')
-      for (const r of indexRoutes) logRoute(r)
+      for (const r of indexRoutes) logRoute(r, extractMetaRoute(r, this.meta))
       await defineRoutes(this.config || {}, this)
       console.log('\n✅ \x1b[1;30mdone\x1b[0m')
       this.server = await server(this, port)
@@ -168,90 +174,96 @@ export class Galbe {
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody
+    B extends STBody,
+    R extends STResponse
   >(
     path: Path,
     arg2:
-      | RequestSchema<Path, H, P, Q, B>
-      | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
-      | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+      | RequestSchema<Path, H, P, Q, B, R>
+      | Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[]
+      | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
   ) => this.add(overloadDiscriminer(this, 'get', path, arg2, arg3, arg4))
   post: Endpoint = <
     Path extends string,
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody
+    B extends STBody,
+    R extends STResponse
   >(
     path: Path,
     arg2:
-      | RequestSchema<Path, H, P, Q, B>
-      | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
-      | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+      | RequestSchema<Path, H, P, Q, B, R>
+      | Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[]
+      | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
   ) => this.add(overloadDiscriminer(this, 'post', path, arg2, arg3, arg4))
   put: Endpoint = <
     Path extends string,
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody
+    B extends STBody,
+    R extends STResponse
   >(
     path: Path,
     arg2:
-      | RequestSchema<Path, H, P, Q, B>
-      | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
-      | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+      | RequestSchema<Path, H, P, Q, B, R>
+      | Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[]
+      | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
   ) => this.add(overloadDiscriminer(this, 'put', path, arg2, arg3, arg4))
   patch: Endpoint = <
     Path extends string,
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody
+    B extends STBody,
+    R extends STResponse
   >(
     path: Path,
     arg2:
-      | RequestSchema<Path, H, P, Q, B>
-      | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
-      | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+      | RequestSchema<Path, H, P, Q, B, R>
+      | Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[]
+      | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
   ) => this.add(overloadDiscriminer(this, 'patch', path, arg2, arg3, arg4))
   delete: Endpoint = <
     Path extends string,
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody
+    B extends STBody,
+    R extends STResponse
   >(
     path: Path,
     arg2:
-      | RequestSchema<Path, H, P, Q, B>
-      | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
-      | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+      | RequestSchema<Path, H, P, Q, B, R>
+      | Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[]
+      | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
   ) => this.add(overloadDiscriminer(this, 'delete', path, arg2, arg3, arg4))
   options: Endpoint = <
     Path extends string,
     H extends STHeaders,
     P extends Partial<STParams<Path>>,
     Q extends STQuery,
-    B extends STBody
+    B extends STBody,
+    R extends STResponse
   >(
     path: Path,
     arg2:
-      | RequestSchema<Path, H, P, Q, B>
-      | Hook<Path, RequestSchema<Path, H, P, Q, B>>[]
-      | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B>>,
-    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B>>
+      | RequestSchema<Path, H, P, Q, B, R>
+      | Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[]
+      | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+    arg3?: Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[] | Handler<Path, RequestSchema<Path, H, P, Q, B, R>>,
+    arg4?: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
   ) => this.add(overloadDiscriminer(this, 'options', path, arg2, arg3, arg4))
 }
 

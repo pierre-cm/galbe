@@ -89,6 +89,7 @@ export class GalbeRouter {
     }
   }
   find(method: string, path: string) {
+    method = method.toUpperCase()
     const staticRoute = this.cachedRoutes.get(`[${method}]${path}`)
     if (staticRoute === null) throw new NotFoundError()
     if (staticRoute !== undefined) return staticRoute

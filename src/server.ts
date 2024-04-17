@@ -3,6 +3,9 @@ import type { Context, Route } from './types'
 import { InternalError, RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
 import { Galbe } from './index'
+import { validateResponse } from './validator'
+
+const LOADABLE_METHODS = ['POST', 'PUT', 'PATCH']
 
 const handleInternalError = (error: any) => {
   console.error(error)
@@ -69,37 +72,41 @@ export default async (galbe: Galbe, port?: number) => {
         for (let [k, v] of url.searchParams) inQuery[k] = v
         let inParams = requestPathParser(url.pathname, route.path)
 
-        context.body = await requestBodyParser(req.body, inHeaders, schema.body)
+        context.body = LOADABLE_METHODS.includes(req.method)
+          ? await requestBodyParser(req.body, inHeaders, schema.body)
+          : null
         context.headers = inHeaders
         context.query = inQuery
         context.params = inParams
 
         // request validation
-        let errors: RequestError[] = []
-        try {
-          if (schema?.headers)
-            context.headers = {
-              ...context.headers,
-              ...parseEntry(context.headers, schema.headers, { name: 'headers', i: true })
-            }
-        } catch (error) {
-          if (error instanceof RequestError) errors.push(error)
-          else throw handleInternalError(error)
-        }
-        try {
-          if (schema?.query) context.query = parseEntry(context.query, schema.query, { name: 'query' })
-        } catch (error) {
-          if (error instanceof RequestError) errors.push(error)
-          else throw handleInternalError(error)
-        }
-        try {
-          if (schema?.params) context.params = parseEntry(context.params, schema.params, { name: 'params' })
-        } catch (error) {
-          if (error instanceof RequestError) errors.push(error)
-          else throw handleInternalError(error)
-        }
-        if (errors.length) {
-          throw new RequestError({ status: 400, payload: errors.reduce((acc, c) => ({ ...acc, ...c.payload }), {}) })
+        if (galbe.config?.requestValidator?.enabled) {
+          let errors: RequestError[] = []
+          try {
+            if (schema?.headers)
+              context.headers = {
+                ...context.headers,
+                ...parseEntry(context.headers, schema.headers, { name: 'headers', i: true })
+              }
+          } catch (error) {
+            if (error instanceof RequestError) errors.push(error)
+            else throw handleInternalError(error)
+          }
+          try {
+            if (schema?.query) context.query = parseEntry(context.query, schema.query, { name: 'query' })
+          } catch (error) {
+            if (error instanceof RequestError) errors.push(error)
+            else throw handleInternalError(error)
+          }
+          try {
+            if (schema?.params) context.params = parseEntry(context.params, schema.params, { name: 'params' })
+          } catch (error) {
+            if (error instanceof RequestError) errors.push(error)
+            else throw handleInternalError(error)
+          }
+          if (errors.length) {
+            throw new RequestError({ status: 400, payload: errors.reduce((acc, c) => ({ ...acc, ...c.payload }), {}) })
+          }
         }
 
         for (const p of pluginsCb.beforeHandle) {
@@ -142,6 +149,9 @@ export default async (galbe: Galbe, port?: number) => {
 
         const parsedResponse = responseParser(response, context)
 
+        if (galbe.config?.responseValidator?.enabled && schema.response)
+          validateResponse(response, schema.response, context.set.status || 200)
+
         for (const p of pluginsCb.afterHandle) {
           //@ts-ignore
           const r = await p.afterHandle(parsedResponse, context)
@@ -154,8 +164,19 @@ export default async (galbe: Galbe, port?: number) => {
         let customError
         if (galbe.errorHandler) customError = responseParser(galbe.errorHandler(error, context), context)
         if (customError) return customError
-        if (error instanceof RequestError) {
-          return new Response(JSON.stringify(error.payload), {
+        if (error instanceof InternalError) {
+          console.log(`Internal Error`, error?.payload || '')
+          return new Response('Internal Server Error', {
+            status: error.status,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        } else if (error instanceof RequestError) {
+          let payload = ''
+          if (typeof error.payload === 'string') payload = error.payload
+          try {
+            payload = JSON.stringify(error.payload)
+          } catch (err) {}
+          return new Response(payload, {
             status: error.status,
             headers: { 'Content-Type': 'application/json' }
           })
