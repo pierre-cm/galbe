@@ -50,6 +50,8 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
       }
     })
     if (Object.keys(err).length) errors.push(err)
+  } else if (schema[Kind] === 'json') {
+    elt = validate(elt, { ...schema, [Kind]: schema.type }, parse)
   } else if (schema[Kind] === 'array') {
     if (parse && typeof elt === 'string') {
       try {

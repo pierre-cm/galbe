@@ -1,13 +1,16 @@
 import type { ServeOptions, TLSServeOptions } from 'bun'
 import type {
+  STAny,
   STArray,
   STBoolean,
   STByteArray,
   STInteger,
+  STJson,
   STLiteral,
   STMultipartForm,
   STNumber,
   STObject,
+  STSchema,
   STStream,
   STString,
   STUnion,
@@ -38,12 +41,16 @@ export type STResponseValue =
   | STInteger
   | STLiteral
   | STObject
+  | STJson
   | STArray
   | STUnion
   | STStream
+  | STAny
 export type STResponse = Record<number, STResponseValue>
 
 export type MaybeArray<T> = T | T[]
+export type MaybeSTArray<T extends STSchema> = T | STArray<T>
+export type MaybeSTUnion<T extends STSchema> = T | STUnion<[T, ...T[]]>
 
 export type Method = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options'
 type MaybePromise<T> = T | Promise<T>
@@ -56,13 +63,16 @@ export type ExtractParams<T extends string> = T extends `/:${infer P}/${infer Re
   ? P
   : never
 
-type STHeadersValue = STString | STBoolean | STNumber | STInteger | STLiteral | STUnion
+type STHeadersPrimaryValue = STString | STBoolean | STNumber | STInteger | STLiteral
+type STHeadersValue = MaybeSTUnion<STHeadersPrimaryValue>
 export type STHeaders = Record<string, STHeadersValue>
 
-type STParamsValue = STString | STBoolean | STNumber | STInteger | STLiteral | STUnion
+type STParamsPrimaryValue = STString | STBoolean | STNumber | STInteger | STLiteral
+type STParamsValue = MaybeSTUnion<STParamsPrimaryValue>
 export type STParams<Path extends string = string> = Record<ExtractParams<Path>, STParamsValue>
 
-type STQueryValue = STString | STBoolean | STNumber | STInteger | STLiteral | STUnion
+type STQueryPrimaryValue = STString | STBoolean | STNumber | STInteger | STLiteral
+type STQueryValue = MaybeSTArray<MaybeSTUnion<STQueryPrimaryValue>>
 export type STQuery = Record<string, STQueryValue>
 
 /**

@@ -147,10 +147,10 @@ export default async (galbe: Galbe, port?: number) => {
           if (r) response = r
         } else response = await handlerWrapper(context)
 
-        const parsedResponse = responseParser(response, context)
+        const parsedResponse = responseParser(response, context, schema.response)
 
         if (galbe.config?.responseValidator?.enabled && schema.response)
-          validateResponse(response, schema.response, context.set.status || 200)
+          validateResponse(response, schema.response, parsedResponse.status || 200)
 
         for (const p of pluginsCb.afterHandle) {
           //@ts-ignore
@@ -180,7 +180,7 @@ export default async (galbe: Galbe, port?: number) => {
             status: error.status,
             headers: { 'Content-Type': 'application/json' }
           })
-        }
+        } else console.log(error)
         return new Response('"Internal Server Error"', {
           status: 500,
           headers: {

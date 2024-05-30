@@ -1,15 +1,6 @@
 import { expect, test, describe, beforeAll } from 'bun:test'
 import { Galbe, $T } from '../src'
-import {
-  formdata,
-  type Case,
-  fileHash,
-  schema_objectBase,
-  schema_object,
-  handleBody,
-  isAsyncIterator,
-  handleUrlFormStream
-} from './test.utils'
+import { formdata, type Case, fileHash, handleBody, isAsyncIterator } from './test.utils'
 
 const port = 7358
 const METHODS = ['get', 'post', 'put', 'patch', 'delete', 'options']
@@ -76,7 +67,8 @@ describe('requests', () => {
           p2: $T.number(),
           p3: $T.boolean(),
           p4: $T.union([$T.number(), $T.boolean()]),
-          p5: $T.optional($T.string())
+          p5: $T.optional($T.string()),
+          p6: $T.array($T.union([$T.string()]))
         }
       },
       ctx => {

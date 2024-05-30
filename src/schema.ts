@@ -3,6 +3,7 @@ export const Optional = Symbol.for('Galbe.SchemaType.Optional')
 export const Stream = Symbol.for('Galbe.SchemaType.Stream')
 
 export interface Options {
+  id?: string
   title?: string
   description?: string
   default?: any
@@ -38,11 +39,11 @@ export interface STSchema extends Options {
     | 'literal'
     | 'array'
     | 'object'
+    | 'json'
     | 'urlForm'
     | 'multipartForm'
     | 'any'
     | 'union'
-    | 'stream'
   [Optional]?: boolean
   [Stream]?: boolean
   params: unknown[]
@@ -172,6 +173,11 @@ export interface STObject<T extends STProps = STProps> extends STSchema {
   static: ObjectStatic<T, this['params']>
   props: T
 }
+export interface STJson<T extends STBoolean | STNumber | STString | STObject = any> extends STSchema {
+  [Kind]: 'json'
+  type: 'boolean' | 'number' | 'string' | 'object' | 'unknown'
+  static: Static<T>
+}
 type ObjectStatic<T extends STProps, P extends unknown[]> = ObjectStaticProps<T, { [K in keyof T]: Static<T[K], P> }>
 type OptionalPropertyKeys<T extends STProps> = {
   [K in keyof T]: T[K] extends STOptional<STSchema> ? K : never
@@ -189,6 +195,13 @@ function _Object<T extends STProps>(properties?: T, options: Options = {}): STOb
   return (requiredKeys.length > 0
     ? { ...options, [Kind]: 'object', props: clonedProperties, required: requiredKeys }
     : { ...options, [Kind]: 'object', props: clonedProperties }) as unknown as STObject<T>
+}
+function _Json<T extends STBoolean | STNumber | STString | STObject>(value?: T, options: Options = {}): STJson<T> {
+  if (value?.[Kind] === 'boolean') return { ..._Bool(options), [Kind]: 'json', type: 'boolean' }
+  if (value?.[Kind] === 'number') return { ..._Number(options), [Kind]: 'json', type: 'number' }
+  if (value?.[Kind] === 'string') return { ..._String(options), [Kind]: 'json', type: 'string' }
+  if (value?.[Kind] === 'object') return { ..._Object(value.props, options), [Kind]: 'json', type: 'object' }
+  throw Error('Invalid Json type definition')
 }
 
 // UrlForm
@@ -251,12 +264,12 @@ export interface STArray<T extends STSchema = STSchema> extends STSchema {
   static: Static<T>[]
   items: T
 }
-export function _Array<T extends STSchema>(schema?: T, options: ArrayOptions = {}): STArray<T | STAny> {
+export function _Array<T extends STSchema>(schema?: T, options: ArrayOptions = {}): STArray<T> {
   return {
     ...options,
     [Kind]: 'array',
     items: schema ?? _Any()
-  } as unknown as T extends undefined ? STArray<STAny> : STArray<T>
+  } as unknown as STArray<T>
 }
 
 // Union
@@ -323,9 +336,12 @@ export class SchemaType {
   public object<T extends STProps>(properties?: T, options: Options = {}): STObject<T> {
     return _Object(properties, options)
   }
-  /** Alias for Object Schema Type */
-  public json<T extends STProps>(properties?: T, options: Options = {}): STObject<T> {
-    return _Object(properties, options)
+  /** Creates a JSON Schema Type */
+  public json<T extends STString | STBoolean | STNumber | STObject<STProps>>(
+    value: T,
+    options: Options = {}
+  ): STJson<T> {
+    return _Json(value, options)
   }
   /** Creates an UrlForm Schema Type */
   public urlForm<T extends STUrlFormProps>(properties?: T, options: Options = {}): STUrlForm<T> {
@@ -336,7 +352,7 @@ export class SchemaType {
     return _MultipartForm(properties, options)
   }
   /** Crates an Array Schema Type */
-  public array<T extends STSchema>(schema?: T, options: Options = {}): STArray<T | STAny> {
+  public array<T extends STSchema>(schema?: T, options: Options = {}): STArray<T> {
     return _Array(schema, options)
   }
   /** Crates an Union Schema Type */
@@ -385,4 +401,37 @@ export class SchemaType {
   public stream<T extends STStreamable>(schema: T): STStream<T> {
     return _Stream(schema)
   }
+}
+
+export const schemaToTypeStr = (schema: STSchema): string => {
+  let type = 'unknown'
+  let kind = schema[Kind]
+
+  if (kind === 'boolean') type = 'boolean'
+  else if (kind === 'byteArray') type = 'Uint8Array'
+  else if (kind === 'number') type = 'number'
+  else if (kind === 'integer') type = 'number'
+  else if (kind === 'string') type = 'string'
+  else if (kind === 'any') type = 'any'
+  else if (kind === 'literal') {
+    let value = (schema as STLiteral).value
+    if (typeof value === 'string') type = `'${value}'`
+    else type = String(value)
+  } else if (kind === 'array') {
+    type = `Array<${schemaToTypeStr((schema as STArray).items)}>`
+  } else if (kind === 'object') {
+    let props = (schema as STObject).props
+    type = `{${Object.entries(props)
+      .map(([k, v]) => `${typeof k === 'string' ? `'${k}'` : k}:${schemaToTypeStr(v)}`)
+      .join(';')}}`
+  } else if (kind === 'json') {
+    type = `Json<${schemaToTypeStr({ ...schema, [Kind]: schema.type })}>`
+  } else if (kind === 'union') {
+    let anyOf = (schema as STUnion).anyOf
+    type = anyOf.map(s => schemaToTypeStr(s)).join('|')
+  }
+
+  if (schema[Optional]) type = `${type}|undefined`
+
+  return type
 }

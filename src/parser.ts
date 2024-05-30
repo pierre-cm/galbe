@@ -1,4 +1,4 @@
-import type { MaybeArray, STBody, Context } from './index'
+import type { MaybeArray, STBody, Context, STResponse } from './index'
 import type {
   STStream,
   STUrlForm,
@@ -630,14 +630,24 @@ export const parseEntry = <T extends STProps>(
   return parsedParams as Static<STObject<T>>
 }
 
-export const responseParser = (response: any, ctx: Context) => {
+export const responseParser = (response: any, ctx: Context, schema?: STResponse) => {
   const details = {
     status: ctx.set.status || 200,
     headers: new Headers(ctx.set.headers)
   }
   if (response instanceof Response) return response
   else if (typeof response === 'string') {
-    if (!details?.headers?.has('content-type')) details?.headers?.set('content-type', 'text/plain')
+    if (!details?.headers?.has('content-type')) {
+      if (schema?.[details.status][Kind] === 'json') {
+        details?.headers?.set('content-type', 'application/json')
+        response = `"${response}"`
+      } else details?.headers?.set('content-type', 'text/plain')
+    }
+    return new Response(response, details)
+  } else if (response instanceof Uint8Array) {
+    if (!details?.headers?.has('content-type')) {
+      details?.headers?.set('content-type', 'application/octet-stream')
+    }
     return new Response(response, details)
   }
   if (response instanceof ReadableStream) {

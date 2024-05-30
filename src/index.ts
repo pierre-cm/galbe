@@ -19,8 +19,6 @@ import type {
 
 import server from './server'
 import { GalbeRouter } from './router'
-import { defineRoutes } from './routes'
-import { extractMetaRoute, logRoute } from './util'
 import { SchemaType, type STObject, type Static } from './schema'
 
 const overloadDiscriminer = <
@@ -100,7 +98,6 @@ export const $T = new SchemaType()
 
 export { RequestError } from './types'
 
-const indexRoutes: { method: string; path: string }[] = []
 /**
  * #### Galbe Server
  * Instanciate a Galbe web server
@@ -120,7 +117,6 @@ export class Galbe {
   router: GalbeRouter
   errorHandler?: ErrorHandler
   listening: boolean = false
-  #prepare: boolean = false
   server?: Server
   plugins: GalbePlugin[] = []
   constructor(config?: GalbeConfig) {
@@ -135,10 +131,7 @@ export class Galbe {
   }
   private add(route: any) {
     this.router.add(route)
-    if (Bun.env.BUN_ENV === 'development') {
-      if (!this.#prepare) indexRoutes.push({ method: route.method, path: route.path })
-      else logRoute(route, extractMetaRoute(route, this.meta))
-    }
+    return route
   }
   async use(plugin: GalbePlugin) {
     this.plugins.push(plugin)
@@ -148,19 +141,13 @@ export class Galbe {
     this.config.port = port
     if (this.listening) this.stop()
     if (Bun.env.BUN_ENV === 'development') {
-      this.#prepare = true
-      console.log('🏗️  \x1b[1;30mConstructing routes\x1b[0m')
-      for (const r of indexRoutes) logRoute(r, extractMetaRoute(r, this.meta))
-      await defineRoutes(this.config || {}, this)
-      console.log('\n✅ \x1b[1;30mdone\x1b[0m')
       this.server = await server(this, port)
       const url = `http://localhost:${port}${this.config?.basePath || ''}`
-      console.log(`\n\x1b[1;30m🚀 API running at\x1b[0m \x1b[4;34m${url}\x1b[0m`)
+      console.log(`\x1b[1;30m🚀 Server running at\x1b[0m \x1b[4;34m${url}\x1b[0m\n`)
     } else {
       this.server = await server(this, port)
     }
     this.listening = true
-    this.#prepare = false
     return this.server
   }
   stop() {

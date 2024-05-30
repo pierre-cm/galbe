@@ -1,4 +1,5 @@
-import type { RouteFileMeta } from './routes'
+import type { Route, RouteNode } from '.'
+import type { RouteMeta } from './routes'
 
 const METHOD_COLOR: Record<string, string> = {
   get: '\x1b[32m',
@@ -9,20 +10,23 @@ const METHOD_COLOR: Record<string, string> = {
   options: ''
 }
 
-export const extractMetaRoute = (route: { path: string; method: string }, meta?: Array<RouteFileMeta>) => {
-  return meta?.map(e => (route.path in e.routes ? e.routes[route.path]?.[route.method] : null)).filter(e => e)?.[0]
-}
-
 export const logRoute = (
   r: { method: string; path: string },
-  meta?: Record<string, boolean | string | string[]> | null
+  meta?: RouteMeta,
+  format?: { maxPathLength?: number }
 ) => {
   let color = METHOD_COLOR?.[r.method] || ''
   console.log(
-    `    [${color}${`${r.method.toUpperCase()}\x1b[0m]`.padEnd(12, ' ')} ${r.path}${
-      meta?.head ? ` - ${meta.head}` : ''
-    }`
+    `    [${color}${`${r.method.toUpperCase()}\x1b[0m]`.padEnd(12, ' ')} ${r.path
+      .padEnd(format?.maxPathLength ?? r.path.length, ' ')
+      .replaceAll(/:([^\/]+)/g, '\x1b[0;33m:$1\x1b[0m')}${meta?.head ? `  ${meta.head}` : ''}`
   )
+}
+
+export const walkRoutes = (node: RouteNode, cb: (route: Route) => void) => {
+  if (node?.route) cb(node.route)
+  for (let c of Object.values(node?.children || {})) walkRoutes(c, cb)
+  if (node?.param) walkRoutes(node.param, cb)
 }
 
 export const isIterator = (obj: any) => typeof obj?.next === 'function'
