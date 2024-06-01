@@ -88,7 +88,7 @@ export default (cmd: Command) => {
               ...(r.schema.response
                 ? {
                     response: Object.fromEntries(
-                      Object.entries(r.schema.response).map(([k, v]) => [k, schemaToTypeStr(v)])
+                      Object.entries(r.schema.response).map(([k, v]) => [k === 'default' ? 200 : k, schemaToTypeStr(v)])
                     )
                   }
                 : {})

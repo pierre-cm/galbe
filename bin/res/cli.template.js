@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { program, Option } from 'commander'
+import { resolve } from 'path'
 
 const DEFAULT_HEADERS = {
   'user-agent': 'galbe:/*%return this.version%*//cli'
@@ -46,11 +47,13 @@ const fetchApi = async (method, path, props) => {
   let headers = Object.fromEntries(props?.['%header'].map(s => s.split('=')))
   let queryParam = Object.fromEntries(props?.['%query'].map(s => s.split('=')))
   let body = props?.['%body']
+  let bodyFile = props?.['%bodyFile']
   let format = new Set(props?.['%format'])
 
   delete props?.['%header']
   delete props?.['%query']
   delete props?.['%body']
+  delete props?.['%bodyFile']
   delete props?.['%format']
 
   const queryString = Object.entries({ ...queryParam, ...props })
@@ -62,10 +65,15 @@ const fetchApi = async (method, path, props) => {
     return process.exit(1)
   }
   let url = `${Bun.env.GCLI_SERVER_URL}${path}?${queryString}`
+  if (bodyFile) body = await Bun.file(resolve(process.cwd(), bodyFile)).arrayBuffer()
   let startTime = Bun.nanoseconds()
   let res = await fetch(url, {
     method,
-    headers: { ...DEFAULT_HEADERS, ...(headers || {}) },
+    headers: {
+      ...DEFAULT_HEADERS,
+      ...(bodyFile ? { 'content-type': 'application/octet-stream' } : {}),
+      ...(headers || {})
+    },
     ...(body ? { body } : {})
   })
   let endTime = Bun.nanoseconds() - startTime
@@ -74,7 +82,8 @@ const fetchApi = async (method, path, props) => {
   if (format.has('b')) {
     let isJson = res.headers.get('content-type') === 'application/json'
     if (isJson) fmtRes(await res.json(), format.has('p'))
-    else fmtRes(await res.text(), format.has('p'))
+    else if (res.headers.get('content-type').match(/^text\//)) fmtRes(await res.text(), format.has('p'))
+    else process.stdout.write(await res.arrayBuffer())
   }
   if (format.has('t')) process.stdout.write(`${(endTime / 1_000_000).toFixed(2)}ms\n`)
   process.exit(res.ok ? 0 : 1)
@@ -89,7 +98,8 @@ return this.commands.map(c=>{
     {name: '%format', short:'%f', type: '[string]', description: 'response format [\'s\',\'h\',\'b\',\'t\',\'p\']', default:'["s","b","p"]'},
     {name: '%header', short:'%h', type: '<string...>', description: 'request header formated as headerName=headerValue', default:'[]'},
     {name: '%query', short:'%q', type: '<string...>', description: 'query param formated as paramName=paramValue', default:'[]'},
-    {name: '%body', short:'%b', type: '<string>', description: 'request body', default:'""'}
+    {name: '%body', short:'%b', type: '<string>', description: 'request body', default:'""'},
+    {name: '%bodyFile', short:'%bf', type: '<path>', description: 'request body file', default:'""'}
   ]
   let options = [...optionsBase,...(c.options||[])].map(o=>`.addOption(new Option("-${o.short}, --${o.name} ${o.type}", "${o.description}").default(${o.default}))`)
   let action = `.action(async (${c.arguments.map(a=>`${a.name},`)} props) => {

@@ -17,12 +17,7 @@ const walkRoutes = (path: string[], node: RouteNode, alts: RouteNode[] = []): Ro
   if (node.param) {
     path.shift()
     alts.pop()
-    try {
-      return walkRoutes(path, node.param, alts)
-    } catch (error) {
-      if (error instanceof NotFoundError) console.log(error)
-      else throw error
-    }
+    return walkRoutes(path, node.param, alts)
   }
   if (alts.length > 1) {
     return walkRoutes(path, alts.pop() as RouteNode, alts)

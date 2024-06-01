@@ -103,7 +103,10 @@ const parseOapiSchema = (
   if (os.type === 'boolean') return `$T.boolean(${hasOptions ? JSON.stringify(options) : ''})`
   if (os.type === 'number') return `$T.number(${hasOptions ? JSON.stringify(options) : ''})`
   if (os.type === 'integer') return `$T.integer(${hasOptions ? JSON.stringify(options) : ''})`
-  if (os.type === 'string') return `$T.string(${hasOptions ? JSON.stringify(options) : ''})`
+  if (os.type === 'string') {
+    if (os.format === 'binary') return `$T.byteArray(${hasOptions ? JSON.stringify(options) : ''})`
+    return `$T.string(${hasOptions ? JSON.stringify(options) : ''})`
+  }
   if (os.type === 'array') return `$T.array(${parseOapiSchema(os?.items)}${optArg})`
   if (os.type === 'object')
     return `$T.object({${Object.entries(os?.properties || {})
