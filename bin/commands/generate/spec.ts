@@ -56,7 +56,7 @@ export default (cmd: Command) => {
       }
 
       if (tName === 'openapi') {
-        let openapiSpec = softMerge(galbeToOpenapi(g), baseSpec)
+        let openapiSpec = await softMerge(galbeToOpenapi(g), baseSpec)
         Bun.write(resolve(CWD, out), tFormat === 'json' ? JSON.stringify(openapiSpec, null, 2) : ymlDump(openapiSpec))
       }
 

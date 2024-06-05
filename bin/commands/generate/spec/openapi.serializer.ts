@@ -1,4 +1,5 @@
-import { HttpStatus, pckg } from '../../../util'
+import { resolve } from 'path'
+import { CWD, HttpStatus } from '../../../util'
 import { Galbe } from '../../../../src'
 import { walkRoutes } from '../../../../src/util'
 import {
@@ -36,7 +37,7 @@ const schemaToMedia = ({ type, format, isJson }) =>
     ? 'text/plain'
     : '*/*'
 
-export const galbeToOpenapi = (g: Galbe, version = '3.0.3') => {
+export const galbeToOpenapi = async (g: Galbe, version = '3.0.3') => {
   let paths = {}
   let components = {
     schemas: {},
@@ -44,6 +45,10 @@ export const galbeToOpenapi = (g: Galbe, version = '3.0.3') => {
     requestBodies: {},
     responses: {}
   }
+  let pckg: any = {}
+  try {
+    pckg = await Bun.file(resolve(CWD, 'package.json')).json()
+  } catch (e) {}
 
   const schemaToOpenapi = (
     schema: STSchema
@@ -144,7 +149,7 @@ export const galbeToOpenapi = (g: Galbe, version = '3.0.3') => {
     walkRoutes(node, r => {
       let meta = metaRoutes?.[r.path]?.[r.method]
       let path = r.path.replaceAll(/:([^\/]+)/g, '{$1}')
-      if (!(path in paths)) paths[path] = { summary: 'undefined' }
+      if (!(path in paths)) paths[path] = {}
       let tags = [...(meta?.tags?.split(' ')?.map(t => t.trim()) || []), ...(meta?.tag || [])]
       let pathParam = r.schema?.params
         ? Object.entries(r.schema?.params as Record<string, STSchema>).map(([k, v]) => parseParam(k, v, 'path'))
