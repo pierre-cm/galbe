@@ -1,6 +1,6 @@
 {
   "name": "galbe",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Fast, lightweight and highly customizable JavaScript web framework based on Bun",
   "author": "Pierre Caillaud M (https://github.com/pierre-cm)",
   "type": "module",
@@ -46,6 +46,7 @@
     "@swc/wasm": "^1.4.0",
     "acorn": "^8.11.2",
     "acorn-walk": "^8.3.0",
+    "chokidar": "^3.6.0",
     "commander": "^11.1.0"
   },
   "release-it": {

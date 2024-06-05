@@ -34,14 +34,13 @@ export default (cmd: Command) => {
       await mkdir(devPath, { recursive: true })
 
       if (watch) {
-        await watchDir(
+        watchDir(
           CWD,
-          async ({ path }) => {
+          async () => {
             g.stop()
             v++
             await $`clear`
-            Loader.registry.delete(path)
-            Loader.registry.delete(indexPath)
+            Loader.registry.clear()
             g = (await import(indexPath)).default
             await instanciateRoutes(g)
             await g.listen(port)

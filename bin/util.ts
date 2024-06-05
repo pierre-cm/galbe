@@ -1,6 +1,5 @@
-import { Glob } from 'bun'
 import { relative, join as pathjoin } from 'path'
-import { stat, watch } from 'fs/promises'
+import { watch } from 'chokidar'
 import { Galbe, Route } from '../src'
 import { logRoute, walkRoutes } from '../src/util'
 import { RouteMeta, defineRoutes } from '../src/routes'
@@ -41,24 +40,20 @@ export const silentExec = async (fn: () => any) => {
 }
 export const watchDir = async (
   path: string,
-  callback: (event: { path: string; filename: string; eventType: 'change' | 'rename' }) => any | Promise<any>,
+  callback: (event: {
+    path: string | null
+    eventType: 'change' | 'add' | 'addDir' | 'unlink' | 'unlinkDir'
+  }) => any | Promise<any>,
   options?: { ignore?: RegExp }
 ) => {
-  let watchers: any[] = []
-  watchers.push({ path, iter: watch(path, { persistent: false, recursive: false }) })
-  for await (const p of new Glob('**/*').scan({ cwd: path, absolute: true, onlyFiles: false })) {
-    if (options?.ignore && p.match(options?.ignore)) continue
-    let file = await stat(p)
-    if (file.isFile()) continue
-    watchers.push({ path: p, iter: watch(p, { persistent: false, recursive: false }) })
-  }
-  Promise.all(
-    Array.from(watchers).map(async watcher => {
-      for await (const event of watcher.iter) {
-        await callback({ path: pathjoin(watcher.path, event.filename), ...event })
-      }
-    })
-  )
+  let watcher = watch(path, {
+    persistent: false,
+    ignored: options?.ignore,
+    ignoreInitial: true
+  })
+  watcher.on('all', async (eventType, filename) => {
+    await callback({ path: filename.toString(), eventType })
+  })
 }
 export const instanciateRoutes = async (g: Galbe) => {
   console.log('🏗️  \x1b[1;30mConstructing routes\x1b[0m :\n')
