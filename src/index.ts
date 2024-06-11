@@ -136,16 +136,20 @@ export class Galbe {
   async use(plugin: GalbePlugin) {
     this.plugins.push(plugin)
   }
+  async init() {
+    for (const p of this.plugins) {
+      if (p.init) await p.init(this.config?.plugin?.[p.name], this)
+    }
+  }
   async listen(port?: number) {
     port = port || this.config?.port || 3000
     this.config.port = port
     if (this.listening) this.stop()
+    await this.init()
+    this.server = await server(this, port)
     if (Bun.env.BUN_ENV === 'development') {
-      this.server = await server(this, port)
       const url = `http://localhost:${port}${this.config?.basePath || ''}`
       console.log(`\x1b[1;30m🚀 Server running at\x1b[0m \x1b[4;34m${url}\x1b[0m\n`)
-    } else {
-      this.server = await server(this, port)
     }
     this.listening = true
     return this.server

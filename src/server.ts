@@ -13,7 +13,6 @@ const handleInternalError = (error: any) => {
 }
 
 const setupPluginCallbacks = (galbe: Galbe) => ({
-  init: galbe.plugins.filter(p => p.init),
   onFetch: galbe.plugins.filter(p => p.onFetch),
   onRoute: galbe.plugins.filter(p => p.onRoute),
   beforeHandle: galbe.plugins.filter(p => p.beforeHandle),
@@ -25,8 +24,6 @@ export default async (galbe: Galbe, port?: number) => {
   if (galbe?.config?.basePath && galbe?.config?.basePath[0] !== '/')
     galbe.config.basePath = `/${galbe?.config?.basePath}`
   let pluginsCb = setupPluginCallbacks(galbe)
-  //@ts-ignore
-  for (const p of pluginsCb.init) await p.init(galbe?.config?.plugin?.[p.name], galbe)
 
   return Bun.serve({
     port: port || galbe.config?.port || 3000,

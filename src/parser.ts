@@ -676,7 +676,8 @@ export const responseParser = (response: any, ctx: Context, schema?: STResponse)
   } else {
     try {
       if (!details?.headers?.has('content-type')) details?.headers?.set('content-type', 'application/json')
-      return new Response(JSON.stringify(response), details)
+      if (details.headers.get('content-type') === 'application/json') response = JSON.stringify(response)
+      return new Response(response, details)
     } catch (error) {
       console.error(error)
       throw new InternalError()

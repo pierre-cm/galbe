@@ -240,7 +240,7 @@ export type RouteNode = {
 
 export type Route<
   Path extends string = string,
-  H extends STHeaders = {},
+  H extends STHeaders = STHeaders,
   P extends Partial<STParams<Path>> = {},
   Q extends STQuery = {},
   B extends STBody = STBody,
@@ -272,7 +272,7 @@ export class InternalError extends RequestError {
 
 /**
  * #### GalbePlugin
- * Define a plugin for a Galbe server
+ * Define a plugin for a Galbe application
  *
  * ---
  * @example
@@ -298,4 +298,14 @@ export type GalbePlugin = {
   onRoute?: (context: Context) => MaybePromise<Response | void>
   beforeHandle?: (context: Context) => MaybePromise<Response | void>
   afterHandle?: (response: Response, context: Context) => MaybePromise<Response | void>
+  cli?: (commands: GalbeCLICommand[]) => MaybePromise<GalbeCLICommand[] | void>
+}
+
+export type GalbeCLICommand = {
+  name: string
+  description?: string
+  route: Route
+  arguments?: { name: string; type: string; description: string }[]
+  options?: { name: string; short: string; type: string; description: string; default: any }[]
+  action?: (props: any) => MaybePromise<void>
 }

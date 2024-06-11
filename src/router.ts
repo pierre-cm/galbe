@@ -3,7 +3,7 @@ import { NotFoundError } from './types'
 
 const ROUTE_REGEX = /^(\/(\*|:?\d+|:?\w+|:?[\w\d][\w-]+[\w\d]))*\/?$/
 
-const walkRoutes = (path: string[], node: RouteNode, alts: RouteNode[] = []): RouteNode => {
+const walk = (path: string[], node: RouteNode, alts: RouteNode[] = []): RouteNode => {
   if (path.length < 1) throw new NotFoundError()
   if (path.length === 1 && node.route) return node
 
@@ -12,20 +12,20 @@ const walkRoutes = (path: string[], node: RouteNode, alts: RouteNode[] = []): Ro
 
   if (node.children && path[1] in node.children) {
     path.shift()
-    return walkRoutes(path, node.children[path[0]], alts)
+    return walk(path, node.children[path[0]], alts)
   }
   if (node.param) {
     path.shift()
     alts.pop()
-    return walkRoutes(path, node.param, alts)
+    return walk(path, node.param, alts)
   }
   if (alts.length > 1) {
-    return walkRoutes(path, alts.pop() as RouteNode, alts)
+    return walk(path, alts.pop() as RouteNode, alts)
   }
   if (alts.length === 1) {
     let lastAlt = alts.pop() as RouteNode
     try {
-      return walkRoutes(path, lastAlt, alts)
+      return walk(path, lastAlt, alts)
     } catch (error) {
       if (error instanceof NotFoundError) {
         if (lastAlt?.route) return lastAlt
@@ -89,7 +89,7 @@ export class GalbeRouter {
     if (staticRoute === null) throw new NotFoundError()
     if (staticRoute !== undefined) return staticRoute
     let parts = path.split('/')
-    const route = walkRoutes(parts, this.routes[method]).route
+    const route = walk(parts, this.routes[method]).route
     if (!route) {
       if (this.cacheEnabled) this.cachedRoutes.set(`[${method}]${path}`, null)
       throw new NotFoundError()
