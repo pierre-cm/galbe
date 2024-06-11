@@ -1,11 +1,23 @@
 import { Command, Option } from 'commander'
-import { resolve, extname } from 'path'
+import { resolve, relative, extname } from 'path'
 import { dump as ymlDump, load as ymlLoad } from 'js-yaml'
 import { CWD, fmtList, instanciateRoutes, silentExec, softMerge } from '../../util'
 import { Galbe } from '../../../src'
-import { galbeToOpenapi } from './spec/openapi.serializer'
+import { OpenAPISerializer } from '../../../src/extras'
 
 const specTargets = ['openapi:3.0:json', 'openapi:3.0:yaml']
+const parsePckgAuthoRgx = /^\s*([^<(]*)(?:<([^>]+)>)?\s*(?:\(([^)]*)\))?\s*$/
+
+const parseAuthor = (author: { name: string; url: string; email: string } | string) => {
+  if (!author) return undefined
+  if (typeof author === 'string') {
+    let m = author.match(parsePckgAuthoRgx)
+    if (!m) return undefined
+    const [_, name, email, url] = m
+    return { name: name?.trim(), email: email?.trim(), url: url?.trim() }
+  }
+  return author
+}
 
 export default (cmd: Command) => {
   cmd
@@ -34,8 +46,13 @@ export default (cmd: Command) => {
         let ext = extname(base)
         let rd = (str: string) =>
           ext === '.json' ? JSON.parse(str) : ['.yml', '.yaml'].includes(ext) ? ymlLoad(str) : null
-        baseSpec = rd(await Bun.file(resolve(CWD, base)).text())
+        baseSpec = rd(await Bun.file(relative(CWD, base)).text())
       }
+
+      let pckg: any = {}
+      try {
+        pckg = await Bun.file(resolve(CWD, 'package.json')).json()
+      } catch (e) {}
 
       process.stdout.write(`📖 \x1b[1;30mGenerating ${target.split(':')?.[0]} spec\x1b[0m`)
 
@@ -44,6 +61,7 @@ export default (cmd: Command) => {
         try {
           const g = (await import(resolve(CWD, index))).default
           await instanciateRoutes(g)
+          await g.init()
           return g
         } catch (err) {
           error = err
@@ -56,7 +74,18 @@ export default (cmd: Command) => {
       }
 
       if (tName === 'openapi') {
-        let openapiSpec = await softMerge(galbeToOpenapi(g), baseSpec)
+        let openapiSpec = await OpenAPISerializer(g)
+        openapiSpec = {
+          ...openapiSpec,
+          info: {
+            title: pckg?.name || 'Galbe app',
+            description: pckg?.description,
+            contact: parseAuthor(pckg.author),
+            //license: TODO
+            version: pckg?.version || '0.1.0'
+          }
+        }
+        openapiSpec = softMerge(openapiSpec, baseSpec)
         Bun.write(resolve(CWD, out), tFormat === 'json' ? JSON.stringify(openapiSpec, null, 2) : ymlDump(openapiSpec))
       }
 

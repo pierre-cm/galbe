@@ -38,12 +38,11 @@ export default (cmd: Command) => {
   cmd
     .description('bundle your \x1b[1;30m\x1b[36mGalbe\x1b[0m application')
     .argument('<index>', 'index file')
-    .addOption(new Option('-o, --out <dir>', 'output directory').default('dist', fmtVal('dist')))
+    .addOption(new Option('-o, --out <dir>', 'output directory').default('dist/app', fmtVal('dist/app')))
     .addOption(new Option('-C, --compile', 'create a standalone executable').default(false, fmtVal(false)))
-    .option('-e, --external <string>', 'external files')
-    .option('-c, --config <string>', 'bun config')
+    .option('-c, --config <file>', 'bun js or ts config file')
     .action(async (index, props) => {
-      const { out, compile, external, config } = props
+      const { out, compile, config } = props
 
       const bunfig = config ? (await import(resolve(CWD, config)))?.default || {} : {}
 
@@ -64,7 +63,7 @@ export default (cmd: Command) => {
       }
       let buildIndex: string = ''
       try {
-        buildIndex = await createBuildIndex(index, g) //routes)
+        buildIndex = await createBuildIndex(index, g)
       } catch (errors) {
         console.log(`\nerror: build errors`)
         for (let error of errors) console.log(error)
@@ -75,13 +74,13 @@ export default (cmd: Command) => {
         return process.exit(1)
       }
 
+      console.log(Object.fromEntries(Object.entries(bunfig).filter(([k, v]) => v)))
       const buildConfig: BuildConfig = {
+        publicPath: `${resolve(CWD, out)}/`,
+        ...Object.fromEntries(Object.entries(bunfig).filter(([k, v]) => v)),
         entrypoints: [buildIndex],
         outdir: resolve(CWD, out),
-        target: 'bun',
-        ...(external ? { external: [resolve(CWD, external)] } : {}),
-        ...(bunfig?.loader ? { loader: bunfig.loader } : {}),
-        ...(bunfig?.plugins ? { plugins: bunfig.plugins } : {})
+        target: 'bun'
       }
 
       let bo = await Bun.build(buildConfig)

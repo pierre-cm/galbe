@@ -1,7 +1,6 @@
 import { $ } from 'bun'
 import { Command, Option } from 'commander'
 import { resolve } from 'path'
-import { mkdir } from 'fs/promises'
 
 import { CWD, fmtInterval, fmtVal, instanciateRoutes, watchDir } from '../util'
 import { Galbe } from '../../src'
@@ -22,24 +21,21 @@ export default (cmd: Command) => {
         .default(null, fmtVal(defaultPort))
     )
     .addOption(new Option('-w, --watch', 'watch file changes').default(false, fmtVal(false)))
+    .addOption(new Option('-nc, --noclear', "don't clear on file changes").default(false, fmtVal(false)))
     .action(async (index, props) => {
-      const { port, watch } = props
+      const { port, watch, noclear } = props
+      const clear = !noclear
       const indexPath = resolve(CWD, index)
-      const devPath = resolve(CWD, '.galbe', 'dev')
       let g: Galbe
-      let v = 0
 
       Bun.env.BUN_ENV = 'development'
 
-      await mkdir(devPath, { recursive: true })
-
       if (watch) {
-        watchDir(
+        await watchDir(
           CWD,
           async () => {
             g.stop()
-            v++
-            await $`clear`
+            if (clear) await $`clear`
             Loader.registry.clear()
             g = (await import(indexPath)).default
             await instanciateRoutes(g)
@@ -49,7 +45,7 @@ export default (cmd: Command) => {
         )
       }
 
-      if (watch) await $`clear`
+      if (watch && clear) await $`clear`
       g = (await import(indexPath)).default
       await instanciateRoutes(g)
       await g.listen(port)

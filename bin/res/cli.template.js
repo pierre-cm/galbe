@@ -4,7 +4,7 @@ import { program, Option } from 'commander'
 import { resolve } from 'path'
 
 const DEFAULT_HEADERS = {
-  'user-agent': 'galbe:/*%return this.version%*//cli'
+  'user-agent': 'galbe:/*%(()=>version)()%*//cli'
 }
 const ansi = (p, c, str) => (p ? `\x1b[${c}m${str}\x1b[0m` : str)
 
@@ -12,7 +12,7 @@ const fmtObject = (o, p = false, idt = 2, iidt = 0) => {
   let _ = ' '.repeat(iidt)
   let __ = ' '.repeat(iidt + idt)
   let lr = idt === 0 ? '' : '\n'
-  if (typeof o === null) return 'null'
+  if (o === null) return ansi(p, '38;2;255;128;0', 'null')
   if (typeof o === 'boolean') return o ? ansi(p, '38;2;255;128;0', 'true') : ansi(p, '38;2;255;128;0', 'false')
   if (typeof o === 'number') return ansi(p, '38;2;10;180;220', o)
   if (typeof o === 'string') return ansi(p, '38;2;125;170;0', `"${o}"`)
@@ -33,6 +33,7 @@ const fmtRes = (r, p = false) => {
       let resp = fmtObject(r, p, 2)
       return process.stdout.write(`${resp}\n`)
     } catch (err) {
+      console.error(err)
       return process.stdout.write(`${r}\n`)
     }
   }
@@ -82,29 +83,36 @@ const fetchApi = async (method, path, props) => {
   if (format.has('b')) {
     let isJson = res.headers.get('content-type') === 'application/json'
     if (isJson) fmtRes(await res.json(), format.has('p'))
-    else if (res.headers.get('content-type').match(/^text\//)) fmtRes(await res.text(), format.has('p'))
+    else if (res.headers.get('content-type')?.match(/^text\//)) fmtRes(await res.text(), format.has('p'))
     else process.stdout.write(await res.arrayBuffer())
   }
   if (format.has('t')) process.stdout.write(`${(endTime / 1_000_000).toFixed(2)}ms\n`)
   process.exit(res.ok ? 0 : 1)
 }
 
-program.name('/*%return this.name%*/').description('/*%return this.description%*/').version('/*%return this.version%*/')
-
+program.name('/*%(()=>name)()%*/').description('/*%(()=>description)()%*/').version('/*%(()=>version)()%*/')
 /*%
-return this.commands.map(c=>{
+const formatDefault = def =>
+  typeof def === 'string'
+    ? `\`${def}\``
+    : Array.isArray(def)
+    ? `[${def.map(d => formatDefault(d)).join(',')}]`
+    : def ?? 'undefined';
+
+result = commands.map(c=>{
   let args = c.arguments.map(a=>`.argument("${a.type}", "${a.description}")`)
   let optionsBase = [
-    {name: '%format', short:'%f', type: '[string]', description: 'response format [\'s\',\'h\',\'b\',\'t\',\'p\']', default:'["s","b","p"]'},
-    {name: '%header', short:'%h', type: '<string...>', description: 'request header formated as headerName=headerValue', default:'[]'},
-    {name: '%query', short:'%q', type: '<string...>', description: 'query param formated as paramName=paramValue', default:'[]'},
-    {name: '%body', short:'%b', type: '<string>', description: 'request body', default:'""'},
-    {name: '%bodyFile', short:'%bf', type: '<path>', description: 'request body file', default:'""'}
+    {name: '%format', short:'%f', type: '[string]', description: 'response format [\'s\',\'h\',\'b\',\'t\',\'p\']', default:["s","b","p"]},
+    {name: '%header', short:'%h', type: '<string...>', description: 'request header formated as headerName=headerValue', default:[]},
+    {name: '%query', short:'%q', type: '<string...>', description: 'query param formated as paramName=paramValue', default:[]},
+    {name: '%body', short:'%b', type: '<string>', description: 'request body', default:''},
+    {name: '%bodyFile', short:'%bf', type: '<path>', description: 'request body file', default:''}
   ]
-  let options = [...optionsBase,...(c.options||[])].map(o=>`.addOption(new Option("-${o.short}, --${o.name} ${o.type}", "${o.description}").default(${o.default}))`)
+  let options = [...optionsBase,...(c.options||[])].map(o=>`.addOption(new Option("-${o.short}, --${o.name} ${o.type}", "${o.description}").default(${formatDefault(o.default)}))`)
   let action = `.action(async (${c.arguments.map(a=>`${a.name},`)} props) => {
-  return await fetchApi("${c.route.method.toUpperCase()}",\`${c.route.pathT}\`, props)
-})`
+    ${c.action ? ';('+c.action.toString()+')(props)' : ''}
+    return await fetchApi("${c.route.method.toUpperCase()}",\`${c.route.pathT}\`, props)
+  })`
   return `program.command("${c.name}").description("${c.description}")${args.join('')}${options.join('')}${action}`
 })
 %*/

@@ -197,7 +197,7 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
   let body = ''
   let _rb = def?.requestBody as OpenAPIV3.ReferenceObject
   if (_rb?.$ref) {
-    body = unref(`  body: "${_rb.$ref}"`, m => {
+    body = unref(`  body: %ref:${_rb.$ref}%`, m => {
       let l = m.split('/')
       imports[l[l.length - 1]] = m
       return l[l.length - 1]
@@ -308,7 +308,13 @@ const writeFiles = async (
     let imports: Record<string, string[]> = {}
     let decl: string[] = []
     Object.entries(schemas).forEach(([k, s]) => {
-      if (s.key === s.schema) return
+      if (s.key === s.schema && s.dependsOn.size === 1) {
+        let depMatch = [...s.dependsOn][0].match(/^#\/components\/([^\/]+)\/([^\/]+)/)
+        if (!depMatch) return
+        let [_, depOrig, depName] = [...depMatch]
+        decl.push(`export { ${depName} } from './${typeMap[depOrig]}.schema'\n`)
+        return
+      }
       for (let dep of [k, ...s.dependsOn]) {
         let depMatch = dep.match(/^#\/components\/([^\/]+)\/([^\/]+)/)
         if (!depMatch) continue
@@ -383,7 +389,9 @@ const writeFiles = async (
 
     let schemaFile =
       `import { $T } from 'galbe'\n\n` +
-      `${Object.entries(sImports).map(([k, v]) => `import { ${[...v].join(', ')} } from '${k}'`)}\n\n` +
+      `${Object.entries(sImports)
+        .map(([k, v]) => `import { ${[...v].join(', ')} } from '${k}'`)
+        .join('\n')}\n\n` +
       `${sDecl.map(d => d).join('\n\n')}\n`
 
     let routeFile =

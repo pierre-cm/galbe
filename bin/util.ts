@@ -1,4 +1,4 @@
-import { relative, join as pathjoin } from 'path'
+import { relative } from 'path'
 import { watch } from 'chokidar'
 import { Galbe, Route } from '../src'
 import { logRoute, walkRoutes } from '../src/util'
@@ -7,6 +7,7 @@ import { RouteMeta, defineRoutes } from '../src/routes'
 export { default as pckg } from '../package.json'
 
 export const CWD = process.cwd()
+export const WATCH_IGNORE = /\.galbe/
 
 export const fmtVal = (v: any) => {
   if (typeof v === 'boolean') return `\x1b[3${v ? '2' : '1'}m${v}\x1b[0m`
@@ -52,13 +53,14 @@ export const watchDir = async (
     ignoreInitial: true
   })
   watcher.on('all', async (eventType, filename) => {
+    if (filename.match(WATCH_IGNORE)) return
     await callback({ path: filename.toString(), eventType })
   })
 }
 export const instanciateRoutes = async (g: Galbe) => {
-  console.log('🏗️  \x1b[1;30mConstructing routes\x1b[0m :\n')
+  console.log('🏗️  \x1b[1;30mConstructing routes\x1b[0m\n')
   // Main thread routes definitions
-  for (let m of Object.values(g.router.routes)) walkRoutes(m, r => logRoute(r))
+  walkRoutes(g.router.routes, r => logRoute(r))
   process.stdout.write('\n')
   // Route Files Analysis
   let routes: Record<string, { route?: Route; meta?: RouteMeta; error?: any }[]> = {}
