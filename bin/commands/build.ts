@@ -74,7 +74,6 @@ export default (cmd: Command) => {
         return process.exit(1)
       }
 
-      console.log(Object.fromEntries(Object.entries(bunfig).filter(([k, v]) => v)))
       const buildConfig: BuildConfig = {
         publicPath: `${resolve(CWD, out)}/`,
         ...Object.fromEntries(Object.entries(bunfig).filter(([k, v]) => v)),
