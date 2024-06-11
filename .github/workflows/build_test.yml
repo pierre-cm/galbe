@@ -1,10 +1,10 @@
-name: Build & Test
+name: Install & Test
 on:
   push:
   pull_request:
 jobs:
   build:
-    name: Build & Test
+    name: Install & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,7 +13,5 @@ jobs:
           bun-version: latest
       - name: Install
         run: bun install
-      - name: Build
-        run: bun run build
       - name: Test
         run: bun test

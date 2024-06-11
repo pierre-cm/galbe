@@ -6,7 +6,6 @@
   "type": "module",
   "bin": "./bin/cli.ts",
   "main": "./src/index.ts",
-  "types": "./dist/index.d.ts",
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
@@ -29,8 +28,6 @@
   ],
   "license": "MIT",
   "scripts": {
-    "build": "bun ./scripts/build.ts",
-    "clean": "rm -rf dist",
     "test": "bun test",
     "postinstall": "bun run ./scripts/postinstall.ts",
     "release": "release-it"

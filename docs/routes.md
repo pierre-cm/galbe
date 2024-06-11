@@ -114,8 +114,8 @@ export default g => {
   /**
    * This is a route head comment
    * @deprecated
-   * @tag tag1
-   * @tag tag2
+   * @operationId fooBar
+   * @tags tag1 tag2
    */
   g.get('/foo/:bar', ctx => ctx.params.bar)
 }

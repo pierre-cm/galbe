@@ -1,5 +1,5 @@
 import { $ } from 'bun'
-import { existsSync } from 'node:fs'
+import { existsSync } from 'fs'
 
 if (existsSync('.git')) {
   console.log('Setting up dev environment')
@@ -7,5 +7,3 @@ if (existsSync('.git')) {
   await $`chmod +x .git/hooks/prepare-commit-msg`
   console.log('done')
 }
-
-await $`bun run build`
