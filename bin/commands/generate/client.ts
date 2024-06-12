@@ -2,10 +2,10 @@ import { $ } from 'bun'
 import { devNull } from 'os'
 import { Script, createContext } from 'vm'
 import { Command, Option } from 'commander'
-import { resolve } from 'path'
+import { resolve, extname } from 'path'
 import { rm } from 'fs/promises'
 import { transformSync } from '@swc/core'
-import { CWD, fmtList, fmtVal, instanciateRoutes, silentExec } from '../../util'
+import { CWD, fmtList, instanciateRoutes, silentExec } from '../../util'
 import { $T, Galbe, GalbeCLICommand, Method, Route } from '../../../src'
 import { walkRoutes } from '../../../src/util'
 import { schemaToTypeStr, Optional, STSchema } from '../../../src/schema'
@@ -23,16 +23,15 @@ export default (cmd: Command) => {
       )
     )
     .addOption(
-      new Option('-t, --target <target>', `build target ${fmtList(clientTargets)}`)
-        .argParser(v => {
-          if (clientTargets.includes(v)) return v
-          console.log(`error: target must be one of ${fmtList(clientTargets)}`)
-          process.exit(1)
-        })
-        .default('ts', fmtVal('ts'))
+      new Option('-t, --target <target>', `build target ${fmtList(clientTargets)}`).argParser(v => {
+        if (clientTargets.includes(v)) return v
+        console.log(`error: target must be one of ${fmtList(clientTargets)}`)
+        process.exit(1)
+      })
     )
     .action(async (index, props) => {
       let { target, out } = props
+      target = target || clientTargets.includes(extname(index)?.slice(1)) ? extname(index)?.slice(1) : 'ts'
       if (!out) out = { ts: 'dist/client.ts', js: 'dist/client.js', cli: 'dist/cli' }[target]
       let pckg: any = {}
       try {
