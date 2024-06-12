@@ -283,6 +283,7 @@ const streamToUrlForm = async (body: ReadableStream<Uint8Array>, schema?: STUrlF
 }
 async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundary: string, schema?: STMultipartForm) {
   const bound = textEncoder.encode(boundary)
+  const delimiter = textEncoder.encode('\r\n\r\n')
   let rest = new Uint8Array()
   let bK: Uint8Array = new Uint8Array()
   let bV: Uint8Array = new Uint8Array()
@@ -294,11 +295,21 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
     start = 0
     for (let i = 0; i < chunk.length; i++) {
       let matchBound = true
+      let matchDelimiter = true
       for (let b = 0; b < bound.length; b++) {
         if (chunk[i + b] === bound[b]) continue
         else {
           matchBound = false
           break
+        }
+      }
+      if (!matchBound) {
+        for (let b = 0; b < delimiter.length; b++) {
+          if (chunk[i + b] === delimiter[b]) continue
+          else {
+            matchDelimiter = false
+            break
+          }
         }
       }
       if (matchBound) {
@@ -324,7 +335,7 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
         start = i + bound.length
         rest = new Uint8Array()
         i = start
-      } else if (chunk[i] === 0x0d && chunk[i + 1] === 0x0a && chunk[i + 2] === 0x0d) {
+      } else if (matchDelimiter) {
         bK = new Uint8Array(rest.length + i - start)
         bK.set(rest)
         bK.set(chunk.slice(start, i), rest.length)
