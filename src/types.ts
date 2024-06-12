@@ -173,9 +173,9 @@ export type Handler<Path extends string = string, S extends RequestSchema = Requ
 export type Endpoint = {
   <
     Path extends string,
-    H extends STHeaders,
     P extends Partial<STParams<Path>>,
-    Q extends STQuery,
+    H extends STHeaders = any,
+    Q extends STQuery = any,
     B extends STBody = any,
     R extends STResponse = STResponse
   >(
@@ -186,9 +186,9 @@ export type Endpoint = {
   ): void
   <
     Path extends string,
-    H extends STHeaders,
     P extends Partial<STParams<Path>>,
-    Q extends STQuery,
+    H extends STHeaders = any,
+    Q extends STQuery = any,
     B extends STBody = any,
     R extends STResponse = STResponse
   >(
@@ -198,9 +198,9 @@ export type Endpoint = {
   ): void
   <
     Path extends string,
-    H extends STHeaders,
     P extends Partial<STParams<Path>>,
-    Q extends STQuery,
+    H extends STHeaders = any,
+    Q extends STQuery = any,
     B extends STBody = any,
     R extends STResponse = STResponse
   >(
@@ -210,9 +210,9 @@ export type Endpoint = {
   ): void
   <
     Path extends string,
-    H extends STHeaders,
     P extends Partial<STParams<Path>>,
-    Q extends STQuery,
+    H extends STHeaders = any,
+    Q extends STQuery = any,
     B extends STBody = any,
     R extends STResponse = STResponse
   >(
@@ -240,9 +240,9 @@ export type RouteNode = {
 
 export type Route<
   Path extends string = string,
-  H extends STHeaders = STHeaders,
   P extends Partial<STParams<Path>> = {},
-  Q extends STQuery = {},
+  H extends STHeaders = STHeaders,
+  Q extends STQuery = STQuery,
   B extends STBody = STBody,
   R extends STResponse = STResponse
 > = {

@@ -162,8 +162,8 @@ export class Galbe {
   }
   get: Endpoint = <
     Path extends string,
-    H extends STHeaders,
     P extends Partial<STParams<Path>>,
+    H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
     R extends STResponse
@@ -178,8 +178,8 @@ export class Galbe {
   ) => this.add(overloadDiscriminer(this, 'get', path, arg2, arg3, arg4))
   post: Endpoint = <
     Path extends string,
-    H extends STHeaders,
     P extends Partial<STParams<Path>>,
+    H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
     R extends STResponse
@@ -194,8 +194,8 @@ export class Galbe {
   ) => this.add(overloadDiscriminer(this, 'post', path, arg2, arg3, arg4))
   put: Endpoint = <
     Path extends string,
-    H extends STHeaders,
     P extends Partial<STParams<Path>>,
+    H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
     R extends STResponse
@@ -210,8 +210,8 @@ export class Galbe {
   ) => this.add(overloadDiscriminer(this, 'put', path, arg2, arg3, arg4))
   patch: Endpoint = <
     Path extends string,
-    H extends STHeaders,
     P extends Partial<STParams<Path>>,
+    H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
     R extends STResponse
@@ -226,8 +226,8 @@ export class Galbe {
   ) => this.add(overloadDiscriminer(this, 'patch', path, arg2, arg3, arg4))
   delete: Endpoint = <
     Path extends string,
-    H extends STHeaders,
     P extends Partial<STParams<Path>>,
+    H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
     R extends STResponse
@@ -242,8 +242,8 @@ export class Galbe {
   ) => this.add(overloadDiscriminer(this, 'delete', path, arg2, arg3, arg4))
   options: Endpoint = <
     Path extends string,
-    H extends STHeaders,
     P extends Partial<STParams<Path>>,
+    H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
     R extends STResponse
