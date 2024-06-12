@@ -4,7 +4,7 @@ import { program, Option } from 'commander'
 import { resolve } from 'path'
 
 const DEFAULT_HEADERS = {
-  'user-agent': 'galbe:/*%(()=>version)()%*//cli'
+  'user-agent': 'Galbe//*%(()=>version)()%*//cli'
 }
 const ansi = (p, c, str) => (p ? `\x1b[${c}m${str}\x1b[0m` : str)
 

@@ -131,8 +131,14 @@ export default (cmd: Command) => {
         const file = await Bun.file(resolve(import.meta.dir, '..', '..', 'res', 'client.template.ts')).text()
         let filled = file.replaceAll(/\/\*\%([\s\S]*?)\%\*\//g, (_match, p) => {
           let idt = p.match(/^\n*([ \t]*)/, p)?.[1] || ''
-          let func = new Function(p)
-          let res = func.call({ version: pckg?.version || '0.1.0', routes })
+          const script = new Script(p)
+          const sandbox = {
+            console,
+            version: pckg?.version || '0.1.0',
+            routes
+          }
+          createContext(sandbox)
+          let res = script.runInNewContext(sandbox)
           if (typeof res === 'string') res = res.split('\n')
           if (Array.isArray(res)) return res.map((s, i) => (i === 0 ? s : `${idt}${s}`)).join('\n')
           return res ?? ''

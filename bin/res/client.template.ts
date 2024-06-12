@@ -50,14 +50,14 @@ type RequestOptions<H = any, B = any> = {
 
 const decoder = new TextDecoder()
 const DEFAULT_HEADERS = {
-  'user-agent': 'galbe:/*%return this.version%*/'
+  'user-agent': 'Galbe//*%(()=>version)()%*/'
 }
 
 export default class GalbeClient {
   config?: GalbeClientConfig
 
   /*%
-  return Object.entries(this.routes).map(([method, list])=>{
+  Object.entries(routes).map(([method, list])=>{
     return`${method} = {\n${list.map( r => {
       let p = Object.entries(r.params)
       let schemas = Object.keys(r.schemas).length ?
@@ -144,7 +144,7 @@ export default class GalbeClient {
 
   // Aliases
   /*%
-  return Object.entries(this.routes).map(([method, list])=>{
+  Object.entries(routes).map(([method, list])=>{
     return list.filter(r=>r.alias).map(r => {
       let p = Object.entries(r.params)
       let schemas = Object.keys(r.schemas).length ?
@@ -155,7 +155,7 @@ export default class GalbeClient {
         `${Object.entries(r.schemas.response).map(([k,v])=>`PGR<${k},${v}${oks?.length?`,${oks.join('|')}`:''}>`).join('|')}|PGR<Exclude<HttpStatusCode,${Object.keys(r.schemas.response).join('|')}>,any${oks?.length?`,${oks.join('|')}`:''}>`: 
         `PGR<HttpStatusCode,any${oks?.length?`,${oks.join('|')}`:',any'}>`
       return `${r.alias}(${p.length ? p.map(([k,v])=>`${k}: ${v.type}`).join(', ')+', ':''}options: RequestOptions${schemas} = {}){return this.fetch(\`${r.pathT}\`, {...options, method: '${r.method.toUpperCase()}'}) as ${responses}}\n`
-    }).join('')
-  }).join('')
+    }).join('  ')
+  })
   %*/
 }
