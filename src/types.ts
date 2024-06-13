@@ -241,7 +241,7 @@ export class RequestError {
 export type ErrorHandler = (error: any, context: Context) => any
 
 export type RouteNode = {
-  route?: Route
+  routes: { [K in Method]?: Route }
   param?: RouteNode
   children?: Record<string, RouteNode>
 }
@@ -263,13 +263,15 @@ export type Route<
   handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
 }
 
-export type RouteTree = {
-  [key: string]: RouteNode
-}
-
 export class NotFoundError extends RequestError {
   constructor(message?: any) {
     super({ status: 404, payload: message ?? 'Not found' })
+  }
+}
+
+export class MethodNotAllowedError extends RequestError {
+  constructor(message?: any) {
+    super({ status: 405, payload: message ?? 'Method not allowed' })
   }
 }
 

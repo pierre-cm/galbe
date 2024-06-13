@@ -1,4 +1,4 @@
-import type { Route, RouteNode, RouteTree } from '.'
+import type { Route, RouteNode } from '.'
 import type { RouteMeta } from './routes'
 
 const METHOD_COLOR: Record<string, string> = {
@@ -24,14 +24,10 @@ export const logRoute = (
   )
 }
 
-export const walkRouteNode = (node: RouteNode, cb: (route: Route) => void) => {
-  if (node?.route) cb(node.route)
-  for (let c of Object.values(node?.children || {})) walkRouteNode(c, cb)
-  if (node?.param) walkRouteNode(node.param, cb)
-}
-
-export const walkRoutes = (routes: RouteTree, cb: (route: Route) => void) => {
-  Object.values(routes).forEach(node => walkRouteNode(node, cb))
+export const walkRoutes = (node: RouteNode, cb: (route: Route) => void) => {
+  if (node?.routes) Object.values(node.routes).forEach(r => cb(r))
+  for (let c of Object.values(node?.children || {})) walkRoutes(c, cb)
+  if (node?.param) walkRoutes(node.param, cb)
 }
 
 export const isIterator = (obj: any) => typeof obj?.next === 'function'

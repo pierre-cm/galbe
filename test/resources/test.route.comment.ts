@@ -35,4 +35,24 @@ export default (g: Galbe) => {
    * @other Hello Mom!
    */
   g.put('/test', { body: $T.object({ foo: $T.string() }) }, [() => {}], _ => {})
+
+  /**
+   * patch method
+   */
+  g.patch('/test', _ => {})
+
+  /**
+   * options method
+   */
+  g.options('/test', _ => {})
+
+  /**
+   * delete method
+   */
+  g.delete('/test', _ => {})
+
+  /**
+   * head method
+   */
+  g.head('/test', _ => {})
 }

@@ -1,5 +1,5 @@
 import { expect, test, describe } from 'bun:test'
-import { Galbe, NotFoundError, type RouteNode } from '../src'
+import { Galbe, MethodNotAllowedError, NotFoundError, type RouteNode } from '../src'
 
 describe('router', () => {
   test('empty', async () => {
@@ -7,13 +7,7 @@ describe('router', () => {
     const router = galbe.router
 
     expect(router.prefix).toBe('')
-    expect(router.routes.GET).toEqual({})
-    expect(router.routes.POST).toEqual({})
-    expect(router.routes.PUT).toEqual({})
-    expect(router.routes.PATCH).toEqual({})
-    expect(router.routes.DELETE).toEqual({})
-    expect(router.routes.OPTIONS).toEqual({})
-    expect(router.routes.HEAD).toEqual({})
+    expect(router.routes).toEqual({ routes: {} })
   })
 
   test('routes, bad syntax', async () => {
@@ -46,13 +40,13 @@ describe('router', () => {
     const galbe = new Galbe()
     const router = galbe.router
 
-    expect(router.routes.GET).toEqual({})
+    expect(router.routes).toEqual({ routes: {} })
 
     galbe.get('/', () => {})
-    let r: RouteNode | undefined = router.routes.GET
+    let r: RouteNode | undefined = router.routes
 
-    expect(r?.route?.method).toBe('get')
-    expect(r?.route?.path).toBe('/')
+    expect(r?.routes.get?.method).toBe('get')
+    expect(r?.routes.get?.path).toBe('/')
     expect(r?.param).toBeUndefined()
     expect(r?.children).toBeUndefined()
 
@@ -60,28 +54,28 @@ describe('router', () => {
     galbe.get('/test', mockHandler)
     r = r?.children?.test
 
-    expect(r?.route?.method).toBe('get')
-    expect(r?.route?.path).toBe('/test')
+    expect(r?.routes.get?.method).toBe('get')
+    expect(r?.routes.get?.path).toBe('/test')
     expect(r?.param).toBeUndefined()
     expect(r?.children).toBeUndefined()
-    expect(r?.route?.handler).toBe(mockHandler)
+    expect(r?.routes.get?.handler).toBe(mockHandler)
 
     const mockHandler2 = () => {}
     galbe.get('/test/:foo', mockHandler2)
     r = r?.param
 
-    expect(r?.route?.method).toBe('get')
-    expect(r?.route?.path).toBe('/test/:foo')
+    expect(r?.routes.get?.method).toBe('get')
+    expect(r?.routes.get?.path).toBe('/test/:foo')
     expect(r?.param).toBeUndefined()
     expect(r?.children).toBeUndefined()
-    expect(r?.route?.handler).toBe(mockHandler2)
+    expect(r?.routes.get?.handler).toBe(mockHandler2)
 
     const mockHandler3 = () => {}
     galbe.get('/test/:foo/bar', mockHandler3)
 
     expect(r?.children).toHaveProperty('bar')
     expect(r?.param).toBeUndefined()
-    expect(r?.children?.bar?.route?.handler).toBe(mockHandler3)
+    expect(r?.children?.bar?.routes.get?.handler).toBe(mockHandler3)
   })
 
   test('redefining root', async () => {
@@ -94,26 +88,26 @@ describe('router', () => {
     galbe.get('/test', h2)
     galbe.get('/', h3)
 
-    let r: RouteNode | undefined = router.routes.GET
+    let r: RouteNode | undefined = router.routes
     expect(router.prefix).toBe('')
-    expect(r?.route?.method).toBe('get')
-    expect(r?.route?.path).toBe('/')
-    expect(r?.route?.handler).toBe(h3)
-    expect(r?.children?.test?.route?.method).toBe('get')
-    expect(r?.children?.test?.route?.handler).toBe(h2)
+    expect(r?.routes.get?.method).toBe('get')
+    expect(r?.routes.get?.path).toBe('/')
+    expect(r?.routes.get?.handler).toBe(h3)
+    expect(r?.children?.test?.routes.get?.method).toBe('get')
+    expect(r?.children?.test?.routes.get?.handler).toBe(h2)
 
     const [h4, h5] = [() => {}, () => {}]
 
     galbe.get('/foo/bar', h4)
     galbe.get('/foo', h5)
 
-    r = router?.routes?.GET?.children?.foo
-    expect(r?.route?.method).toBe('get')
-    expect(r?.route?.path).toBe('/foo')
-    expect(r?.route?.handler).toBe(h5)
-    expect(r?.children?.bar?.route?.method).toBe('get')
-    expect(r?.children?.bar?.route?.path).toBe('/foo/bar')
-    expect(r?.children?.bar?.route?.handler).toBe(h4)
+    r = router?.routes?.children?.foo
+    expect(r?.routes.get?.method).toBe('get')
+    expect(r?.routes.get?.path).toBe('/foo')
+    expect(r?.routes.get?.handler).toBe(h5)
+    expect(r?.children?.bar?.routes.get?.method).toBe('get')
+    expect(r?.children?.bar?.routes.get?.path).toBe('/foo/bar')
+    expect(r?.children?.bar?.routes.get?.handler).toBe(h4)
   })
 
   test('find route', async () => {
@@ -126,18 +120,18 @@ describe('router', () => {
     galbe.get('/test/foo', h3)
     galbe.get('/test/foo/bar', h4)
 
-    let r1 = router.find('GET', '/')
+    let r1 = router.find('get', '/')
     expect(r1.path).toBe('/')
     expect(r1.handler).toBe(h1)
-    let r2 = router.find('GET', '/test/foo')
+    let r2 = router.find('get', '/test/foo')
     expect(r2.path).toBe('/test/foo')
     expect(r2.handler).toBe(h3)
-    let r3 = router.find('GET', '/test/foo/bar')
+    let r3 = router.find('get', '/test/foo/bar')
     expect(r3.path).toBe('/test/foo/bar')
     expect(r3.handler).toBe(h4)
 
     try {
-      router.find('GET', '/test')
+      router.find('get', '/test')
       expect.unreachable()
     } catch (err: any) {
       expect(err).toBeInstanceOf(NotFoundError)
@@ -146,7 +140,7 @@ describe('router', () => {
     }
 
     try {
-      router.find('GET', '/test/bar/bar')
+      router.find('get', '/test/bar/bar')
       expect.unreachable()
     } catch (err: any) {
       expect(err).toBeInstanceOf(NotFoundError)
@@ -164,11 +158,11 @@ describe('router', () => {
     galbe.get('/test/:foo', h1)
     galbe.get('/test/test', h2)
 
-    let r1 = router.find('GET', '/test/42')
+    let r1 = router.find('get', '/test/42')
     expect(r1.path).toBe('/test/:foo')
     expect(r1.handler).toBe(h1)
 
-    let r2 = router.find('GET', '/test/test')
+    let r2 = router.find('get', '/test/test')
     expect(r2.path).toBe('/test/test')
     expect(r2.handler).toBe(h2)
   })
@@ -185,20 +179,50 @@ describe('router', () => {
 
     galbe.get('/test/foo/*/lol', h4)
 
-    let r1 = router.find('GET', '/test/foo/bar/42')
+    let r1 = router.find('get', '/test/foo/bar/42')
     expect(r1.path).toBe('/test/foo/*')
     expect(r1.handler).toBe(h1)
 
-    let r3 = router.find('GET', '/test/foo/bar/bar')
+    let r3 = router.find('get', '/test/foo/bar/bar')
     expect(r3.path).toBe('/test/foo/:p/bar')
     expect(r3.handler).toBe(h3)
 
-    let r4 = router.find('GET', '/test/foo/foo')
+    let r4 = router.find('get', '/test/foo/foo')
     expect(r4.path).toBe('/test/foo/*')
     expect(r4.handler).toBe(h1)
 
-    let r5 = router.find('GET', '/test/foo/toto/lol')
+    let r5 = router.find('get', '/test/foo/toto/lol')
     expect(r5.path).toBe('/test/foo/*/lol')
     expect(r5.handler).toBe(h4)
+  })
+
+  test('method not allowed', async () => {
+    const galbe = new Galbe()
+    const router = galbe.router
+
+    const [h1, h2] = [() => {}, () => {}]
+
+    galbe.put('/test/foo', h1)
+    galbe.post('/test/bar/*', h2)
+
+    let r1 = router.find('put', '/test/foo')
+    expect(r1.path).toBe('/test/foo')
+    expect(r1.handler).toBe(h1)
+    try {
+      router.find('get', '/test/foo')
+      expect.unreachable()
+    } catch (err) {
+      expect(err).toBeInstanceOf(MethodNotAllowedError)
+    }
+
+    let r2 = router.find('post', '/test/bar/tender')
+    expect(r2.path).toBe('/test/bar/*')
+    expect(r2.handler).toBe(h2)
+    try {
+      router.find('delete', '/test/bar/toto/titi')
+      expect.unreachable()
+    } catch (err) {
+      expect(err).toBeInstanceOf(MethodNotAllowedError)
+    }
   })
 })

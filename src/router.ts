@@ -1,11 +1,11 @@
-import type { Route, RouteNode, RouteTree } from './types'
-import { NotFoundError } from './types'
+import type { Method, Route, RouteNode } from './types'
+import { MethodNotAllowedError, NotFoundError } from './types'
 
 const ROUTE_REGEX = /^(\/(\*|:?\d+|:?\w+|:?[\w\d][\w-]+[\w\d]))*\/?$/
 
 const walk = (path: string[], node: RouteNode, alts: RouteNode[] = []): RouteNode => {
   if (path.length < 1) throw new NotFoundError()
-  if (path.length === 1 && node.route) return node
+  if (path.length === 1 && node.routes && !!Object.keys(node.routes).length) return node
 
   if (node.children?.['*']) alts.push(node.children['*'])
   if (node.param) alts.push(node.param)
@@ -28,7 +28,7 @@ const walk = (path: string[], node: RouteNode, alts: RouteNode[] = []): RouteNod
       return walk(path, lastAlt, alts)
     } catch (error) {
       if (error instanceof NotFoundError) {
-        if (lastAlt?.route) return lastAlt
+        if (lastAlt?.routes) return lastAlt
       } else throw error
     }
   }
@@ -37,12 +37,12 @@ const walk = (path: string[], node: RouteNode, alts: RouteNode[] = []): RouteNod
 }
 
 export class GalbeRouter {
-  routes: RouteTree
+  routes: RouteNode
   prefix: string
   cacheEnabled: boolean
   cachedRoutes: Map<string, Route | null>
   constructor(options?: { prefix?: string; cacheEnabled?: boolean }) {
-    this.routes = { GET: {}, POST: {}, PUT: {}, PATCH: {}, DELETE: {}, OPTIONS: {}, HEAD: {} }
+    this.routes = { routes: {} }
     let prefix = options?.prefix || ''
     if (prefix && !prefix.match(/^\//)) prefix = `/${prefix}`
     this.prefix = prefix
@@ -57,43 +57,46 @@ export class GalbeRouter {
     route.path = `${this.prefix || ''}${route.path}`
     let path = route.path.replace(/^\/$(.*)\/?$/, '$1').split('/')
     path.shift()
-    let r = this.routes[route.method.toUpperCase()]
+    let r = this.routes
     if (!path.length) {
-      r.route = route
+      r.routes[route.method] = route
     } else {
       while (path.length) {
         let p = path.shift()
         if (p === undefined) break
         if (!path.length) {
-          if (p.match(/^:/)) r.param = { route }
-          else {
+          if (p.match(/^:/)) {
+            if (!r.param) r.param = { routes: {} }
+            r.param.routes[route.method] = route
+          } else {
             if (!r.children) r.children = {}
-            r.children[p] = { ...r.children[p], route }
+            if (!(p in r.children)) r.children[p] = { routes: {} }
+            r.children[p].routes[route.method] = route
           }
         } else {
           if (p.match(/^:/)) {
-            if (!r.param) r.param = {}
+            if (!r.param) r.param = { routes: {} }
             r = r.param
           } else {
             if (!r.children) r.children = {}
-            if (!(p in r.children)) r.children[p] = {}
+            if (!(p in r.children)) r.children[p] = { routes: {} }
             r = r.children[p]
           }
         }
       }
     }
   }
-  find(method: string, path: string) {
-    method = method.toUpperCase()
+  find(method: Method, path: string): Route {
     const staticRoute = this.cachedRoutes.get(`[${method}]${path}`)
     if (staticRoute === null) throw new NotFoundError()
     if (staticRoute !== undefined) return staticRoute
-    let parts = path.split('/')
-    const route = walk(parts, this.routes[method]).route
-    if (!route) {
+    let parts = path === '/' ? [''] : path.split('/')
+    let r = walk(parts, this.routes)
+    if (!r || !Object.keys(r.routes).length) {
       if (this.cacheEnabled) this.cachedRoutes.set(`[${method}]${path}`, null)
       throw new NotFoundError()
-    }
+    } else if (!(method in r.routes)) throw new MethodNotAllowedError()
+    const route = r.routes[method] as Route
     if (this.cacheEnabled) this.cachedRoutes.set(`[${method}]${path}`, route)
     return route
   }

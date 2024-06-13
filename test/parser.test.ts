@@ -10,6 +10,7 @@ import {
   isAsyncIterator
 } from './test.utils'
 import { Galbe, $T } from '../src'
+import { schemaToTypeStr } from '../src/schema'
 
 const port = 7357
 
@@ -1194,5 +1195,38 @@ describe('parser', () => {
       expect(resp.status).toBe(expected.status ?? 200)
       expect(body).toEqual(expected.body)
     }
+  })
+
+  test('schema to type', async () => {
+    let type = schemaToTypeStr(
+      $T.object({
+        boolean: $T.boolean(),
+        byteArray: $T.byteArray(),
+        number: $T.number(),
+        integer: $T.integer(),
+        string: $T.string(),
+        any: $T.any(),
+        literal: $T.literal('literal'),
+        array: $T.array($T.string()),
+        object: $T.object({
+          foo: $T.string()
+        }),
+        union: $T.union([$T.number(), $T.string()])
+      })
+    )
+    expect(type).toBe(
+      `{` +
+        `'boolean':boolean;` +
+        `'byteArray':Uint8Array;` +
+        `'number':number;` +
+        `'integer':number;` +
+        `'string':string;` +
+        `'any':any;` +
+        `'literal':'literal';` +
+        `'array':Array<string>;` +
+        `'object':{'foo':string};` +
+        `'union':number|string` +
+        `}`
+    )
   })
 })

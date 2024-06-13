@@ -49,6 +49,18 @@ describe('routeFiles', () => {
           put: {
             tags: 'tag1, tag2',
             other: 'Hello Mom!'
+          },
+          patch: {
+            head: 'patch method'
+          },
+          options: {
+            head: 'options method'
+          },
+          delete: {
+            head: 'delete method'
+          },
+          head: {
+            head: 'head method'
           }
         }
       }
@@ -59,13 +71,7 @@ describe('routeFiles', () => {
     const k = new Galbe()
     await defineRoutes({}, k)
     expect(k.router.routes).toEqual({
-      GET: {},
-      POST: {},
-      PUT: {},
-      PATCH: {},
-      DELETE: {},
-      OPTIONS: {},
-      HEAD: {}
+      routes: {}
     })
   })
 
@@ -73,13 +79,7 @@ describe('routeFiles', () => {
     const k = new Galbe({ routes: false })
     await defineRoutes({}, k)
     expect(k.router.routes).toEqual({
-      GET: {},
-      POST: {},
-      PUT: {},
-      PATCH: {},
-      DELETE: {},
-      OPTIONS: {},
-      HEAD: {}
+      routes: {}
     })
   })
 
@@ -87,13 +87,7 @@ describe('routeFiles', () => {
     const k = new Galbe()
     await defineRoutes({ routes: 'unexisting_route' }, k)
     expect(k.router.routes).toEqual({
-      GET: {},
-      POST: {},
-      PUT: {},
-      PATCH: {},
-      DELETE: {},
-      OPTIONS: {},
-      HEAD: {}
+      routes: {}
     })
   })
 
@@ -103,17 +97,17 @@ describe('routeFiles', () => {
     await defineRoutes({ routes: 'test/resources/test.route.empty.ts' }, k)
 
     const r = k.router.routes
-    expect(r.GET?.children?.one?.route).toMatchObject({
+    expect(r?.children?.one?.routes.get).toMatchObject({
       method: 'get',
       path: '/one',
       handler: () => {}
     })
-    expect(r.POST?.children?.two?.route).toMatchObject({
+    expect(r?.children?.two?.routes.post).toMatchObject({
       method: 'post',
       path: '/two',
       handler: () => {}
     })
-    expect(r.PUT?.children?.three?.route).toMatchObject({
+    expect(r?.children?.three?.routes.put).toMatchObject({
       method: 'put',
       path: '/three',
       handler: () => {}
@@ -143,33 +137,53 @@ describe('routeFiles', () => {
     await defineRoutes({ routes: ['test/resources/test.route.*.ts'] }, k)
 
     const r = k.router.routes
-    expect(r.GET?.children?.one?.route).toMatchObject({
+    expect(r?.children?.one?.routes.get).toMatchObject({
       method: 'get',
       path: '/one',
       handler: () => {}
     })
-    expect(r.POST?.children?.two?.route).toMatchObject({
+    expect(r?.children?.two?.routes.post).toMatchObject({
       method: 'post',
       path: '/two',
       handler: () => {}
     })
-    expect(r.PUT?.children?.three?.route).toMatchObject({
+    expect(r?.children?.three?.routes.put).toMatchObject({
       method: 'put',
       path: '/three',
       handler: () => {}
     })
-    expect(r.GET?.children?.test?.param?.route).toMatchObject({
+    expect(r?.children?.test?.param?.routes.get).toMatchObject({
       method: 'get',
       path: '/test/:param1',
       handler: () => {}
     })
-    expect(r.POST?.children?.test?.route).toMatchObject({
+    expect(r?.children?.test?.routes.post).toMatchObject({
       method: 'post',
       path: '/test',
       handler: () => {}
     })
-    expect(r.PUT?.children?.test?.route).toMatchObject({
+    expect(r?.children?.test?.routes.put).toMatchObject({
       method: 'put',
+      path: '/test',
+      handler: () => {}
+    })
+    expect(r?.children?.test?.routes.patch).toMatchObject({
+      method: 'patch',
+      path: '/test',
+      handler: () => {}
+    })
+    expect(r?.children?.test?.routes.options).toMatchObject({
+      method: 'options',
+      path: '/test',
+      handler: () => {}
+    })
+    expect(r?.children?.test?.routes.delete).toMatchObject({
+      method: 'delete',
+      path: '/test',
+      handler: () => {}
+    })
+    expect(r?.children?.test?.routes.head).toMatchObject({
+      method: 'head',
       path: '/test',
       handler: () => {}
     })

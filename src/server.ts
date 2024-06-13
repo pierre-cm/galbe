@@ -1,4 +1,4 @@
-import type { Context, Route } from './types'
+import type { Context, Method, Route } from './types'
 
 import { InternalError, RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
@@ -50,7 +50,7 @@ export default async (galbe: Galbe, port?: number) => {
       try {
         // find route
         try {
-          route = router.find(req.method, url.pathname)
+          route = router.find(req.method.toLowerCase() as Method, url.pathname)
         } catch (error) {
           if (error instanceof RequestError) throw error
           else throw handleInternalError(error)
