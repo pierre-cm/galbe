@@ -5,7 +5,8 @@ import { parseEntry, requestBodyParser, requestPathParser, responseParser } from
 import { Galbe } from './index'
 import { validateResponse } from './validator'
 
-const LOADABLE_METHODS = ['POST', 'PUT', 'PATCH']
+const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']
+const EMPTY_BODY_METHODS = ['GET', 'OPTIONS', 'HEAD']
 
 const handleInternalError = (error: any) => {
   console.error(error)
@@ -28,6 +29,7 @@ export default async (galbe: Galbe, port?: number) => {
   return Bun.serve({
     port: port || galbe.config?.port || 3000,
     async fetch(req) {
+      if (!METHODS.includes(req.method)) return new Response('', { status: 501 })
       const context: Context = {
         request: req,
         set: { headers: {} },
@@ -69,7 +71,7 @@ export default async (galbe: Galbe, port?: number) => {
         for (let [k, v] of url.searchParams) inQuery[k] = v
         let inParams = requestPathParser(url.pathname, route.path)
 
-        context.body = LOADABLE_METHODS.includes(req.method)
+        context.body = !EMPTY_BODY_METHODS.includes(req.method)
           ? await requestBodyParser(req.body, inHeaders, schema.body)
           : null
         context.headers = inHeaders

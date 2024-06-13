@@ -32,6 +32,7 @@ export type STBody =
   | STMultipartForm
   | STUnion
   | STStream
+  | undefined
 
 export type STResponseValue =
   | STByteArray
@@ -52,7 +53,7 @@ export type MaybeArray<T> = T | T[]
 export type MaybeSTArray<T extends STSchema> = T | STArray<T>
 export type MaybeSTUnion<T extends STSchema> = T | STUnion<[T, ...T[]]>
 
-export type Method = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options'
+export type Method = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head'
 type MaybePromise<T> = T | Promise<T>
 
 export type ExtractParams<T extends string> = T extends `/:${infer P}/${infer Rest}`
@@ -122,6 +123,7 @@ export type GalbeConfig = {
  * ```
  */
 export type RequestSchema<
+  M extends Method = Method,
   Path extends string = string,
   H extends STHeaders = STHeaders,
   P extends Partial<STParams<Path>> = Partial<STParams<Path>>,
@@ -145,13 +147,17 @@ type OmitNotDefined<S extends RequestSchema> = {
       never]: Static<STObject<Exclude<S['params'], undefined>>>[K]
 }
 
-export type Context<Path extends string = string, S extends RequestSchema = RequestSchema> = {
+export type Context<
+  M extends Method = Method,
+  Path extends string = string,
+  S extends RequestSchema = RequestSchema
+> = {
   headers: Static<STObject<Exclude<S['headers'], undefined>>>
   params: {
     [K in ExtractParams<Path>]: K extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[K] : string
   }
   query: Static<STObject<Exclude<S['query'], undefined>>>
-  body: Static<Exclude<S['body'], undefined>>
+  body: M extends 'get' | 'options' | 'head' ? null : Static<Exclude<S['body'], undefined>> // TODO: HERE
   request: Request
   route?: Route
   state: Record<string, any>
@@ -163,14 +169,16 @@ export type Context<Path extends string = string, S extends RequestSchema = Requ
   }
 }
 export type Next = () => void | Promise<void>
-export type Hook<Path extends string = string, S extends RequestSchema = RequestSchema> = (
-  ctx: Context<Path, S>,
+export type Hook<M extends Method = Method, Path extends string = string, S extends RequestSchema = RequestSchema> = (
+  ctx: Context<M, Path, S>,
   next: Next
 ) => any | Promise<any>
-export type Handler<Path extends string = string, S extends RequestSchema = RequestSchema> = (
-  ctx: Context<Path, S>
-) => any
-export type Endpoint = {
+export type Handler<
+  M extends Method = Method,
+  Path extends string = string,
+  S extends RequestSchema = RequestSchema
+> = (ctx: Context<M, Path, S>) => any
+export type Endpoint<M extends Method> = {
   <
     Path extends string,
     P extends Partial<STParams<Path>>,
@@ -180,9 +188,9 @@ export type Endpoint = {
     R extends STResponse = STResponse
   >(
     path: Path,
-    schema: RequestSchema<Path, H, P, Q, B, R>,
-    hooks: Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[],
-    handler: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
+    schema: RequestSchema<Method, Path, H, P, Q, B, R>,
+    hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[],
+    handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
   ): void
   <
     Path extends string,
@@ -193,8 +201,8 @@ export type Endpoint = {
     R extends STResponse = STResponse
   >(
     path: Path,
-    schema: RequestSchema<Path, H, P, Q, B, R>,
-    handler: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
+    schema: RequestSchema<Method, Path, H, P, Q, B, R>,
+    handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
   ): void
   <
     Path extends string,
@@ -205,8 +213,8 @@ export type Endpoint = {
     R extends STResponse = STResponse
   >(
     path: Path,
-    hooks: Hook<Path, RequestSchema<Path, H, P, Q, B, R>>[],
-    handler: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
+    hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[],
+    handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
   ): void
   <
     Path extends string,
@@ -217,7 +225,7 @@ export type Endpoint = {
     R extends STResponse = STResponse
   >(
     path: Path,
-    handler: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
+    handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
   ): void
 }
 
@@ -239,6 +247,7 @@ export type RouteNode = {
 }
 
 export type Route<
+  M extends Method = Method,
   Path extends string = string,
   P extends Partial<STParams<Path>> = {},
   H extends STHeaders = STHeaders,
@@ -246,12 +255,12 @@ export type Route<
   B extends STBody = STBody,
   R extends STResponse = STResponse
 > = {
-  method: Method
+  method: M
   path: Path
-  schema: RequestSchema<Path, H, P, Q, B, R>
-  context: Context<Path, RequestSchema<Path, H, P, Q, B, R>>
+  schema: RequestSchema<M, Path, H, P, Q, B, R>
+  context: Context<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
   hooks: Hook[]
-  handler: Handler<Path, RequestSchema<Path, H, P, Q, B, R>>
+  handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
 }
 
 export type RouteTree = {

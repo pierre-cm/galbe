@@ -45,7 +45,7 @@ type PGR<
 type RequestOptions<H = any, B = any> = {
   headers?: H
   body?: B
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS'
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD'
 }
 
 const decoder = new TextDecoder()

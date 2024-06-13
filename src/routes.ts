@@ -107,6 +107,18 @@ class GalbeProxy {
       })
     return route
   }
+  async head(...args: any[]) {
+    //@ts-ignore
+    const route = this.#g.head(...args) as Route
+    if (this.#cb)
+      await this.#cb({
+        type: 'add',
+        route,
+        filepath: this.filepath,
+        meta: this.meta?.routes?.[route.path]?.[route.method] || {}
+      })
+    return route
+  }
 }
 
 const parseComment = (comment: string): Record<string, string | string[]> => {

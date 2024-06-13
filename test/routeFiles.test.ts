@@ -64,7 +64,8 @@ describe('routeFiles', () => {
       PUT: {},
       PATCH: {},
       DELETE: {},
-      OPTIONS: {}
+      OPTIONS: {},
+      HEAD: {}
     })
   })
 
@@ -77,7 +78,8 @@ describe('routeFiles', () => {
       PUT: {},
       PATCH: {},
       DELETE: {},
-      OPTIONS: {}
+      OPTIONS: {},
+      HEAD: {}
     })
   })
 
@@ -90,7 +92,8 @@ describe('routeFiles', () => {
       PUT: {},
       PATCH: {},
       DELETE: {},
-      OPTIONS: {}
+      OPTIONS: {},
+      HEAD: {}
     })
   })
 

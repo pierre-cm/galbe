@@ -42,7 +42,7 @@ export class GalbeRouter {
   cacheEnabled: boolean
   cachedRoutes: Map<string, Route | null>
   constructor(options?: { prefix?: string; cacheEnabled?: boolean }) {
-    this.routes = { GET: {}, POST: {}, PUT: {}, PATCH: {}, DELETE: {}, OPTIONS: {} }
+    this.routes = { GET: {}, POST: {}, PUT: {}, PATCH: {}, DELETE: {}, OPTIONS: {}, HEAD: {} }
     let prefix = options?.prefix || ''
     if (prefix && !prefix.match(/^\//)) prefix = `/${prefix}`
     this.prefix = prefix

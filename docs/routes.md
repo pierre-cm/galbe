@@ -10,7 +10,7 @@ Here is how to define routes in Galbe.
 galbe.[method](path: string, schema?: Schema, hooks?: Hooks[], handler: Handler)
 ```
 
-**method** ( get | post | put | delete | patch | options )
+**method** ( get | post | put | delete | patch | options | head )
 
 The [HTTP Request Method](https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods) for the defined route.
 

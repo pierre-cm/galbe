@@ -3,7 +3,7 @@ import { Galbe, $T } from '../src'
 import { formdata, type Case, fileHash, handleBody, isAsyncIterator } from './test.utils'
 
 const port = 7358
-const METHODS = ['get', 'post', 'put', 'patch', 'delete', 'options']
+const METHODS = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head']
 
 describe('requests', () => {
   beforeAll(async () => {
@@ -15,6 +15,7 @@ describe('requests', () => {
     galbe.patch('/test', () => {})
     galbe.delete('/test', () => {})
     galbe.options('/test', () => {})
+    galbe.head('/test', () => {})
 
     galbe.get('/headers', ctx => {
       return ctx.headers

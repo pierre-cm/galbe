@@ -7,7 +7,8 @@ const METHOD_COLOR: Record<string, string> = {
   put: '\x1b[36m',
   patch: '\x1b[33m',
   delete: '\x1b[31m',
-  options: ''
+  options: '',
+  head: ''
 }
 
 export const logRoute = (

@@ -15,7 +15,7 @@ type EndpointEntry = {
   version?: string
   visibility?: 'public' | 'private'
   scope?: string
-  method?: 'get' | 'put' | 'patch' | 'post' | 'delete' | 'options'
+  method?: 'get' | 'put' | 'patch' | 'post' | 'delete' | 'options' | 'head'
   path?: string
   schema?: { imports: Record<string, string>; name: string; def: string }
   endpoint?: { meta?: string; def?: string }
@@ -267,7 +267,7 @@ const parseEndpoints = (def: OpenAPIV3.Document) => {
     if (!match) continue
     let [_, version, visibility, scope, path] = [...match]
     path = `/${path}`
-    let methods = ['get', 'put', 'patch', 'post', 'delete', 'options'] as const
+    let methods = ['get', 'put', 'patch', 'post', 'delete', 'options', 'head'] as const
     for (let m of methods) {
       let endpointDef = pathVal?.[m]
       if (!endpointDef) continue

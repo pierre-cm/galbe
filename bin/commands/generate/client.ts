@@ -62,7 +62,8 @@ export default (cmd: Command) => {
         put: [],
         patch: [],
         delete: [],
-        options: []
+        options: [],
+        head: []
       }
       let commands: GalbeCLICommand[] = []
       const metaRoutes = g.meta?.reduce(

@@ -13,6 +13,7 @@ describe('router', () => {
     expect(router.routes.PATCH).toEqual({})
     expect(router.routes.DELETE).toEqual({})
     expect(router.routes.OPTIONS).toEqual({})
+    expect(router.routes.HEAD).toEqual({})
   })
 
   test('routes, bad syntax', async () => {
