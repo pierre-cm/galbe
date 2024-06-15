@@ -31,7 +31,7 @@ export default (cmd: Command) => {
     )
     .action(async (index, props) => {
       let { target, out } = props
-      target = target || clientTargets.includes(extname(index)?.slice(1)) ? extname(index)?.slice(1) : 'ts'
+      if (!target) target = clientTargets.includes(extname(index)?.slice(1)) ? extname(index)?.slice(1) : 'ts'
       if (!out) out = { ts: 'dist/client.ts', js: 'dist/client.js', cli: 'dist/cli' }[target]
       let pckg: any = {}
       try {
