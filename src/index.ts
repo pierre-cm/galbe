@@ -145,7 +145,7 @@ export class Galbe {
   }
   async init() {
     for (const p of this.plugins) {
-      if (p.init) await p.init(this.config?.plugin?.[p.name], this)
+      if (p.init) await p.init(this.config?.plugin?.[p.name] || {}, this)
     }
   }
   async listen(port?: number) {

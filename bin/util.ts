@@ -60,8 +60,12 @@ export const watchDir = async (
 export const instanciateRoutes = async (g: Galbe) => {
   console.log('🏗️  \x1b[1;30mConstructing routes\x1b[0m\n')
   // Main thread routes definitions
-  walkRoutes(g.router.routes, r => logRoute(r))
-  process.stdout.write('\n')
+  let hasMainRoutes = false
+  walkRoutes(g.router.routes, r => {
+    hasMainRoutes = true
+    logRoute(r)
+  })
+  if (hasMainRoutes) process.stdout.write('\n')
   // Route Files Analysis
   let routes: Record<string, { route?: Route; meta?: RouteMeta; error?: any }[]> = {}
   let errors: Record<string, any> = {}

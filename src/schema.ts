@@ -244,7 +244,19 @@ export interface MultipartFormData<K extends string = string, V extends Static<S
 }
 export interface STMultipartForm<T extends STProps = STProps> extends STSchema {
   [Kind]: 'multipartForm'
-  static: T extends undefined ? Record<string, any> : ObjectStatic<T, this['params']>
+  static: T extends undefined
+    ? {
+        [k: string]: {
+          headers: { type?: string; name: string; filename?: string }
+          content: Static<STMultipartFormValues>
+        }
+      }
+    : {
+        [K in keyof T]: {
+          headers: { type?: string; name: K; filename?: string }
+          content: Static<T[K]>
+        }
+      }
   props: T
 }
 function _MultipartForm<T extends STProps>(properties?: T, options: Options = {}): STMultipartForm<T> {

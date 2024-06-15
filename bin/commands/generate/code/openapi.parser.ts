@@ -85,13 +85,29 @@ const writeCodeFile = async (path: string, content: string, target: 'js' | 'ts')
 
 const parseOapiSchema = (
   os?: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject,
-  details: { id?: string; title?: string; description?: string } = {}
+  details: { id?: string; title?: string; description?: string } = {},
+  extra?: { media?: string }
 ): string => {
   if (!os) return `$T.any()`
   //@ts-ignore
   if (os?.$ref) return `%ref:${os.$ref}%`
   os = os as OpenAPIV3.SchemaObject
-  let options = { ...details, title: os.title, description: os.description }
+  let options: typeof details & {
+    min?: number
+    max?: number
+    exclusiveMin?: number
+    exclusiveMax?: number
+    minLength?: number
+    maxLength?: number
+    pattern?: string
+    minItems?: number
+    maxItems?: number
+    unique?: boolean
+  } = {
+    ...details,
+    title: os.title,
+    description: os.description
+  }
   let hasOptions = Object.values(options).some(v => !!v)
   let optArg = hasOptions ? `, ${JSON.stringify(options)}` : ''
   let anyOf = os.oneOf || os.anyOf || os.allOf
@@ -101,17 +117,57 @@ const parseOapiSchema = (
     )})`
   }
   if (os.type === 'boolean') return `$T.boolean(${hasOptions ? JSON.stringify(options) : ''})`
-  if (os.type === 'number') return `$T.number(${hasOptions ? JSON.stringify(options) : ''})`
-  if (os.type === 'integer') return `$T.integer(${hasOptions ? JSON.stringify(options) : ''})`
+  if (os.type === 'number') {
+    let { max, min, exclusiveMax, exclusiveMin } = {
+      max: os.maximum !== undefined && !os.exclusiveMaximum ? os.maximum : undefined,
+      min: os.minimum !== undefined && !os.exclusiveMinimum ? os.minimum : undefined,
+      exclusiveMax: os.maximum !== undefined && os.exclusiveMaximum ? os.maximum : undefined,
+      exclusiveMin: os.minimum !== undefined && os.exclusiveMinimum ? os.minimum : undefined
+    }
+    options = { ...options, min, max, exclusiveMax, exclusiveMin }
+    hasOptions = Object.values(options).some(v => !!v)
+    return `$T.number(${hasOptions ? JSON.stringify(options) : ''})`
+  }
+  if (os.type === 'integer') {
+    let max = os.maximum !== undefined && !os.exclusiveMaximum ? os.maximum : undefined
+    let min = os.minimum !== undefined && !os.exclusiveMinimum ? os.minimum : undefined
+    let exclusiveMax = os.maximum !== undefined && os.exclusiveMaximum ? os.maximum : undefined
+    let exclusiveMin = os.minimum !== undefined && os.exclusiveMinimum ? os.minimum : undefined
+    options = { ...options, min, max, exclusiveMax, exclusiveMin }
+    hasOptions = Object.values(options).some(v => !!v)
+    return `$T.integer(${hasOptions ? JSON.stringify(options) : ''})`
+  }
   if (os.type === 'string') {
     if (os.format === 'binary') return `$T.byteArray(${hasOptions ? JSON.stringify(options) : ''})`
+    let minLength = os.minLength
+    let maxLength = os.maxLength
+    let pattern = os.pattern
+    options = { ...options, minLength, maxLength, pattern }
+    hasOptions = Object.values(options).some(v => !!v)
     return `$T.string(${hasOptions ? JSON.stringify(options) : ''})`
   }
-  if (os.type === 'array') return `$T.array(${parseOapiSchema(os?.items)}${optArg})`
-  if (os.type === 'object')
+  if (os.type === 'array') {
+    let minItems = os.minItems
+    let maxItems = os.maxItems
+    let unique = os.uniqueItems
+    options = { ...options, minItems, maxItems, unique }
+    return `$T.array(${parseOapiSchema(os?.items)}${optArg})`
+  }
+  if (os.type === 'object') {
+    if (extra?.media === 'multipart/form-data') {
+      return `$T.multipartForm({${Object.entries(os?.properties || {})
+        .map(([k, v]) => `${k}:${parseOapiSchema(v)}`)
+        .join(',')}}${optArg})`
+    }
+    if (extra?.media === 'application/x-www-form-urlencoded') {
+      return `$T.urlForm({${Object.entries(os?.properties || {})
+        .map(([k, v]) => `${k}:${parseOapiSchema(v)}`)
+        .join(',')}}${optArg})`
+    }
     return `$T.object({${Object.entries(os?.properties || {})
       .map(([k, v]) => `${k}:${parseOapiSchema(v)}`)
       .join(',')}}${optArg})`
+  }
   throw new Error(`Unknown schema type ${os.type}`)
 }
 
@@ -125,8 +181,8 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
     else if (kind === 'requestBodies' || kind === 'responses') {
       let schemas = [
         ...new Set(
-          Object.entries((s as OpenAPIV3.RequestBodyObject).content || {}).map(([_k, v]) =>
-            parseOapiSchema(v.schema, { id: k })
+          Object.entries((s as OpenAPIV3.RequestBodyObject).content || {}).map(([media, v]) =>
+            parseOapiSchema(v.schema, { id: k }, { media })
           )
         )
       ]
@@ -207,8 +263,8 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
     let o = (s: string) => (!rb.required ? `$T.optional(${s})` : s)
     let bs = [
       ...new Set(
-        Object.entries(rb?.content || {}).map(([_, v]) =>
-          unref(parseOapiSchema(v.schema), m => {
+        Object.entries(rb?.content || {}).map(([media, v]) =>
+          unref(parseOapiSchema(v.schema, undefined, { media }), m => {
             let l = m.split('/')
             imports[l[l.length - 1]] = m
             return l[l.length - 1]

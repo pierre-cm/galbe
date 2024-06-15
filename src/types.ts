@@ -10,6 +10,7 @@ import type {
   STMultipartForm,
   STNumber,
   STObject,
+  STOptional,
   STSchema,
   STStream,
   STString,
@@ -146,7 +147,7 @@ type OmitNotDefined<S extends RequestSchema> = {
     : //@ts-ignore
       never]: Static<STObject<Exclude<S['params'], undefined>>>[K]
 }
-
+type StaticBody<T extends STSchema> = T extends STOptional<STSchema> ? Static<T> | null : Static<T>
 export type Context<
   M extends Method = Method,
   Path extends string = string,
@@ -157,7 +158,7 @@ export type Context<
     [K in ExtractParams<Path>]: K extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[K] : string
   }
   query: Static<STObject<Exclude<S['query'], undefined>>>
-  body: M extends 'get' | 'options' | 'head' ? null : Static<Exclude<S['body'], undefined>> // TODO: HERE
+  body: M extends 'get' | 'options' | 'head' ? null : StaticBody<Exclude<S['body'], undefined>>
   request: Request
   route?: Route
   state: Record<string, any>
@@ -188,7 +189,7 @@ export type Endpoint<M extends Method> = {
     R extends STResponse = STResponse
   >(
     path: Path,
-    schema: RequestSchema<Method, Path, H, P, Q, B, R>,
+    schema: RequestSchema<M, Path, H, P, Q, B, R>,
     hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[],
     handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
   ): void
@@ -201,7 +202,7 @@ export type Endpoint<M extends Method> = {
     R extends STResponse = STResponse
   >(
     path: Path,
-    schema: RequestSchema<Method, Path, H, P, Q, B, R>,
+    schema: RequestSchema<M, Path, H, P, Q, B, R>,
     handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
   ): void
   <
