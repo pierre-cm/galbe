@@ -1,4 +1,4 @@
-import type { GalbeConfig, Route } from './types'
+import type { GalbeConfig, Method, Route } from './types'
 
 import { readdir, lstat } from 'fs/promises'
 import { extname } from 'path'
@@ -13,7 +13,7 @@ export const DEFAULT_ROUTE_PATTERN = 'src/**/*.route.{js,ts}'
 export type RouteMeta = { head?: string } & Record<string, boolean | string | string[]>
 export type RoutesMeta = {
   header: Record<string, boolean | string | string[]>
-  routes: Record<string, Record<string, RouteMeta>>
+  routes: Record<string, Partial<Record<Method, RouteMeta>>>
 }
 export type RouteInstanciationCallback = <T extends 'add' | 'error'>(event: {
   type: T
@@ -204,7 +204,7 @@ export const metaAnalysis = async (filePath: string): Promise<RoutesMeta> => {
             // @ts-ignore
             const path = node.arguments[0].value
             // @ts-ignore
-            const method = node.callee.property.name
+            const method = node.callee.property.name as Method
             const line = node.loc?.start.line || -1
             const col = node.loc?.start.column || -1
             const com = comments?.[line]?.[col - 1] ? comments[line][col - 1] : ''

@@ -17,7 +17,7 @@ type GalbePlugin = {
 
 **name**
 
-The name should be a Unique Plugin Identifier. It should be chosen to be unique to avoid conflicts with other potential plugins. For example, Galbe's official plugins names will always start with `dev.galbe.*`.
+The name should be a Unique Plugin Identifier. It should be chosen to be unique to avoid conflicts with other potential plugins. Ideally, it will have the form of `com.example.myplugin`.
 
 **init**
 
@@ -62,44 +62,44 @@ Here is an example of a plugin implementation that handles routes tagged with `@
 
 ```ts
 // myPlugin.ts
+import type { GalbePlugin } from 'galbe'
+import { walkMetaRoutes } from 'galbe/utils'
 
-import { Galbe, type Context, type Route } from 'galbe'
+const PLUGIN_ID = 'dev.galbe.deprecated'
 
-class MyPlugin {
-  name = 'dev.galbe.example'
-  deprecated: Record<string, string[]> = {}
-  // Retrieve and store all route with a @deprecated flag metadata
-  init(config: any, galbe: Galbe) {
-    if (config?.enabled && galbe.meta) {
-      for (const f of galbe.meta) {
-        for (const [path, methods] of Object.entries(f.routes)) {
-          for (const [method, meta] of Object.entries(methods)) {
-            if (meta.deprecated) {
-              if (!this.deprecated?.[method]) this.deprecated[method] = []
-              this.deprecated[method].push(path)
-            }
-          }
-        }
+export default () => {
+  let deprecateds = new Set<string>()
+  return {
+    name: PLUGIN_ID,
+    // Init the plugin, check for deprecated metadata tags
+    init(_config, galbe) {
+      if (galbe.meta) {
+        walkMetaRoutes(galbe.meta, (method, path, meta) => {
+          if (meta.deprecated) deprecateds.add(JSON.stringify({ method, path }))
+        })
+      }
+    },
+    // Check if the current route is deprecated; if so, flag it as such and log it
+    onRoute(context) {
+      let r = context.route
+      if (!r) return
+      if (deprecateds.has(JSON.stringify({ method: r.method, path: r.path }))) {
+        context.state[PLUGIN_ID] = { deprecated: true }
+        console.warn(`Call to deprecated route "${r.method} ${r.path}"`)
+      }
+    },
+    // Add a header to the response if the route has been flagged as deprecated
+    afterHandle(response, context) {
+      let r = context.route
+      if (!r) return
+      console.log('yooo', r.method, r.path)
+      if (deprecateds.has(JSON.stringify({ method: r.method, path: r.path }))) {
+        console.log('OK...')
+        response.headers.set('x-deprecated', 'true')
       }
     }
-  }
-  // Check if the current route is deprecated; if so, flag it as such and log it
-  onRoute(context: Context) {
-    let route = context.route
-    if (this.deprecated?.[route.method]?.includes(route.path)) {
-      context.state[this.name] = { deprecated: true }
-      console.warn(`Call to deprecated route [${route.method}]${route.path}`)
-    }
-  }
-  // Add a header if the request has previously been flagged as deprecated
-  afterHandle(response: Response, context: Context) {
-    if (context.state?.[this.name]?.deprecated) {
-      response.headers.set('x-deprecated', 'true')
-    }
-  }
+  } as GalbePlugin
 }
-
-export default new MyPlugin()
 ```
 
 ```ts

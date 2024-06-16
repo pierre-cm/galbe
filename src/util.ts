@@ -1,5 +1,5 @@
-import type { Route, RouteNode } from '.'
-import type { RouteMeta } from './routes'
+import type { Method, Route, RouteNode } from '.'
+import type { RouteFileMeta, RouteMeta } from './routes'
 
 const METHOD_COLOR: Record<string, string> = {
   get: '\x1b[32m',
@@ -24,10 +24,29 @@ export const logRoute = (
   )
 }
 
+/**
+ * Walk over the routes tree. A callback is called for each route with Route infos.
+ */
 export const walkRoutes = (node: RouteNode, cb: (route: Route) => void) => {
   if (node?.routes) Object.values(node.routes).forEach(r => cb(r))
   for (let c of Object.values(node?.children || {})) walkRoutes(c, cb)
   if (node?.param) walkRoutes(node.param, cb)
+}
+
+/**
+ * Walk over the routes metadata tree. A callback is called for each route metadata with RouteMeta infos.
+ */
+export const walkMetaRoutes = (
+  meta: RouteFileMeta[],
+  cb: (method: Method, path: string, routeMeta: RouteMeta) => void
+) => {
+  for (const f of meta) {
+    for (const [path, methods] of Object.entries(f.routes)) {
+      for (const [method, meta] of Object.entries(methods)) {
+        cb(method as Method, path, meta)
+      }
+    }
+  }
 }
 
 export const isIterator = (obj: any) => typeof obj?.next === 'function'
