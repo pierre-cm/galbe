@@ -122,7 +122,9 @@ export class Galbe {
   config: GalbeConfig
   meta?: Array<RouteFileMeta> = []
   router: GalbeRouter
-  errorHandler?: ErrorHandler
+  startCb: (() => void)[] = []
+  stopCb: (() => void)[] = []
+  errorCb: ErrorHandler[] = []
   listening: boolean = false
   server?: Server
   plugins: GalbePlugin[] = []
@@ -148,24 +150,34 @@ export class Galbe {
       if (p.init) await p.init(this.config?.plugin?.[p.name] || {}, this)
     }
   }
-  async listen(port?: number) {
+  async listen(port?: number, hostname?: string) {
     port = port || this.config?.port || 3000
+    hostname = hostname || this.config?.hostname || 'localhost'
     this.config.port = port
+    this.config.hostname = hostname
     if (this.listening) this.stop()
     await this.init()
-    this.server = await server(this, port)
+    this.server = await server(this, port, hostname)
     if (Bun.env.BUN_ENV === 'development') {
-      const url = `http://localhost:${port}${this.config?.basePath || ''}`
-      console.log(`\x1b[1;30m🚀 Server running at\x1b[0m \x1b[4;34m${url}\x1b[0m\n`)
+      const url = `http${this.config.tls ? 's' : ''}://${hostname}:${port}${this.config?.basePath || ''}`
+      console.log(`\x1b[1m🚀 Server running at\x1b[0m \x1b[4;34m${url}\x1b[0m\n`)
     }
     this.listening = true
+    for (let sh of this.startCb) sh()
     return this.server
   }
   stop() {
     this.server?.stop(true)
+    for (let sh of this.stopCb) sh()
+  }
+  onStart(callback: () => void) {
+    this.startCb.push(callback)
+  }
+  onStop(callback: () => void) {
+    this.stopCb.push(callback)
   }
   onError(handler: ErrorHandler) {
-    this.errorHandler = handler
+    this.errorCb.push(handler)
   }
   get: Endpoint<'get'> = <
     Path extends string,
@@ -203,7 +215,6 @@ export class Galbe {
       | Hook<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R>>[]
       | Handler<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R>>,
     arg4?: Handler<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R>>
-    //@ts-ignore
   ) => this.add(overloadDiscriminer(this, 'post', path, arg2, arg3, arg4))
   put: Endpoint<'put'> = <
     Path extends string,

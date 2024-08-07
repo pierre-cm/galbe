@@ -58,7 +58,7 @@ export const watchDir = async (
   })
 }
 export const instanciateRoutes = async (g: Galbe) => {
-  console.log('🏗️  \x1b[1;30mConstructing routes\x1b[0m\n')
+  console.log('🏗️  \x1b[1mConstructing routes\x1b[0m\n')
   // Main thread routes definitions
   let hasMainRoutes = false
   walkRoutes(g.router.routes, r => {
@@ -100,6 +100,25 @@ export const softMerge = (base, override) => {
     } else Object.assign(base, { [key]: override[key] })
   }
   return base
+}
+
+export const killPort = async (port: number) => {
+  let getProcCmd: string[], killCmd: (port: string) => string[]
+
+  if (process.platform === 'win32') {
+    getProcCmd = ['cmd', '-c', `netstat -aon | findstr ${port}`]
+    killCmd = (pid: string) => ['taskkill', '/pid', pid, '/f']
+  } else {
+    getProcCmd = ['lsof', '-t', `-i:${port}`, '-sTCP:LISTEN']
+    killCmd = (pid: string) => ['kill', '-9', pid]
+  }
+
+  let proc = Bun.spawn(getProcCmd, { stdout: 'pipe' })
+  const pid = (await new Response(proc.stdout).text()).trim()
+  if (pid) {
+    proc = Bun.spawn(killCmd(pid), { stdout: 'pipe' })
+    await proc.exited
+  }
 }
 
 export const HttpStatus = {

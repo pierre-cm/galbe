@@ -79,8 +79,11 @@ export default (cmd: Command) => {
         ...Object.fromEntries(Object.entries(bunfig).filter(([k, v]) => v)),
         entrypoints: [buildIndex],
         outdir: resolve(CWD, out),
+        sourcemap: 'external',
         target: 'bun'
       }
+
+      await rm(resolve(CWD, out), { recursive: true })
 
       let bo = await Bun.build(buildConfig)
       if (bo.success) process.stdout.write(' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')

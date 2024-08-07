@@ -4,6 +4,9 @@ import { InternalError, RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
 import { Galbe } from './index'
 import { validateResponse } from './validator'
+import { logger } from 'girok'
+
+type MakeOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']
 const EMPTY_BODY_METHODS = ['GET', 'OPTIONS', 'HEAD']
@@ -20,7 +23,7 @@ const setupPluginCallbacks = (galbe: Galbe) => ({
   afterHandle: galbe.plugins.filter(p => p.afterHandle)
 })
 
-export default async (galbe: Galbe, port?: number) => {
+export default async (galbe: Galbe, port?: number, hostname?: string) => {
   const router = galbe.router
   if (galbe?.config?.basePath && galbe?.config?.basePath[0] !== '/')
     galbe.config.basePath = `/${galbe?.config?.basePath}`
@@ -28,17 +31,16 @@ export default async (galbe: Galbe, port?: number) => {
 
   return Bun.serve({
     port: port || galbe.config?.port || 3000,
+    hostname: hostname || galbe.config?.hostname || 'localhost',
+    tls: galbe.config?.tls,
+
     async fetch(req) {
       if (!METHODS.includes(req.method)) return new Response('', { status: 501 })
-      const context: Context = {
+      const context = {
         request: req,
         set: { headers: {} },
-        headers: {},
-        params: {},
-        query: {},
-        body: {},
         state: {}
-      }
+      } as MakeOptional<Context, 'headers' | 'params' | 'query' | 'body'>
       for (const p of pluginsCb.onFetch) {
         //@ts-ignore
         const r = await p.onFetch(context)
@@ -130,23 +132,23 @@ export default async (galbe: Galbe, port?: number) => {
                 await callChain[idx + 1].call()
               }
             }
-            let r = await hook(context, next)
+            let r = await hook(context as Context, next)
             if (r) return r
             if (!nextCalled && !handlerCalled) await next()
           }
         }))
         callChain.push({
           call: async () => {
-            response = await handlerWrapper(context)
+            response = await handlerWrapper(context as Context)
             context.set.status = response instanceof Response ? response.status : 200
           }
         })
         if (callChain.length > 1) {
           let r = await callChain[0].call()
           if (r) response = r
-        } else response = await handlerWrapper(context)
+        } else response = await handlerWrapper(context as Context)
 
-        const parsedResponse = responseParser(response, context, schema.response)
+        const parsedResponse = responseParser(response, context as Context, schema.response)
 
         if (galbe.config?.responseValidator?.enabled && schema.response)
           validateResponse(response, schema.response, parsedResponse.status || 200)
@@ -161,7 +163,7 @@ export default async (galbe: Galbe, port?: number) => {
       } catch (error) {
         context.set.status = error instanceof RequestError ? error.status : 500
         let customError
-        if (galbe.errorHandler) customError = responseParser(galbe.errorHandler(error, context), context)
+        for (let eh of galbe.errorCb) customError = responseParser(eh(error, context as Context), context as Context)
         if (customError) return customError
         if (error instanceof InternalError) {
           console.log(`Internal Error`, error?.payload || '')

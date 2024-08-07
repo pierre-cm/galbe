@@ -165,7 +165,10 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     let meta = metaRoutes?.[r.path]?.[r.method]
     let path = r.path.replaceAll(/:([^\/]+)/g, '{$1}')
     if (!(path in paths)) paths[path] = {}
-    let tags = [...(meta?.tags?.split(' ')?.map((t: string) => t.trim()) || []), ...(meta?.tag || [])]
+    let tags = [
+      ...(meta?.tags?.split(' ')?.map((t: string) => t.trim()) || []),
+      ...(typeof meta?.tag === 'string' ? [meta?.tag] : meta?.tag || [])
+    ]
     let security: Record<string, any> = []
 
     let pathParam = r.schema?.params

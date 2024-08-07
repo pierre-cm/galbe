@@ -1,4 +1,4 @@
-import type { ServeOptions, TLSServeOptions } from 'bun'
+import type { ServeOptions, TLSOptions, TLSServeOptions } from 'bun'
 import type {
   STAny,
   STArray,
@@ -96,7 +96,9 @@ export type STQuery = Record<string, STQueryValue>
  */
 export type GalbeConfig = {
   port?: number
+  hostname?: string
   basePath?: string
+  tls?: TLSOptions
   server?: Exclude<ServeOptions, 'port'> | TLSServeOptions
   routes?: boolean | string | string[]
   router?: { cacheEnabled: boolean }
@@ -306,8 +308,8 @@ export class InternalError extends RequestError {
 export type GalbePlugin = {
   name: string
   init?: (config: any, galbe: Galbe) => MaybePromise<void>
-  onFetch?: (context: Context) => MaybePromise<Response | void>
-  onRoute?: (context: Context) => MaybePromise<Response | void>
+  onFetch?: (context: Pick<Context, 'request' | 'set' | 'state'>) => MaybePromise<Response | void>
+  onRoute?: (context: Pick<Context, 'request' | 'set' | 'state' | 'route'>) => MaybePromise<Response | void>
   beforeHandle?: (context: Context) => MaybePromise<Response | void>
   afterHandle?: (response: Response, context: Context) => MaybePromise<Response | void>
   cli?: (commands: GalbeCLICommand[]) => MaybePromise<GalbeCLICommand[] | void>

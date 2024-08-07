@@ -10,6 +10,7 @@ const METHOD_COLOR: Record<string, string> = {
   options: '',
   head: ''
 }
+const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g
 
 export const logRoute = (
   r: { method: string; path: string },
@@ -17,11 +18,11 @@ export const logRoute = (
   format?: { maxPathLength?: number }
 ) => {
   let color = METHOD_COLOR?.[r.method] || ''
-  console.log(
-    `    [${color}${`${r.method.toUpperCase()}\x1b[0m]`.padEnd(12, ' ')} ${r.path
-      .padEnd(format?.maxPathLength ?? r.path.length, ' ')
-      .replaceAll(/:([^\/]+)/g, '\x1b[0;33m:$1\x1b[0m')}${meta?.head ? `  ${meta.head}` : ''}`
-  )
+  let routeLog = `[${color}${`${r.method.toUpperCase()}\x1b[0m]`.padEnd(12, ' ')} ${r.path
+    .padEnd(format?.maxPathLength ?? r.path.length, ' ')
+    .replaceAll(/:([^\/]+)/g, '\x1b[0;33m:$1\x1b[0m')}${meta?.head ? `  ${meta.head}` : ''}\x1b[0m`
+  if (meta?.deprecated) routeLog = `\x1b[0;9m\x1b[38;5;244m${routeLog.replaceAll(ansiRegex, '')}\x1b[0m`
+  console.log(`    ${routeLog}`)
 }
 
 /**

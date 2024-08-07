@@ -2,7 +2,7 @@ import { $ } from 'bun'
 import { Command, Option } from 'commander'
 import { resolve } from 'path'
 
-import { CWD, fmtInterval, fmtVal, instanciateRoutes, watchDir } from '../util'
+import { CWD, fmtInterval, fmtVal, instanciateRoutes, killPort, watchDir } from '../util'
 import { Galbe } from '../../src'
 
 const defaultPort = 3000
@@ -22,13 +22,21 @@ export default (cmd: Command) => {
     )
     .addOption(new Option('-w, --watch', 'watch file changes').default(false, fmtVal(false)))
     .addOption(new Option('-nc, --noclear', "don't clear on file changes").default(false, fmtVal(false)))
+    .addOption(
+      new Option('-f, --force', 'kills any process running on defined port before strating the server').default(
+        false,
+        fmtVal(false)
+      )
+    )
     .action(async (index, props) => {
-      const { port, watch, noclear } = props
+      const { port, watch, noclear, force } = props
       const clear = !noclear
       const indexPath = resolve(CWD, index)
       let g: Galbe
 
-      Bun.env.BUN_ENV = 'development'
+      if (!Bun.env.BUN_ENV) Bun.env.BUN_ENV = 'development'
+
+      if (force) await killPort(port || 3000)
 
       if (watch) {
         await watchDir(
