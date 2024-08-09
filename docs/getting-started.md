@@ -14,29 +14,40 @@ This is the recommended way of setting up a Galbe project.
 
 ```bash
 $ bun create galbe app
+```
+
+The Galbe starter CLI will request you to chose a template and a target language for your project. Let's select `hello` as template and `ts` as language. This will create a new project under `app` directory.
+
+Now you can navigate to your newly created project and install it:
+
+```bash
 $ cd app
 $ bun install
 ```
 
-This will create a new project under `app` directory and install it.
-
-Now you can start the dev server by running:
+And start the dev server by running:
 
 ```bash
 $ bun dev
+🏗️  Constructing routes
+
+    hello.route.ts
+    [GET]     /hello/:name  Greeting endpoint
+
+done
+
+🚀 Server running at http://localhost:3000
 ```
 
-This will start a web server on `localhost:3000`.
-
-To verify that the project was setup correctly and is running, try to reach `localhost:3000/hello` endpoint, this should return following greeting message:
+Let's try to reach the hello endpoint:
 
 ```bash
-$ curl localhost:3000/hello
-Hello from Galbe!
+$ curl localhost:3000/hello/John?age=32
+Hello John! You're 32 y.o.
 ```
 
 > [!TIP]  
-> By default, the dev server automatically reloads on every file change.
+> If you want to have a more complete view of Galbe capabilities, feel free to take a look at the `demo` template from the Galbe starter CLI.
 
 ## Manual installation
 
@@ -59,15 +70,15 @@ Open `package.json` file and add the following scripts:
 }
 ```
 
-As you can see, those scripts rely on Galbe CLI to run and build the application. You will find more info about Galbe CLI available options in the next section [Galbe CLI](#galbe-cli).
+As you can see, those scripts rely on Galbe CLI to run and build the application. You will find more info about it on the [CLI](cli.md) page.
 
 This require your `index.ts` to export a default Galbe instance in order to work. As in the following example:
 
 ```ts
 import { Galbe } from 'galbe'
 
-const g = new Galbe({ port: 3000 })
-g.get('/hello', () => 'Hello Mom!')
+const galbe = new Galbe({ port: 3000 })
+galbe.get('/hello', () => 'Hello Mom!')
 
 export default galbe
 ```
@@ -76,40 +87,6 @@ This is the recommended way to proceed but it is not mandatory. Galbe instances 
 
 > [!WARNING]
 > In the case you decide to not rely on Galbe CLI to run/build your app, you will not have access to [Automatic Route Analyzer](routes.md#automatic-route-analyzer) feature.
-
-### Galbe CLI
-
-```bash
-$ galbe <command> <argument> [options]
-```
-
-Here are the available commands:
-
-**dev**
-
-Start a dev server running your Galbe application.
-
-_argument_
-
-The path of the file exporting your Galbe instance
-
-_options_
-
-- `--port` or `-p`: port number (default: 3000)
-- `--watch` or `-w`: watch file changes (default: true)
-
-**build**
-
-Bundle your Galbe application.
-
-_argument_
-
-The path of the file exporting your Galbe instance
-
-_options_
-
-- `--out` or `-o`: output file | directory (default: app | dist )
-- `--compile` or `-c`: create a standalone executable (default: false)
 
 ## Configuration
 
@@ -120,6 +97,10 @@ const galbe = new Galbe(configuration)
 ```
 
 ### Properties
+
+**hostname**
+
+The hostname of the server. Default is `localhost`.
 
 **port**
 
@@ -136,6 +117,16 @@ A Glob Pattern or a list of Glob patterns defining the route files to be analyze
 **plugin**
 
 A property that can be used by plugins to add plugin's specific configuration. Every key should correspond to a [Unique Plugin Identifier](plugins.md).
+
+**tls**
+
+Enable or disable TLS support. Default value is `false`.
+
+- **tls.key**: The path to the private key file
+
+- **tls.cert**: The path to the certificate file
+
+- **tls.ca**: The path to the certificate authority file
 
 **requestValidator.enabled**
 
@@ -229,3 +220,27 @@ You can find more info about Route Files definition in the [Routes Files](routes
 
 > [!NOTE]
 > The examples provided above will work with the default configuration, but you can easily customize the routes property to fit your own project structure. Simply redefine the `routes` property with your own pattern(s) to to fit your own project structure.
+
+## How to debug
+
+The easiest way to debug your app is by installing the [VSCode Bun extension](https://marketplace.visualstudio.com/items?itemName=oven.bun-vscode).
+
+You can then create a `.vscode/launch.json` config file in your project root directory. Here is an example of configuration:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "bun",
+      "request": "launch",
+      "name": "Debug Galbe",
+      "program": "node_modules/galbe/bin/cli.ts",
+      "env": { "TERM": "xterm" },
+      "cwd": "${workspaceFolder}",
+      "runtime": "bun",
+      "runtimeArgs": ["dev", "index.ts", "--watch", "--force"]
+    }
+  ]
+}
+```

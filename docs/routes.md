@@ -82,7 +82,7 @@ galbe.get(
 > [!NOTE]
 > This feature is only available if you run/build the app via the [Galbe CLI](getting-started.md#galbe-cli), which is the case by default if you created your app following the [Automatic Installation](getting-started.md#automatic-installation) step or if you configured your package.json to do so.
 
-The Automatic Route Analyzer is responsible for analyzing all the Route Files of your project and setting up the route definitions for your Galbe server automatically. By default, the analyzer will search for Route Files matching paths like `src/**/*.route.{js,ts}`. This can be configured by modifying the value of `routes` property of your Galbe configuration. A value of `false` will disable the analyzer.
+The Automatic Route Analyzer is responsible for analyzing all the Route Files of your project and setting up the route definitions for your Galbe server automatically. By default, the analyzer will search for Route Files matching paths like `src/**/*.route.{js,ts}`. This can be configured by modifying the value of `routes` property of your Galbe configuration. A value of `false` will disable the route analyzer.
 
 ### Route Files
 
@@ -90,15 +90,6 @@ In order to be properly analyzed, Route Files must export a default function tha
 
 ```ts
 export default g => {
-  g.get('/foo/:bar', ctx => ctx.params.bar)
-}
-```
-
-The same example in Typescript:
-
-```ts
-import type { Galbe } from 'galbe'
-export default (g: Galbe) => {
   g.get('/foo/:bar', ctx => ctx.params.bar)
 }
 ```
@@ -120,5 +111,3 @@ export default g => {
   g.get('/foo/:bar', ctx => ctx.params.bar)
 }
 ```
-
-You will find more information about comment metadata and how to use them along with examples in the [Plugin](plugins.md) section.

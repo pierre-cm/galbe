@@ -60,8 +60,9 @@ galbe.use(plugin)
 
 Here is an example of a plugin implementation that handles routes tagged with `@deprecated` metadata (See [Route files](routes.md#route-files) section about metadata).
 
+deprecated.plugin.ts
+
 ```ts
-// myPlugin.ts
 import type { GalbePlugin } from 'galbe'
 import { walkMetaRoutes } from 'galbe/utils'
 
@@ -84,7 +85,6 @@ export default () => {
       let r = context.route
       if (!r) return
       if (deprecateds.has(JSON.stringify({ method: r.method, path: r.path }))) {
-        context.state[PLUGIN_ID] = { deprecated: true }
         console.warn(`Call to deprecated route "${r.method} ${r.path}"`)
       }
     },
@@ -92,9 +92,7 @@ export default () => {
     afterHandle(response, context) {
       let r = context.route
       if (!r) return
-      console.log('yooo', r.method, r.path)
       if (deprecateds.has(JSON.stringify({ method: r.method, path: r.path }))) {
-        console.log('OK...')
         response.headers.set('x-deprecated', 'true')
       }
     }
@@ -102,17 +100,14 @@ export default () => {
 }
 ```
 
+index.ts
+
 ```ts
-// index.ts
-
 import { Galbe } from 'galbe'
-import config from './galbe.config'
-import myPlugin from './myPlugin'
+import deprecatedPlugin from './deprecated.plugin'
 
-const galbe = new Galbe(config)
-galbe.use(myPlugin)
+const galbe = new Galbe()
+galbe.use(deprecatedPlugin())
 
 export default galbe
 ```
-
-As you can see in this example, the [Context](context.md#definition) `state` property is used to persist information between plugins interceptor methods. It is a good practice to scope any information stored in the state with the plugin name, as it can also be used by other plugins and hooks to store data in the context.
