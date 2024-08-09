@@ -82,7 +82,14 @@ export default (cmd: Command) => {
               [...r.path.matchAll(/:([^\/]+)/g)]?.map(m => [
                 m?.[1],
                 {
-                  ...(r.schema?.params?.[m?.[1]] ? { type: schemaToTypeStr(r.schema.params[m[1]]) } : {})
+                  ...(r.schema?.params?.[m?.[1]]
+                    ? {
+                        type: schemaToTypeStr(r.schema.params[m[1]]),
+                        ...(r.schema.params[m[1]]?.description
+                          ? { description: r.schema.params[m[1]].description as string }
+                          : {})
+                      }
+                    : { type: 'string' })
                 }
               ])
             ) || {},
@@ -106,14 +113,15 @@ export default (cmd: Command) => {
             description: meta.head,
             route,
             arguments:
-              Object.entries((r.schema?.params || {}) as Record<string, STSchema>)?.map(([k, p]) => {
-                let type = schemaToTypeStr({ ...p, [Optional]: false })
-                return {
-                  name: k,
-                  type: type === 'boolean' ? '' : `<${type}>`,
-                  description: p?.description || ''
+              Object.entries((route?.params || {}) as Record<string, { type: string; description?: string }>)?.map(
+                ([k, p]) => {
+                  return {
+                    name: k,
+                    type: p.type === 'boolean' ? '' : `<${p.type}>`,
+                    description: p?.description || ''
+                  }
                 }
-              }) || [],
+              ) || [],
             options:
               Object.entries((r.schema?.query || {}) as Record<string, STSchema>)?.map(([k, o]) => {
                 let type = schemaToTypeStr({ ...o, [Optional]: false })

@@ -42,8 +42,9 @@ type PGR<
   O extends number = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207 | 208 | 226
 > = Promise<GR<S, B, O>>
 
-type RequestOptions<H = any, B = any> = {
+type RequestOptions<H = any, Q = any, B = any> = {
   headers?: H
+  query?: Q
   body?: B
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD'
 }
@@ -61,7 +62,7 @@ export default class GalbeClient {
     return`${method} = {\n${list.map( r => {
       let p = Object.entries(r.params)
       let schemas = Object.keys(r.schemas).length ?
-        `<${r.schemas.headers??'any'},${r.schemas.body??'any'}>`: 
+        `<${r.schemas.headers??'any'},${r.schemas.query??'any'},${r.schemas.body??'any'}>`: 
         ''
       let oks = Object.keys(r.schemas?.response||{}).filter(s=>s>=200&&s<300)
       let responses = Object.keys(r.schemas?.response||{}).length ?
@@ -79,6 +80,8 @@ export default class GalbeClient {
 
   async fetch(path: string, options: RequestOptions) {
     let url = `${this?.config?.server?.url ?? ''}${path}`
+    const params = new URLSearchParams(options?.query || {})
+    url = `${url}?${params.toString()}`
     let res = await fetch(url, {
       method: options?.method || 'GET',
       headers: { ...DEFAULT_HEADERS, ...(options?.headers || {}) },
@@ -148,7 +151,7 @@ export default class GalbeClient {
     return list.filter(r=>r.alias).map(r => {
       let p = Object.entries(r.params)
       let schemas = Object.keys(r.schemas).length ?
-        `<${r.schemas.headers??'any'},${r.schemas.body??'any'}>`: 
+        `<${r.schemas.headers??'any'},${r.schemas.query??'any'},${r.schemas.body??'any'}>`: 
         ''
       let oks = Object.keys(r.schemas?.response||{}).filter(s=>s>=200&&s<300)
       let responses = Object.keys(r.schemas?.response||{}).length ?

@@ -100,7 +100,7 @@ const formatDefault = def =>
     : def ?? 'undefined';
 
 result = commands.map(c=>{
-  let args = c.arguments.map(a=>`.argument("${a.type}", "${a.description}")`)
+  let args = c.arguments.map(a=>`.argument("${a.name}", "${a.description || a.name+' argument' || ''}")`)
   let optionsBase = [
     {name: '%format', short:'%f', type: '[string]', description: 'response format [\'s\',\'h\',\'b\',\'t\',\'p\']', default:["s","b","p"]},
     {name: '%header', short:'%h', type: '<string...>', description: 'request header formated as headerName=headerValue', default:[]},
