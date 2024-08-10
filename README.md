@@ -25,3 +25,5 @@ bun install && bun dev
 The detailed documentation is available at [galbe.dev](https://galbe.dev).
 
 ## Contributing
+
+Please refer to the [Contributing Guide](https://github.com/pierre-cm/galbe/blob/main/docs/CONTRIBUTING.md) to start contributing to Galbe.
