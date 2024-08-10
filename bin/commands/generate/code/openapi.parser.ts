@@ -280,6 +280,7 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
   let rs = Object.fromEntries(
     Object.entries(r || {}).map(([status, sv]) => {
       let entries: string[] = []
+      let s: string = Number.isInteger(Number(status)) ? status : '200'
       for (let [_type, tv] of Object.entries((sv as OpenAPIV3.ResponseObject)?.content || {})) {
         entries.push(
           unref(parseOapiSchema(tv.schema), m => {
@@ -289,7 +290,7 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
           })
         )
       }
-      return [status, [...new Set(entries)]]
+      return [s, [...new Set(entries)]]
     })
   )
 
