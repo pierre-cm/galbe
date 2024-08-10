@@ -12,7 +12,7 @@ Install it globally using the following command:
 $ bun install -g galbe
 ```
 
-Run it with `bunx`:
+Or run it with `bunx`:
 
 ```bash
 $ bunx galbe
@@ -38,16 +38,19 @@ Start a dev server running your Galbe application.
 
 #### Example
 
-```js
-// index.js
+index.js
 
+```js
 import { Galbe } from 'galbe'
 
-export default new Galbe()
+const g = new Galbe()
+g.get('example', () => '')
+
+export default g
 ```
 
 ```bash
-$ galbe dev index.js -p 7357 --watch
+$ galbe dev index.js -p 7357 -w
 ```
 
 ## build
@@ -66,13 +69,13 @@ Bundle your Galbe application.
 | ----- | --------- | ------------------------------ | -------- |
 | -o    | --out     | output directory               | dist/app |
 | -C    | --compile | create a standalone executable | false    |
-| -c    | --config  | bun config (js or ts)          | -        |
+| -c    | --config  | bun config (js or ts)          |          |
 
 #### Example
 
-```js
-// index.js
+index.js
 
+```js
 import { Galbe } from 'galbe'
 
 export default new Galbe()
@@ -105,7 +108,7 @@ Generate a client for your Galbe application.
 
 #### Examples
 
-Let's setup a new Galbe project:
+Let's first setup a new Galbe project:
 
 ```bash
 $ bun create galbe galbe-example -t hello -l ts
@@ -128,9 +131,9 @@ $ galbe generate client index.ts
 This will generate a `dist/client.ts` client lib by default.
 You can import it and use it like in the following example:
 
-```ts
-// client_example.ts
+client_example.ts
 
+```ts
 import HelloClient from './dist/client'
 
 const client = new HelloClient({ server: { url: 'http://localhost:3000' } })
@@ -191,8 +194,9 @@ $ ./dist/cli hello Pierre -a 29
 Hello Pierre! You're 29 y.o.
 ```
 
-> [!NOTE]
-> In order to be able to fetch the correct server url, the cli requires to set an env variable `GCLI_SERVER_URL` with the url of your Galbe app.
+> [!IMPORTANT]
+> A `GCLI_SERVER_URL` environment variable must be defined. It should indicates the url of the Galbe server you want to target.
+> In that specific case `http://localhost:3000`.
 
 ### spec
 
@@ -209,7 +213,7 @@ Generate the spec of your Galbe application.
 | Short | Long     | Descritpion                                      | Default                 |
 | ----- | -------- | ------------------------------------------------ | ----------------------- |
 | -t    | --target | spec target [openapi:3.0:json, openapi:3.0:yaml] | openapi:3.0:yaml        |
-| -b    | --base   | base spec file                                   | -                       |
+| -b    | --base   | base spec file                                   |                         |
 | -o    | --out    | output file                                      | spec/api.(yaml \| json) |
 
 #### Example
@@ -302,7 +306,7 @@ This should generate the code of our application in the `src` directory by defau
 To test that the code was successfully generated, you can run:
 
 ```bash
-$ bunx galbe dev index.ts
+$ galbe dev index.ts
 🏗️  Constructing routes
 
     src/routes/pet.route.ts
