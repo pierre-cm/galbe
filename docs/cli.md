@@ -111,7 +111,7 @@ Generate a client for your Galbe application.
 Let's first setup a new Galbe project:
 
 ```bash
-$ bun create galbe galbe-example -t hello -l ts
+$ bun create galbe galbe-example --template hello --lang ts
 $ cd galbe-example
 $ bun install
 ```
