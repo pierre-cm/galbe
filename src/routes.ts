@@ -231,7 +231,7 @@ export const defineRoutes = async (
   if (!routes) return
   const root = process.cwd()
   if (typeof routes === 'string') {
-    for await (const path of new Glob(routes).scan({ cwd: root, absolute: true, onlyFiles: false })) {
+    for await (const path of new Glob(routes).scan({ cwd: root, absolute: true, onlyFiles: false, dot: true })) {
       const isDir = (await lstat(path)).isDirectory()
 
       let files: string[] = []

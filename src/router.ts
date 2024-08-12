@@ -1,7 +1,7 @@
 import type { Method, Route, RouteNode } from './types'
 import { MethodNotAllowedError, NotFoundError } from './types'
 
-const ROUTE_REGEX = /^(\/(\*|:?\d+|:?\w+|:?[\w\d][\w-]+[\w\d]))*\/?$/
+const ROUTE_REGEX = /^(\/(\*|:?\d+|:?\w+|:?[\w\d.][\w-.]+[\w\d]))*\/?$/
 
 const walk = (path: string[], node: RouteNode, alts: RouteNode[] = []): RouteNode => {
   if (path.length < 1) throw new NotFoundError()

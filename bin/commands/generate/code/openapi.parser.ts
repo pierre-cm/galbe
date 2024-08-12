@@ -217,7 +217,7 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
   let imports = {}
   let p = path.replaceAll(/\{([^\}]*)\}/g, ':$1')
   let description = def.summary || def.description
-  let pathName = path.replaceAll(/\/\{[^\}]*\}/g, 'X').replaceAll(/[^$\w\d-_]([$\w\d-_])/g, (_, $1) => $1.toUpperCase())
+  let pathName = path.replaceAll(/\/\{[^\}]*\}/g, 'X').replaceAll(/[^$\w\d_]+([$\w\d_])/g, (_, $1) => $1.toUpperCase())
   let schemaName = `${method}${pathName}`.replace(/^\w/, c => c.toUpperCase())
 
   let meta = '/**\n'

@@ -13,18 +13,7 @@ describe('router', () => {
   test('routes, bad syntax', async () => {
     const galbe = new Galbe()
 
-    const invalidPaths = [
-      '.',
-      '/@',
-      '/-ta',
-      '/test/-ta',
-      '/test/my.path',
-      '/hell@/w0rld',
-      '/last-',
-      '../',
-      './x',
-      '/hello?'
-    ]
+    const invalidPaths = ['.', '/@', '/-ta', '/test/-ta', '/hell@/w0rld', '/last-', '../', './x', '/hello?']
 
     for (const p of invalidPaths) {
       try {
