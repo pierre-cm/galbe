@@ -8,7 +8,9 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
   const errors: ValidationError[] = []
   const iElt = elt
 
-  if (schema[Kind] === 'boolean') {
+  if (schema[Kind] === 'null') {
+    if (elt !== null) throw `Expected null value got ${iElt}`
+  } else if (schema[Kind] === 'boolean') {
     if (typeof elt === 'string') {
       if (parse) elt = elt === 'true' ? true : elt === 'false' ? false : null
       else throw `Expected boolean, got string.`

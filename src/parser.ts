@@ -56,7 +56,7 @@ export const requestBodyParser = async (
               }
             })
           } else return new Uint8Array()
-        } else if (schema?.[Optional]) {
+        } else if (schema?.[Optional] || kind === 'null') {
           return null
         } else {
           throw new RequestError({ status: 400, payload: { body: `Not a valid ${kind}` } })
@@ -75,7 +75,8 @@ export const requestBodyParser = async (
         } else return null
       }
     } else {
-      if (kind === 'byteArray') {
+      if (kind === 'null') throw new RequestError({ status: 400, payload: { body: `Expected null body` } })
+      else if (kind === 'byteArray') {
         if (isStream) return rsToAsyncIterator(body)
         const bytes = await readableStreamToArrayBuffer(body)
         return new Uint8Array(bytes)
@@ -435,7 +436,7 @@ const parseMultipartContent = (
       } else {
         throw new RequestError({
           status: 400,
-          payload: { body: { [headers.name]: `Expect ${schema?.props[headers.name][Kind]} found json` } }
+          payload: { body: { [headers.name]: `Expected ${schema?.props[headers.name][Kind]} found json` } }
         })
       }
     }

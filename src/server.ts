@@ -4,7 +4,6 @@ import { InternalError, RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
 import { Galbe } from './index'
 import { validateResponse } from './validator'
-import { logger } from 'girok'
 
 type MakeOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
@@ -140,7 +139,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         callChain.push({
           call: async () => {
             response = await handlerWrapper(context as Context)
-            context.set.status = response instanceof Response ? response.status : 200
+            context.set.status = response instanceof Response ? response.status : context.set.status || 200
           }
         })
         if (callChain.length > 1) {

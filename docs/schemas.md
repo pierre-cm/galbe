@@ -44,6 +44,14 @@ Schema Type matching integer `number` values.
 const intSchema = $T.integer(options)
 ```
 
+#### Null
+
+Schema Type matching `null` values.
+
+```ts
+const nullSchema = $T.null(options)
+```
+
 #### Any
 
 Schema Type matching `any` of the previous Schema Types.
@@ -66,6 +74,22 @@ Makes any type optional. This allows for `undefined` values.
 
 ```ts
 const optionalSchema = $T.optional($T.string())
+```
+
+#### Nullable
+
+Makes any type nullable. This allows for `null` values.
+
+```ts
+const nullableSchema = $T.nullable($T.string())
+```
+
+#### Nullish
+
+Makes any type nullish. This allows for `undefined` and `null` values.
+
+```ts
+const nullishSchema = $T.nullish($T.string())
 ```
 
 #### Union
@@ -155,7 +179,7 @@ const schema = {
 body: STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | STObject | STArray | STMulripartForm | STUrlForm | STStream
 ```
 
-#### Json
+#### Object
 
 To define an `application/json` request body, use `STObject` Schema Type. Example:
 

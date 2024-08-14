@@ -324,14 +324,28 @@ describe('parser', () => {
           bool: false,
           object: {},
           array: [],
-          any: false
+          any: false,
+          null: null,
+          nullable: null,
+          nullish: 42
         }),
         type,
         schema,
         expected: {
           status: 200,
           type: 'object',
-          resp: { ba: '', string: '', number: 0, bool: false, object: {}, array: [], any: false }
+          resp: {
+            ba: '',
+            string: '',
+            number: 0,
+            bool: false,
+            object: {},
+            array: [],
+            any: false,
+            null: null,
+            nullable: null,
+            nullish: 42
+          }
         }
       },
       {
@@ -343,7 +357,10 @@ describe('parser', () => {
           object: { foo: 'bar' },
           array: [false, 'one', 2],
           any: '36',
-          optional: 'optional'
+          optional: 'optional',
+          null: null,
+          nullable: 'test',
+          nullish: null
         }),
         type,
         schema,
@@ -358,7 +375,10 @@ describe('parser', () => {
             object: { foo: 'bar' },
             array: [false, 'one', 2],
             any: '36',
-            optional: 'optional'
+            optional: 'optional',
+            null: null,
+            nullable: 'test',
+            nullish: null
           }
         }
       },
@@ -370,7 +390,8 @@ describe('parser', () => {
           bool: 'x',
           object: [],
           array: {},
-          any: {}
+          any: {},
+          null: ''
         }),
         type,
         schema,
@@ -383,7 +404,9 @@ describe('parser', () => {
               number: 'a is not a valid number',
               bool: "x is not a valid boolean. Should be 'true' or 'false'",
               object: 'Expected an object, not an array',
-              array: 'Not a valid array'
+              array: 'Not a valid array',
+              null: 'Expected null value got ',
+              nullable: 'Required'
             }
           }
         }

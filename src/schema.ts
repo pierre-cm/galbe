@@ -31,6 +31,7 @@ export interface ArrayOptions extends Options {
 }
 export interface STSchema extends Options {
   [Kind]:
+    | 'null'
     | 'boolean'
     | 'byteArray'
     | 'number'
@@ -61,6 +62,7 @@ export type STPropsValue =
   | STObject
   | STUnion
   | STAny
+  | STNull
 export type STProps = Record<string | number, STPropsValue>
 
 type Evaluate<T> = T extends infer O ? { [K in keyof O]: O[K] } : never
@@ -84,6 +86,17 @@ export type STStream<T extends STSchema = STSchema> = T & {
   [Stream]: true
 }
 
+// Null
+export interface STNull extends STSchema, Options {
+  [Kind]: 'null'
+  static: null
+}
+export function _Null(options: Options = {}): STNull {
+  return {
+    ...options,
+    [Kind]: 'null'
+  } as unknown as STNull
+}
 // ByteArray
 export interface STByteArray extends STSchema, ByteArrayOptions {
   [Kind]: 'byteArray'
@@ -310,11 +323,27 @@ export function _Stream<T extends STStreamable>(schema: T): STStream<T> {
     [Stream]: true
   } as unknown as STStream<T>
 }
+// Nullable
+type STNullable<T extends STSchema> = STUnion<[T, STNull]>
+// Nullish
+type STNullish<T extends STSchema> = STOptional<STNullable<T>>
 
 export class SchemaType {
   /** Creates an Optional Schema Type Wrapper*/
   public optional<T extends STSchema>(schema: T): STOptional<T> {
     return { ...schema, [Optional]: true }
+  }
+  /** Creates an Nullable Schema Type Wrapper*/
+  public nullable<T extends STSchema>(schema: T): STNullable<T> {
+    return { ..._Union([schema, _Null()], {}) }
+  }
+  /** Creates an Nullish Schema Type Wrapper*/
+  public nullish<T extends STSchema>(schema: T): STNullish<T> {
+    return { ..._Union([schema, _Null()], {}), [Optional]: true }
+  }
+  /** Creates a Null Schema Type */
+  public null(options: Options = {}): STNull {
+    return _Null(options)
   }
   /** Creates a ByteArray Schema Type */
   public byteArray(options: ByteArrayOptions = {}): STByteArray {
@@ -419,7 +448,8 @@ export const schemaToTypeStr = (schema: STSchema): string => {
   let type = 'unknown'
   let kind = schema[Kind]
 
-  if (kind === 'boolean') type = 'boolean'
+  if (kind === 'null') type = 'null'
+  else if (kind === 'boolean') type = 'boolean'
   else if (kind === 'byteArray') type = 'Uint8Array'
   else if (kind === 'number') type = 'number'
   else if (kind === 'integer') type = 'number'

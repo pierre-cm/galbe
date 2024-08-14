@@ -32,7 +32,10 @@ export const schema_objectBase = {
 export const schema_object = {
   ...schema_objectBase,
   object: $T.object($T.any()),
-  array: $T.array()
+  array: $T.array(),
+  null: $T.null(),
+  nullable: $T.nullable($T.string()),
+  nullish: $T.nullish($T.number())
 }
 
 export const isAsyncIterator = (obj: any) => {

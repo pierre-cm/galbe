@@ -51,8 +51,12 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       //@ts-ignore
       return { schema: { $ref: `#/components/schemas/${schema.id}` } }
     }
-    // TODO add constraints min, max etc.
-    if (kind === 'boolean') s = { type: 'boolean' }
+
+    if (kind === 'null') {
+      s = {
+        anyOf: ['null']
+      }
+    } else if (kind === 'boolean') s = { type: 'boolean' }
     else if (kind === 'byteArray') s = { type: 'string', format: 'byte' }
     else if (kind === 'number')
       s = {
