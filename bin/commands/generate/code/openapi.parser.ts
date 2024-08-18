@@ -108,16 +108,22 @@ const parseOapiSchema = (
     title: os.title,
     description: os.description
   }
+  let resp = ''
   let hasOptions = Object.values(options).some(v => !!v)
   let optArg = hasOptions ? `, ${JSON.stringify(options)}` : ''
   let anyOf = os.oneOf || os.anyOf || os.allOf
+  let required = os.required
+  let nullable = os.nullable
+
   if (anyOf?.length) {
-    return `$T.union([${anyOf.map(s => parseOapiSchema(s as OpenAPIV3.SchemaObject)).join(',')}], ${JSON.stringify(
-      options
-    )})`
-  }
-  if (os.type === 'boolean') return `$T.boolean(${hasOptions ? JSON.stringify(options) : ''})`
-  if (os.type === 'number') {
+    if (anyOf.length === 1) resp = parseOapiSchema(anyOf[0] as OpenAPIV3.SchemaObject, details, extra)
+    else {
+      resp = `$T.union([${anyOf.map(s => parseOapiSchema(s as OpenAPIV3.SchemaObject)).join(',')}], ${JSON.stringify(
+        options
+      )})`
+    }
+  } else if (os.type === 'boolean') resp = `$T.boolean(${hasOptions ? JSON.stringify(options) : ''})`
+  else if (os.type === 'number') {
     let { max, min, exclusiveMax, exclusiveMin } = {
       max: os.maximum !== undefined && !os.exclusiveMaximum ? os.maximum : undefined,
       min: os.minimum !== undefined && !os.exclusiveMinimum ? os.minimum : undefined,
@@ -126,49 +132,52 @@ const parseOapiSchema = (
     }
     options = { ...options, min, max, exclusiveMax, exclusiveMin }
     hasOptions = Object.values(options).some(v => !!v)
-    return `$T.number(${hasOptions ? JSON.stringify(options) : ''})`
-  }
-  if (os.type === 'integer') {
+    resp = `$T.number(${hasOptions ? JSON.stringify(options) : ''})`
+  } else if (os.type === 'integer') {
     let max = os.maximum !== undefined && !os.exclusiveMaximum ? os.maximum : undefined
     let min = os.minimum !== undefined && !os.exclusiveMinimum ? os.minimum : undefined
     let exclusiveMax = os.maximum !== undefined && os.exclusiveMaximum ? os.maximum : undefined
     let exclusiveMin = os.minimum !== undefined && os.exclusiveMinimum ? os.minimum : undefined
     options = { ...options, min, max, exclusiveMax, exclusiveMin }
     hasOptions = Object.values(options).some(v => !!v)
-    return `$T.integer(${hasOptions ? JSON.stringify(options) : ''})`
-  }
-  if (os.type === 'string') {
-    if (os.format === 'binary') return `$T.byteArray(${hasOptions ? JSON.stringify(options) : ''})`
-    let minLength = os.minLength
-    let maxLength = os.maxLength
-    let pattern = os.pattern
-    options = { ...options, minLength, maxLength, pattern }
-    hasOptions = Object.values(options).some(v => !!v)
-    return `$T.string(${hasOptions ? JSON.stringify(options) : ''})`
-  }
-  if (os.type === 'array') {
+    resp = `$T.integer(${hasOptions ? JSON.stringify(options) : ''})`
+  } else if (os.type === 'string') {
+    if (os.format === 'binary') resp = `$T.byteArray(${hasOptions ? JSON.stringify(options) : ''})`
+    else {
+      let minLength = os.minLength
+      let maxLength = os.maxLength
+      let pattern = os.pattern
+      options = { ...options, minLength, maxLength, pattern }
+      hasOptions = Object.values(options).some(v => !!v)
+      resp = `$T.string(${hasOptions ? JSON.stringify(options) : ''})`
+    }
+  } else if (os.type === 'array') {
     let minItems = os.minItems
     let maxItems = os.maxItems
     let unique = os.uniqueItems
     options = { ...options, minItems, maxItems, unique }
-    return `$T.array(${parseOapiSchema(os?.items)}${optArg})`
-  }
-  if (os.type === 'object') {
+    resp = `$T.array(${parseOapiSchema(os?.items)}${optArg})`
+  } else if (os.type === 'object') {
     if (extra?.media === 'multipart/form-data') {
-      return `$T.multipartForm({${Object.entries(os?.properties || {})
+      resp = `$T.multipartForm({${Object.entries(os?.properties || {})
+        .map(([k, v]) => `${k}:${parseOapiSchema(v)}`)
+        .join(',')}}${optArg})`
+    } else if (extra?.media === 'application/x-www-form-urlencoded') {
+      resp = `$T.urlForm({${Object.entries(os?.properties || {})
+        .map(([k, v]) => `${k}:${parseOapiSchema(v)}`)
+        .join(',')}}${optArg})`
+    } else {
+      resp = `$T.object({${Object.entries(os?.properties || {})
         .map(([k, v]) => `${k}:${parseOapiSchema(v)}`)
         .join(',')}}${optArg})`
     }
-    if (extra?.media === 'application/x-www-form-urlencoded') {
-      return `$T.urlForm({${Object.entries(os?.properties || {})
-        .map(([k, v]) => `${k}:${parseOapiSchema(v)}`)
-        .join(',')}}${optArg})`
-    }
-    return `$T.object({${Object.entries(os?.properties || {})
-      .map(([k, v]) => `${k}:${parseOapiSchema(v)}`)
-      .join(',')}}${optArg})`
-  }
-  throw new Error(`Unknown schema type ${os.type}`)
+  } else throw new Error(`Unknown schema type ${os.type}`)
+
+  if (!required && nullable) resp = `$T.nullish(${resp})`
+  else if (!required) resp = `$T.optional(${resp})`
+  else if (nullable) resp = `$T.nullable(${resp})`
+
+  return resp
 }
 
 const buildSchemaIndex = (def: OpenAPIV3.Document) => {

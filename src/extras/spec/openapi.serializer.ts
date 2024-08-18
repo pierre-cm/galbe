@@ -122,10 +122,23 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       }
     } else if (kind === 'union') {
       let anyOf = (schema as STUnion).anyOf
-      s = {
-        anyOf: anyOf.map(s => schemaToOpenapi(s).schema)
+      let nullable = anyOf.some(s => s[Kind] === 'null')
+      anyOf = anyOf.filter(s => s[Kind] !== 'null')
+
+      if (anyOf.length === 0) {
+        s = {}
+      } else if (anyOf.length === 1) {
+        s = schemaToOpenapi(anyOf[0]).schema
+      } else if (anyOf.length > 1) {
+        s = {
+          anyOf: anyOf.map(s => schemaToOpenapi(s).schema)
+        }
       }
+
+      //@ts-ignore
+      if (nullable) s.nullable = nullable
     }
+
     s = { title: schema.title, description: schema.description, ...s }
     if (components.schemas && schema.id) {
       components.schemas[schema.id] = s
