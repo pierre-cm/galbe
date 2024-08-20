@@ -171,7 +171,7 @@ export type Context<
     status?: number
   }
 }
-export type Next = () => void | Promise<void>
+export type Next = () => void | Promise<any>
 export type Hook<M extends Method = Method, Path extends string = string, S extends RequestSchema = RequestSchema> = (
   ctx: Context<M, Path, S>,
   next: Next
