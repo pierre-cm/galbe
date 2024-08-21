@@ -35,6 +35,9 @@ class GalbeProxy {
     this.#g = g
     this.#cb = cb
   }
+  get server() {
+    return this.#g.server
+  }
   async get(...args: any[]) {
     //@ts-ignore
     const route = this.#g.get(...args) as Route

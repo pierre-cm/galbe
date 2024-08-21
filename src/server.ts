@@ -28,7 +28,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
     galbe.config.basePath = `/${galbe?.config?.basePath}`
   let pluginsCb = setupPluginCallbacks(galbe)
 
-  return Bun.serve({
+  const server = Bun.serve({
     port: port || galbe.config?.port || 3000,
     hostname: hostname || galbe.config?.hostname || 'localhost',
     tls: galbe.config?.tls,
@@ -37,6 +37,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
       if (!METHODS.includes(req.method)) return new Response('', { status: 501 })
       const context = {
         request: req,
+        remoteAddress: server.requestIP(req),
         set: { headers: {} },
         state: {}
       } as MakeOptional<Context, 'headers' | 'params' | 'query' | 'body'>
@@ -199,4 +200,5 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
       })
     }
   })
+  return server
 }

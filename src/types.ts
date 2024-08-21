@@ -1,4 +1,4 @@
-import type { ServeOptions, TLSOptions, TLSServeOptions } from 'bun'
+import type { ServeOptions, SocketAddress, TLSOptions, TLSServeOptions } from 'bun'
 import type {
   STAny,
   STArray,
@@ -8,6 +8,7 @@ import type {
   STJson,
   STLiteral,
   STMultipartForm,
+  STNull,
   STNumber,
   STObject,
   STOptional,
@@ -48,6 +49,7 @@ export type STResponseValue =
   | STUnion
   | STStream
   | STAny
+  | STNull
 export type STResponse = Record<number, STResponseValue>
 
 export type MaybeArray<T> = T | T[]
@@ -162,6 +164,7 @@ export type Context<
   query: Static<STObject<Exclude<S['query'], undefined>>>
   body: M extends 'get' | 'options' | 'head' ? null : StaticBody<Exclude<S['body'], undefined>>
   request: Request
+  remoteAddress: SocketAddress | null
   route?: Route
   state: Record<string, any>
   set: {

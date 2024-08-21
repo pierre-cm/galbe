@@ -11,7 +11,7 @@ A context has the following properties:
 
 **request**
 
-An instance of the [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request) object created by th server.
+An instance of the [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request) object created by the server.
 
 **headers**
 
@@ -112,3 +112,7 @@ galbe.get(
 $ curl http://localhost:3000/example
 bar
 ```
+
+**remoteAddress**
+
+An instance of the [SocketAdress](https://github.com/oven-sh/bun/blob/fe62a614046948ebba260bed87db96287e67921f/packages/bun-types/bun.d.ts#L2600-L2613) representing the remote address of the client.
