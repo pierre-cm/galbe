@@ -54,7 +54,7 @@ export default (cmd: Command) => {
         pckg = await Bun.file(resolve(CWD, 'package.json')).json()
       } catch (e) {}
 
-      process.stdout.write(`📖 \x1b[1;30mGenerating ${target.split(':')?.[0]} spec\x1b[0m`)
+      Bun.write(Bun.stdout, `📖 \x1b[1;30mGenerating ${target.split(':')?.[0]} spec\x1b[0m`)
 
       let error = null
       let g: Galbe = await silentExec(async () => {
@@ -89,6 +89,6 @@ export default (cmd: Command) => {
         Bun.write(resolve(CWD, out), tFormat === 'json' ? JSON.stringify(openapiSpec, null, 2) : ymlDump(openapiSpec))
       }
 
-      process.stdout.write(' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')
+      Bun.write(Bun.stdout, ' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')
     })
 }

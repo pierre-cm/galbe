@@ -111,3 +111,6 @@ export default g => {
   g.get('/foo/:bar', ctx => ctx.params.bar)
 }
 ```
+
+> [!TIP]
+> You can ignore a specific route from being analyzed by adding a `//@galbe-ignore` comment before the route definition. This is useful if you want to exclude certain routes from automatic analysis or documentation generation.

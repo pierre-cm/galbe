@@ -2,7 +2,7 @@ import { relative } from 'path'
 import { watch } from 'chokidar'
 import { Galbe, Route } from '../src'
 import { logRoute, walkRoutes } from '../src/util'
-import { RouteMeta, defineRoutes } from '../src/routes'
+import { GalbeProxy, RouteMeta, defineRoutes } from '../src/routes'
 
 export { default as pckg } from '../package.json'
 
@@ -22,7 +22,7 @@ export const silentExec = async (fn: () => any) => {
   let consoleMock = Object.fromEntries(
     Object.entries(console)
       .filter(([_, v]) => typeof v === 'function')
-      .map(([k, _]) => [k, () => {}])
+      .map(([k, _]) => [k, () => { }])
   )
   const _console = console
   const _processStdoutWrite = process.stdout.write
@@ -30,9 +30,9 @@ export const silentExec = async (fn: () => any) => {
   //@ts-ignore
   global.console = consoleMock
   //@ts-ignore
-  process.stdout.write = function () {}
+  process.stdout.write = function () { }
   //@ts-ignore
-  process.stderr.write = function () {}
+  process.stderr.write = function () { }
   const r = await fn()
   global.console = _console
   process.stdout.write = _processStdoutWrite
@@ -65,29 +65,32 @@ export const instanciateRoutes = async (g: Galbe) => {
     hasMainRoutes = true
     logRoute(r)
   })
-  if (hasMainRoutes) process.stdout.write('\n')
+  if (hasMainRoutes) Bun.write(Bun.stdout, '\n')
   // Route Files Analysis
   let routes: Record<string, { route?: Route; meta?: RouteMeta; error?: any }[]> = {}
   let errors: Record<string, any> = {}
-  await defineRoutes({ routes: g?.config?.routes }, g, ({ type, route, error, filepath, meta }) => {
+
+  const proxy = new GalbeProxy(g, ({ type, route, error, filepath, meta }) => {
+    if (meta?.ignore || meta?.hide) return
     if (!filepath) return
     if (!(filepath in routes)) routes[filepath] = []
     if (type === 'add' && route && filepath) routes[filepath].push({ route, meta })
     if (type === 'error') errors[filepath] = error
   })
+  await defineRoutes({ routes: g?.config?.routes }, proxy)
   for (let [fp, e] of Object.entries(routes)) {
     console.log(`\x1b\[0;36m    ${relative(CWD, fp)}\x1b[0m`)
     let maxPathLength = e.reduce((p, c) => {
       return Math.max(p, c.route?.path.length || 0)
     }, 0)
     for (let r of e) {
-      if (r.route) logRoute(r.route, r.meta, { maxPathLength })
+      if (r.route && !r.meta?.ignore && !r.meta?.hide) logRoute(r.route, r.meta, { maxPathLength })
     }
     if (errors?.[fp]) {
       console.log(`\x1b\[0;31m    Error:\x1b[0m`)
       console.log(errors?.[fp])
     }
-    process.stdout.write('\n')
+    console.log("")
   }
   console.log('\x1b[1;30m\x1b[32mdone\x1b[0m\n')
 }

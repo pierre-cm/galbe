@@ -31,17 +31,17 @@ const fmtRes = (r, p = false) => {
   if (typeof r === 'object') {
     try {
       let resp = fmtObject(r, p, 2)
-      return process.stdout.write(`${resp}\n`)
+      return Bun.write(Bun.stdout, `${resp}\n`)
     } catch (err) {
       console.error(err)
-      return process.stdout.write(`${r}\n`)
+      return Bun.write(Bun.stdout, `${r}\n`)
     }
   }
-  if (!p) return process.stdout.write(`${r}\n`)
-  if (typeof r === 'boolean') return process.stdout.write(`${ansi(p, '38;2;255;128;0', r)}\n`)
-  if (typeof r === 'number') return process.stdout.write(`${ansi(p, '38;2;10;180;220', r)}\n`)
-  if (typeof r === 'string') return process.stdout.write(`${ansi(p, '38;2;125;170;0', r)}\n`)
-  return process.stdout.write(`${r}\n`)
+  if (!p) return Bun.write(Bun.stdout, `${r}\n`)
+  if (typeof r === 'boolean') return Bun.write(Bun.stdout, `${ansi(p, '38;2;255;128;0', r)}\n`)
+  if (typeof r === 'number') return Bun.write(Bun.stdout, `${ansi(p, '38;2;10;180;220', r)}\n`)
+  if (typeof r === 'string') return Bun.write(Bun.stdout, `${ansi(p, '38;2;125;170;0', r)}\n`)
+  return Bun.write(Bun.stdout, `${r}\n`)
 }
 
 const fetchApi = async (method, path, props) => {
@@ -84,9 +84,9 @@ const fetchApi = async (method, path, props) => {
     let isJson = res.headers.get('content-type') === 'application/json'
     if (isJson) fmtRes(await res.json(), format.has('p'))
     else if (res.headers.get('content-type')?.match(/^text\//)) fmtRes(await res.text(), format.has('p'))
-    else process.stdout.write(await res.arrayBuffer())
+    else Bun.write(Bun.stdout, await res.arrayBuffer())
   }
-  if (format.has('t')) process.stdout.write(`${(endTime / 1_000_000).toFixed(2)}ms\n`)
+  if (format.has('t')) Bun.write(Bun.stdout, `${(endTime / 1_000_000).toFixed(2)}ms\n`)
   process.exit(res.ok ? 0 : 1)
 }
 
@@ -100,7 +100,7 @@ const formatDefault = def =>
     : def ?? 'undefined';
 
 result = commands.map(c=>{
-  let args = c.arguments.map(a=>`.argument("${a.name}", "${a.description || a.name+' argument' || ''}")`)
+  let args = c.arguments.map(a=>`.argument("${a.name}", "${JSON.stringify(a.description).slice(1,-1) || a.name+' argument' || ''}")`)
   let optionsBase = [
     {name: '%format', short:'%f', type: '[string]', description: 'response format [\'s\',\'h\',\'b\',\'t\',\'p\']', default:["s","b","p"]},
     {name: '%header', short:'%h', type: '<string...>', description: 'request header formated as headerName=headerValue', default:[]},
@@ -108,12 +108,12 @@ result = commands.map(c=>{
     {name: '%body', short:'%b', type: '<string>', description: 'request body', default:''},
     {name: '%bodyFile', short:'%bf', type: '<path>', description: 'request body file', default:''}
   ]
-  let options = [...optionsBase,...(c.options||[])].map(o=>`.addOption(new Option("-${o.short}, --${o.name} ${o.type}", "${o.description}").default(${formatDefault(o.default)}))`)
-  let action = `.action(async (${c.arguments.map(a=>`${a.name},`)} props) => {
+  let options = [...optionsBase,...(c.options||[])].map(o=>`.addOption(new Option("-${o.short}, --${o.name} ${o.type}", "${JSON.stringify(o.description).slice(1,-1)}").default(${formatDefault(o.default)}))`)
+  let action = `.action(async (${c.arguments.map(a=>`${a.name},`).join('')} props) => {
     ${c.action ? ';('+c.action.toString()+')(props)' : ''}
     return await fetchApi("${c.route.method.toUpperCase()}",\`${c.route.pathT}\`, props)
   })`
-  return `program.command("${c.name}").description("${c.description}")${args.join('')}${options.join('')}${action}`
+  return `program.command("${c.name}").description("${JSON.stringify(c.description).slice(1,-1)}")${args.join('')}${options.join('')}${action}`
 })
 %*/
 

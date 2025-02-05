@@ -20,6 +20,7 @@ import type {
   Static
 } from './schema'
 import type { Galbe } from './index'
+import { HttpStatus } from './util'
 
 export type STBody =
   | STByteArray
@@ -34,6 +35,7 @@ export type STBody =
   | STMultipartForm
   | STUnion
   | STStream
+  | STAny
   | undefined
 
 export type STResponseValue =
@@ -50,7 +52,7 @@ export type STResponseValue =
   | STStream
   | STAny
   | STNull
-export type STResponse = Record<number, STResponseValue>
+export type STResponse = Record<number | 'default', STResponseValue>
 
 export type MaybeArray<T> = T | T[]
 export type MaybeSTArray<T extends STSchema> = T | STArray<T>
@@ -134,7 +136,7 @@ export type RequestSchema<
   P extends Partial<STParams<Path>> = Partial<STParams<Path>>,
   Q extends STQuery = STQuery,
   B extends STBody = STBody,
-  R extends STResponse = STResponse
+  R extends Partial<STResponse> = Partial<STResponse>
 > = {
   headers?: H
   params?: P
@@ -147,9 +149,9 @@ type OmitNotDefined<S extends RequestSchema> = {
   [K in keyof Exclude<S['params'], undefined> as Exclude<S['params'], undefined>[K] extends Required<
     Exclude<S['params'], undefined>
   >[K]
-    ? K
-    : //@ts-ignore
-      never]: Static<STObject<Exclude<S['params'], undefined>>>[K]
+  ? K
+  : //@ts-ignore
+  never]: Static<STObject<Exclude<S['params'], undefined>>>[K]
 }
 type StaticBody<T extends STSchema> = T extends STOptional<STSchema> ? Static<T> | null : Static<T>
 export type Context<
@@ -169,7 +171,8 @@ export type Context<
   state: Record<string, any>
   set: {
     headers: {
-      [header: string]: string
+      'set-cookie': string[]
+      [header: string]: string | string[]
     }
     status?: number
   }
@@ -191,49 +194,54 @@ export type Endpoint<M extends Method> = {
     H extends STHeaders = any,
     Q extends STQuery = any,
     B extends STBody = any,
-    R extends STResponse = STResponse
+    R extends Partial<STResponse> = Partial<STResponse>
   >(
     path: Path,
     schema: RequestSchema<M, Path, H, P, Q, B, R>,
     hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[],
     handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-  ): void
+  ): Route<M, Path, P, H, Q, B, R>
   <
     Path extends string,
     P extends Partial<STParams<Path>>,
     H extends STHeaders = any,
     Q extends STQuery = any,
     B extends STBody = any,
-    R extends STResponse = STResponse
+    R extends Partial<STResponse> = Partial<STResponse>
   >(
     path: Path,
     schema: RequestSchema<M, Path, H, P, Q, B, R>,
     handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-  ): void
+  ): Route<M, Path, P, H, Q, B, R>
   <
     Path extends string,
     P extends Partial<STParams<Path>>,
     H extends STHeaders = any,
     Q extends STQuery = any,
     B extends STBody = any,
-    R extends STResponse = STResponse
+    R extends Partial<STResponse> = Partial<STResponse>
   >(
     path: Path,
     hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[],
     handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-  ): void
+  ): Route<M, Path, P, H, Q, B, R>
   <
     Path extends string,
     P extends Partial<STParams<Path>>,
     H extends STHeaders = any,
     Q extends STQuery = any,
     B extends STBody = any,
-    R extends STResponse = STResponse
+    R extends Partial<STResponse> = Partial<STResponse>
   >(
     path: Path,
     handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-  ): void
+  ): Route<M, Path, P, H, Q, B, R>
 }
+
+export type StaticEndpointOptions = {
+  resolve?: (path: string, target: string) => string | null | undefined | void
+}
+export type StaticEndpoint<P extends string = string, T extends string = string> = (path: P, target: T, options?: StaticEndpointOptions) => Route<"get", P, {}, {}, {}, STBody, STResponse, T>
 
 export class RequestError {
   status: number
@@ -259,31 +267,40 @@ export type Route<
   H extends STHeaders = STHeaders,
   Q extends STQuery = STQuery,
   B extends STBody = STBody,
-  R extends STResponse = STResponse
+  R extends Partial<STResponse> = Partial<STResponse>,
+  SP extends string = string,
+  SR extends string = string
 > = {
   method: M
   path: Path
   schema: RequestSchema<M, Path, H, P, Q, B, R>
   context: Context<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-  hooks: Hook[]
+  hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[]
   handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
+  static?: { path: SP, root: SR }
 }
 
 export class NotFoundError extends RequestError {
   constructor(message?: any) {
-    super({ status: 404, payload: message ?? 'Not found' })
+    super({ status: 404, payload: message ?? HttpStatus[404] })
   }
 }
 
 export class MethodNotAllowedError extends RequestError {
   constructor(message?: any) {
-    super({ status: 405, payload: message ?? 'Method not allowed' })
+    super({ status: 405, payload: message ?? HttpStatus[405] })
   }
 }
 
 export class InternalError extends RequestError {
   constructor(message?: any) {
-    super({ status: 500, payload: message ?? 'Internal Server Error' })
+    super({ status: 500, payload: message ?? HttpStatus[500] })
+  }
+}
+
+export class NotImplementedError extends RequestError {
+  constructor(message?: any) {
+    super({ status: 501, payload: message ?? HttpStatus[501] })
   }
 }
 

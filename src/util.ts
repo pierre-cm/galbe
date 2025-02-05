@@ -13,16 +13,30 @@ const METHOD_COLOR: Record<string, string> = {
 const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g
 
 export const logRoute = (
-  r: { method: string; path: string },
+  r: { method: string; path: string, static?: { path: string, root: string } },
   meta?: RouteMeta,
   format?: { maxPathLength?: number }
 ) => {
-  let color = METHOD_COLOR?.[r.method] || ''
-  let routeLog = `[${color}${`${r.method.toUpperCase()}\x1b[0m]`.padEnd(12, ' ')} ${r.path
-    .padEnd(format?.maxPathLength ?? r.path.length, ' ')
-    .replaceAll(/:([^\/]+)/g, '\x1b[0;33m:$1\x1b[0m')}${meta?.head ? `  ${meta.head}` : ''}\x1b[0m`
-  if (meta?.deprecated) routeLog = `\x1b[0;9m\x1b[38;5;244m${routeLog.replaceAll(ansiRegex, '')}\x1b[0m`
-  console.log(`    ${routeLog}`)
+  let path = r.path === '' ? '/' : r.path
+  let method = r.method
+
+  let routeLog = ''
+
+  if (r?.static) {
+    routeLog = `[\x1b[0;33m${`STATIC\x1b[0m]`.padEnd(12, ' ')} ${path
+      .padEnd(format?.maxPathLength ?? path.length, ' ')} \x1b[0;33m⇒\x1b[0m  ${r.static.path}\x1b[0m`
+    if (meta?.deprecated) routeLog = `\x1b[0;9m\x1b[38;5;244m${routeLog.replaceAll(ansiRegex, '')}\x1b[0m`
+  } else {
+    let color = METHOD_COLOR?.[method] || ''
+    let [_, summary, _description] = meta?.head?.match(/^([^\n]*)\n\n(.*)/) || []
+    if(!summary) _description = meta?.head || ''
+    routeLog = `[${color}${`${method.toUpperCase()}\x1b[0m]`.padEnd(12, ' ')} ${path
+      .padEnd(format?.maxPathLength ?? path.length, ' ')
+      .replaceAll(/:([^\/]+)/g, '\x1b[0;33m:$1\x1b[0m')}${(summary?`  ${summary}`:'').replace(/\n/, '')}\x1b[0m`
+    if (meta?.deprecated) routeLog = `\x1b[0;9m\x1b[38;5;244m${routeLog.replaceAll(ansiRegex, '')}\x1b[0m`
+  }
+
+  if (routeLog) console.log(`    ${routeLog}`)
 }
 
 /**

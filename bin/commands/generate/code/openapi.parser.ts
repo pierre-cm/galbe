@@ -68,6 +68,13 @@ const orderDeps = (deps: Record<string, SchemaEntry>) => {
   }
   return Object.fromEntries([...l].map(k => [k, deps[k]]))
 }
+const serialize = (obj: any) => {
+  return JSON.stringify(obj, (k, value) => {
+    if (k === 'pattern' && value) return `/${value}/`
+    return value
+  }).replace(/"\/(.*)\/([gimsuy]*)"/g, '/$1/$2');
+}
+
 const writeCodeFile = async (path: string, content: string, target: 'js' | 'ts') => {
   if (target === 'js') {
     content = transformSync(content, {
@@ -88,7 +95,9 @@ const parseOapiSchema = (
   details: { id?: string; title?: string; description?: string } = {},
   extra?: { media?: string }
 ): string => {
-  if (!os) return `$T.any()`
+  if (!os) {
+    return `$T.any(${details && Object.keys(details).length ? JSON.stringify(details) : ''})`
+  }
   //@ts-ignore
   if (os?.$ref) return `%ref:${os.$ref}%`
   os = os as OpenAPIV3.SchemaObject
@@ -106,11 +115,12 @@ const parseOapiSchema = (
   } = {
     ...details,
     title: os.title,
-    description: os.description
+    description: details.description || os.description
   }
+  if(!os?.type) return `$T.any(${details && Object.keys(details).length ? JSON.stringify(details) : ''})`
   let resp = ''
   let hasOptions = Object.values(options).some(v => !!v)
-  let optArg = hasOptions ? `, ${JSON.stringify(options)}` : ''
+  let optArg = hasOptions ? serialize(options) : ''
   let anyOf = os.oneOf || os.anyOf || os.allOf
   let required = os.required
   let nullable = os.nullable
@@ -118,11 +128,11 @@ const parseOapiSchema = (
   if (anyOf?.length) {
     if (anyOf.length === 1) resp = parseOapiSchema(anyOf[0] as OpenAPIV3.SchemaObject, details, extra)
     else {
-      resp = `$T.union([${anyOf.map(s => parseOapiSchema(s as OpenAPIV3.SchemaObject)).join(',')}], ${JSON.stringify(
+      resp = `$T.union([${anyOf.map(s => parseOapiSchema(s as OpenAPIV3.SchemaObject)).join(',')}], ${serialize(
         options
       )})`
     }
-  } else if (os.type === 'boolean') resp = `$T.boolean(${hasOptions ? JSON.stringify(options) : ''})`
+  } else if (os.type === 'boolean') resp = `$T.boolean(${hasOptions ? serialize(options) : ''})`
   else if (os.type === 'number') {
     let { max, min, exclusiveMax, exclusiveMin } = {
       max: os.maximum !== undefined && !os.exclusiveMaximum ? os.maximum : undefined,
@@ -132,7 +142,7 @@ const parseOapiSchema = (
     }
     options = { ...options, min, max, exclusiveMax, exclusiveMin }
     hasOptions = Object.values(options).some(v => !!v)
-    resp = `$T.number(${hasOptions ? JSON.stringify(options) : ''})`
+    resp = `$T.number(${hasOptions ? serialize(options) : ''})`
   } else if (os.type === 'integer') {
     let max = os.maximum !== undefined && !os.exclusiveMaximum ? os.maximum : undefined
     let min = os.minimum !== undefined && !os.exclusiveMinimum ? os.minimum : undefined
@@ -140,38 +150,35 @@ const parseOapiSchema = (
     let exclusiveMin = os.minimum !== undefined && os.exclusiveMinimum ? os.minimum : undefined
     options = { ...options, min, max, exclusiveMax, exclusiveMin }
     hasOptions = Object.values(options).some(v => !!v)
-    resp = `$T.integer(${hasOptions ? JSON.stringify(options) : ''})`
+    resp = `$T.integer(${hasOptions ? serialize(options) : ''})`
   } else if (os.type === 'string') {
-    if (os.format === 'binary') resp = `$T.byteArray(${hasOptions ? JSON.stringify(options) : ''})`
+    if (os.format === 'binary') resp = `$T.byteArray(${hasOptions ? serialize(options) : ''})`
     else {
       let minLength = os.minLength
       let maxLength = os.maxLength
       let pattern = os.pattern
       options = { ...options, minLength, maxLength, pattern }
       hasOptions = Object.values(options).some(v => !!v)
-      resp = `$T.string(${hasOptions ? JSON.stringify(options) : ''})`
+      resp = `$T.string(${hasOptions ? serialize(options) : ''})`
     }
   } else if (os.type === 'array') {
     let minItems = os.minItems
     let maxItems = os.maxItems
     let unique = os.uniqueItems
     options = { ...options, minItems, maxItems, unique }
-    resp = `$T.array(${parseOapiSchema(os?.items)}${optArg})`
+    resp = `$T.array(${parseOapiSchema(os?.items)}, ${optArg})`
   } else if (os.type === 'object') {
+    let props = Object.entries(os?.properties || {})
+    .map(([k, v]) => `"${k}":${parseOapiSchema(v)}`)
+    .join(',')
     if (extra?.media === 'multipart/form-data') {
-      resp = `$T.multipartForm({${Object.entries(os?.properties || {})
-        .map(([k, v]) => `${k}:${parseOapiSchema(v)}`)
-        .join(',')}}${optArg})`
+      resp = `$T.multipartForm({${props}}${optArg ? `, ${optArg}`:''})`
     } else if (extra?.media === 'application/x-www-form-urlencoded') {
-      resp = `$T.urlForm({${Object.entries(os?.properties || {})
-        .map(([k, v]) => `${k}:${parseOapiSchema(v)}`)
-        .join(',')}}${optArg})`
+      resp = `$T.urlForm({${props}}${optArg ? `, ${optArg}`:''})`
     } else {
-      resp = `$T.object({${Object.entries(os?.properties || {})
-        .map(([k, v]) => `${k}:${parseOapiSchema(v)}`)
-        .join(',')}}${optArg})`
+      resp = `$T.object({${props}}${optArg ? `, ${optArg}`:''})`
     }
-  } else throw new Error(`Unknown schema type ${os.type}`)
+  } else throw new Error(`Unknown schema type ${JSON.stringify(os)}`)
 
   if (!required && nullable) resp = `$T.nullish(${resp})`
   else if (!required) resp = `$T.optional(${resp})`
@@ -188,13 +195,21 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
     let dependsOn = new Set<string>()
     if (kind === 'schemas') schema = parseOapiSchema(s, { id: k })
     else if (kind === 'requestBodies' || kind === 'responses') {
-      let schemas = [
-        ...new Set(
-          Object.entries((s as OpenAPIV3.RequestBodyObject).content || {}).map(([media, v]) =>
-            parseOapiSchema(v.schema, { id: k }, { media })
+      let schemas=[] as string[]
+      if(!!s.content){
+
+        schemas = [
+          ...new Set(
+            Object.entries((s as OpenAPIV3.RequestBodyObject)?.content || {null:{}}).map(([media, v]) => {
+              return parseOapiSchema(v.schema, { id: k }, { media })
+            })
           )
-        )
-      ]
+        ]
+      } else {
+        schemas = [
+          parseOapiSchema(undefined, {id: k, ...s})
+        ]
+      }
       schema = schemas.length <= 0 ? '' : schemas.length === 1 ? schemas[0] : `$T.union([${schemas.join(',')}])`
     }
     schema = unref(schema, m => {
@@ -225,26 +240,33 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
   if (!def) return {}
   let imports = {}
   let p = path.replaceAll(/\{([^\}]*)\}/g, ':$1')
-  let description = def.summary || def.description
+  // let description = def.summary || def.description
   let pathName = path.replaceAll(/\/\{[^\}]*\}/g, 'X').replaceAll(/[^$\w\d_]+([$\w\d_])/g, (_, $1) => $1.toUpperCase())
   let schemaName = `${method}${pathName}`.replace(/^\w/, c => c.toUpperCase())
 
   let meta = '/**\n'
-  if (description) meta += ` * ${description.replace('\n', '\n * ')}\n`
+  if (def.summary) meta += ` * ${def.summary}\n *\n`
+  if (def.description) meta += ` * ${def.description.replace('\n', '\n * ')}\n`
   if (def.operationId) meta += ` * @operationId ${def.operationId}\n`
   if (def.externalDocs) meta += ` * @externalDocs ${def.externalDocs}\n`
   if (def.tags) meta += ` * @tags ${def.tags.join(' ')}\n`
   if (def.deprecated) meta == ' * @deprecated\n'
   meta += ' */'
-  let endpoint = `${method}("${p}", ${schemaName}, ctx => {\n  throw new Error("Not implemented")\n})`
+  let endpoint = `${method}("${p}", ${schemaName}, ctx => {\n  throw new NotImplementedError()\n})`
 
   let sp = { path: {}, query: {}, header: {}, body: {}, formData: {} } // TODO handle body and formData cases
   for (let _p of def?.parameters || []) {
     // @ts-ignore: TODO handle refs cases
     if (_p.$ref) continue
     let p = _p as OpenAPIV3.ParameterObject
-    let o = (s: string) => (p.in !== 'path' && !p.required ? `$T.optional(${s})` : s)
-    sp[p.in][p.name] = o(parseOapiSchema(p.schema))
+    let o = (s: string) => (p.in !== 'path' && !p.required && !/^\$T.optional\(.*\)$/.test(s) ? `$T.optional(${s})` : s)
+    sp[p.in][p.name] = o(
+      unref(parseOapiSchema(p.schema, {description: p.description }), m => {
+        let l = m.split('/')
+        imports[l[l.length - 1]] = m
+        return l[l.length - 1]
+      })
+    )
   }
 
   let [schemaParams, schemaQuery, schemaHeaders] = [
@@ -254,34 +276,36 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
   ].map(({ g, o }) =>
     Object.keys(sp[o]).length
       ? `  ${g}: {${Object.entries(sp[o])
-          .map(([k, v]) => `${k}:${v}`)
+          .map(([k, v]) => `"${k}":${v}`)
           .join(',')}}`
       : ''
   )
 
   let body = ''
-  let _rb = def?.requestBody as OpenAPIV3.ReferenceObject
-  if (_rb?.$ref) {
-    body = unref(`  body: %ref:${_rb.$ref}%`, m => {
-      let l = m.split('/')
-      imports[l[l.length - 1]] = m
-      return l[l.length - 1]
-    })
-  } else {
-    let rb = def?.requestBody as OpenAPIV3.RequestBodyObject
-    let o = (s: string) => (!rb.required ? `$T.optional(${s})` : s)
-    let bs = [
-      ...new Set(
-        Object.entries(rb?.content || {}).map(([media, v]) =>
-          unref(parseOapiSchema(v.schema, undefined, { media }), m => {
-            let l = m.split('/')
-            imports[l[l.length - 1]] = m
-            return l[l.length - 1]
-          })
+  if(!['get', 'options', 'head'].includes(method)){
+    let _rb = def?.requestBody as OpenAPIV3.ReferenceObject
+    if (_rb?.$ref) {
+      body = unref(`  body: %ref:${_rb.$ref}%`, m => {
+        let l = m.split('/')
+        imports[l[l.length - 1]] = m
+        return l[l.length - 1]
+      })
+    } else {
+      let rb = def?.requestBody as OpenAPIV3.RequestBodyObject
+      let o = (s: string) => (!rb?.required ? `$T.optional(${s})` : s)
+      let bs = [
+        ...new Set(
+          Object.entries(rb?.content || {null:{}}).map(([media, v]) =>
+            unref(parseOapiSchema(v.schema, undefined, { media }), m => {
+              let l = m.split('/')
+              imports[l[l.length - 1]] = m
+              return l[l.length - 1]
+            })
+          )
         )
-      )
-    ]
-    body = bs.length === 1 ? `  body: ${o(bs[0])}` : bs.length > 1 ? `  body: ${o(`$T.union(${bs.join(',')})`)}` : ''
+      ]
+      body = bs.length === 1 ? `  body: ${o(bs[0])}` : bs.length > 1 ? `  body: ${o(`$T.union([${bs.join(',')}])`)}` : ''
+    }
   }
 
   let resp = ''
@@ -289,7 +313,18 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
   let rs = Object.fromEntries(
     Object.entries(r || {}).map(([status, sv]) => {
       let entries: string[] = []
-      let s: string = Number.isInteger(Number(status)) ? status : '200'
+      let s: string = Number.isInteger(Number(status)) ? status : 'default'
+
+      //@ts-ignore
+      let rootRef = sv?.$ref ? unref(parseOapiSchema(sv), m => {
+        let l = m.split('/')
+        imports[l[l.length - 1]] = m
+        return l[l.length - 1]
+      }) : null
+      if (rootRef) {
+        return [s, [rootRef]]
+      }
+
       for (let [_type, tv] of Object.entries((sv as OpenAPIV3.ResponseObject)?.content || {})) {
         entries.push(
           unref(parseOapiSchema(tv.schema), m => {
@@ -306,7 +341,7 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
   if (Object.keys(rs).length) {
     resp = `  response: {${Object.entries(rs)
       .filter(([_, v]) => v.length)
-      .map(([s, v]) => `${s}: ${v.length === 1 ? v[0] : v.length > 1 ? `$T.union(${v.join(',')})` : ''}`)
+      .map(([s, v]) => `${s}: ${v.length === 1 ? v[0] : v.length > 1 ? `$T.union([${v.join(',')}])` : ''}`)
       .join(',')}}`
   } else resp = ''
 
@@ -394,7 +429,7 @@ const writeFiles = async (
     })
     if (decl.length === 0) return ''
     return `import type { Static } from 'galbe/schema'\nimport { $T } from 'galbe'\n${Object.entries(imports)
-      .map(([k, v]) => `import { ${v.join(', ')} } from './${typeMap[k]}.schema'\n`)
+      .map(([k, v]) => `import { ${[...new Set(v)].join(', ')} } from './${typeMap[k]}.schema'\n`)
       .join('\n')}\n${decl.join('\n')}\n`
   }
 
@@ -461,7 +496,7 @@ const writeFiles = async (
       `${sDecl.map(d => d).join('\n\n')}\n`
 
     let routeFile =
-      `import type { Galbe } from 'galbe'\n` +
+      `import { NotImplementedError, type Galbe } from 'galbe'\n` +
       `import { ${[...rImports].join(', ')} } from '../schemas${scopeKey}.schema'\n\n` +
       `export default (g: Galbe) => {\n` +
       rDecl.map(d => d.replaceAll('\n', '\n  ')).join('\n\n') +

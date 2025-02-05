@@ -14,9 +14,14 @@ import type {
   STResponse,
   STParams,
   STHeaders,
-  STQuery
+  STQuery,
+  StaticEndpoint,
+  Route,
+  StaticEndpointOptions
 } from './types'
 
+import { readdirSync, statSync } from 'fs'
+import { resolve as resolvePath } from 'path'
 import server from './server'
 import { GalbeRouter } from './router'
 import { SchemaType, type STObject, type Static } from './schema'
@@ -41,7 +46,7 @@ const overloadDiscriminer = <
     | Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[]
     | Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>,
   arg4?: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-) => {
+): Route<M, Path, P, H, Q, B, R> => {
   const defaultSchema = {}
   if (typeof arg2 === 'function') {
     return galbeMethod(galbe, method, path, defaultSchema, undefined, arg2)
@@ -70,7 +75,7 @@ const galbeMethod = <
   schema: RequestSchema<M, Path, H, P, Q, B, R> | undefined,
   hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[] | undefined,
   handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-) => {
+): Route<M, Path, P, H, Q, B, R> => {
   schema = schema ?? {}
   hooks = hooks || []
   const context: Context<M, Path, typeof schema> = {
@@ -85,7 +90,8 @@ const galbeMethod = <
     state: {},
     set: {} as {
       headers: {
-        [header: string]: string
+        'set-cookie': string[]
+        [header: string]: string | string[]
       }
       status?: number
     }
@@ -306,6 +312,40 @@ export class Galbe {
       | Handler<'head', Path, RequestSchema<'head', Path, H, P, Q, B, R>>,
     arg4?: Handler<'head', Path, RequestSchema<'head', Path, H, P, Q, B, R>>
   ) => this.add(overloadDiscriminer(this, 'head', path, arg2, arg3, arg4))
+  static: StaticEndpoint = (path: string, target: string, options?: StaticEndpointOptions) => {
+    let { resolve } = options ?? {}
+    const rootPath = path
+
+    const walkStatic = (path: string, target: string) => {
+      path = path?.[0] === '/' ? path : `/${path}`
+      path = path.endsWith('/') ? path.slice(0, -1) : path;
+
+      let t = target
+      if (Bun.env.BUN_ENV === 'production') {
+        t = resolvePath(import.meta.dir, `static-${Bun.env.GALBE_BUILD}/${target}`)
+      }
+
+      if (!statSync(t).isDirectory()) {
+        let ut: string | null | undefined | void = t
+        if (path.endsWith('.html')) path = path.slice(0, -5)
+        if (resolve) ut = resolve(path, ut)
+        if (ut) {
+          let handler = () => new Response(Bun.file(ut))
+          this.add({ ...galbeMethod(this, 'get', path, {}, undefined, handler), static: { path: ut, root: rootPath } })
+        }
+      } else {
+        let root = readdirSync(t)
+        for (let f of root) {
+          let p = f === 'index.html' ? path : `${path}/${f}`
+          walkStatic(p, `${target}/${f}`)
+        }
+      }
+
+      return { ...galbeMethod(this, 'get', path, {}, undefined, () => { }), static: { path: t, root: rootPath } }
+    }
+
+    return walkStatic(path, target)
+  }
 }
 
 export * from './types'

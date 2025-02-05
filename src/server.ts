@@ -38,7 +38,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
       const context = {
         request: req,
         remoteAddress: server.requestIP(req),
-        set: { headers: {} },
+        set: { headers: { 'set-cookie': [] } },
         state: {}
       } as MakeOptional<Context, 'headers' | 'params' | 'query' | 'body'>
       for (const p of pluginsCb.onFetch) {
@@ -176,7 +176,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
           if (typeof error.payload === 'string') payload = error.payload
           try {
             payload = JSON.stringify(error.payload)
-          } catch (err) {}
+          } catch (err) { }
           return new Response(payload, {
             status: error.status,
             headers: { 'Content-Type': 'application/json' }

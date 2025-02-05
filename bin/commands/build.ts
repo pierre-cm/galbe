@@ -3,34 +3,42 @@ import { $ } from 'bun'
 import { Command, Option } from 'commander'
 import { resolve, relative, dirname } from 'path'
 import { tmpdir } from 'os'
-import { mkdir, rm } from 'fs/promises'
+import { mkdir, rm, exists } from 'fs/promises'
 
 import { CWD, fmtVal, silentExec } from '../util'
 import { Galbe } from '../../src'
-import { defineRoutes } from '../../src/routes'
+import { defineRoutes, GalbeProxy } from '../../src/routes'
 import { BuildConfig } from 'bun'
 
-const createBuildIndex = async (indexPath: string, g: Galbe) => {
-  const buildId = crypto.randomUUID()
+const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string) => {
   const buildPath = resolve(tmpdir(), buildId)
-  const routes = new Set<string>()
+  const routes = new Map<string, { filepath: string, static?: { path: string, root: string } }>()
   let errors: any[] = []
-  await defineRoutes({ routes: g?.config?.routes }, g, ({ type, error, filepath }) => {
+  // Create GalbeProxy here
+  // use it to define routes
+  const proxy = new GalbeProxy(g, ({ type, error, filepath, route }) => {
     if (!filepath) return
-    routes.add(filepath)
+    routes.set(filepath, { filepath, static: route?.static })
     if (type === 'error') errors.push(error)
   })
+  await defineRoutes({ routes: g?.config?.routes }, proxy)
+  // call init on it for plugin initialization
+  await proxy.init()
+
   if (errors.length) throw errors
   await mkdir(buildPath, { recursive: true })
-  await Bun.write(
-    resolve(buildPath, 'index.ts'),
-    `import galbe from '${relative(buildPath, indexPath)}';
-${[...routes].map((r, idx) => `import _${idx} from '${relative(buildPath, r)}'`).join(';\n')}
-galbe.meta = ${JSON.stringify(g.meta)};
-${[...routes].map((_, idx) => `_${idx}(galbe)`).join(';\n')}
-galbe.listen();
-`
-  )
+
+  let buildIndex =
+    `import galbe from '${relative(buildPath, indexPath)}';\n` +
+    `${[...routes.values()].map((r, idx) => `import _${idx} from '${relative(buildPath, r.filepath)}'`).join(';\n')}\n` +
+    `Bun.env.BUN_ENV = 'production';\n` +
+    `Bun.env.GALBE_BUILD = '${buildId}';\n` +
+    `galbe.meta = ${JSON.stringify(g.meta)};\n` +
+    `${[...routes].map((_, idx) => `_${idx}(galbe)`).join(';\n')};\n` +
+    `galbe.listen();\n`
+
+  await Bun.write(resolve(buildPath, 'index.ts'), buildIndex)
+
   return resolve(buildPath, 'index.ts')
 }
 
@@ -44,10 +52,18 @@ export default (cmd: Command) => {
     .action(async (index, props) => {
       const { out, compile, config } = props
 
+      const buildID = crypto.randomUUID()
+      const outPath = resolve(CWD, out)
+
+      Bun.env.GALBE_BUILD = buildID
+      Bun.env.GALBE_BUILD_OUT = outPath
+
       const bunfig = config ? (await import(resolve(CWD, config)))?.default || {} : {}
 
+      if(await exists(outPath)) await rm(outPath, { recursive: true })
+
       let error = null
-      process.stdout.write('📦 \x1b[1;30mBuilding \x1b[36mGalbe\x1b[0m\x1b[1;30m app\x1b[0m')
+      Bun.write(Bun.stdout, '📦 \x1b[1;30mBuilding \x1b[36mGalbe\x1b[0m\x1b[1;30m app\x1b[0m')
       let g: Galbe = await silentExec(async () => {
         try {
           const g = (await import(resolve(CWD, index))).default
@@ -63,7 +79,7 @@ export default (cmd: Command) => {
       }
       let buildIndex: string = ''
       try {
-        buildIndex = await createBuildIndex(index, g)
+        buildIndex = await createBuildIndex(index, g, buildID)
       } catch (errors) {
         console.log(`\nerror: build errors`)
         for (let error of errors) console.log(error)
@@ -75,24 +91,25 @@ export default (cmd: Command) => {
       }
 
       const buildConfig: BuildConfig = {
-        publicPath: `${resolve(CWD, out)}/`,
+        publicPath: `${outPath}/`,
         ...Object.fromEntries(Object.entries(bunfig).filter(([k, v]) => v)),
         entrypoints: [buildIndex],
-        outdir: resolve(CWD, out),
+        outdir: outPath,
         sourcemap: 'external',
-        target: 'bun'
+        target: 'bun',
       }
 
-      await rm(resolve(CWD, out), { recursive: true })
-
       let bo = await Bun.build(buildConfig)
-      if (bo.success) process.stdout.write(' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')
+      if (bo.success) Bun.write(Bun.stdout, ' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')
       else {
         console.log(`\nerror: build errors`)
         console.log(...bo.logs)
       }
-      if (compile) await $`bun build --compile ${resolve(CWD, out, 'index.js')} --outfile ${resolve(CWD, out, 'app')}`
+      if (compile) {
+        await $`bun build --compile ${resolve(CWD, out, 'index.js')} --outfile ${outPath}/bin`
+      }
 
       await rm(dirname(buildIndex), { recursive: true })
+      process.exit(0)
     })
 }

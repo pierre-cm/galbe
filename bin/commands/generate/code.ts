@@ -43,20 +43,21 @@ export default (cmd: Command) => {
 
       if (!format) format = `openapi:3.0:${inputExt.slice(1)}`
 
-      if ((await exists(resolve(CWD, out))) && !force) {
-        console.log(
-          `error: output directory ${fmtVal(
-            out
-          )} already exists. If you're sure you want to override its content, please remove it before or use the ${fmtVal(
-            '-F --force'
-          )} option`
-        )
-        process.exit(1)
+      if (await exists(resolve(CWD, out))) {
+        if(!force){
+          console.log(
+            `error: output directory ${fmtVal(
+              out
+            )} already exists. If you're sure you want to override its content, please remove it before or use the ${fmtVal(
+              '-F --force'
+            )} option`
+          )
+          process.exit(1)
+        }
+        await rm(resolve(CWD, out), { recursive: true })
       }
 
-      await rm(resolve(CWD, out), { recursive: true })
-
-      process.stdout.write('💻 \x1b[1;30mGenerating \x1b[36mGalbe\x1b[0m\x1b[1;30m sources\x1b[0m')
+      Bun.write(Bun.stdout, '💻 \x1b[1;30mGenerating \x1b[36mGalbe\x1b[0m\x1b[1;30m sources\x1b[0m')
       try {
         let match = format.match(/^([^:]*):([^:]*):(.*)$/)
         if (!match) throw new Error(`error: invalid format ${format}`)
@@ -70,6 +71,6 @@ export default (cmd: Command) => {
         console.log(`error: ${err.message}`)
         process.exit(1)
       }
-      process.stdout.write(' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')
+      Bun.write(Bun.stdout, ' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')
     })
 }

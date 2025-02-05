@@ -20,7 +20,8 @@ export default (cmd: Command) => {
         })
         .default(null, fmtVal(defaultPort))
     )
-    .addOption(new Option('-w, --watch', 'watch file changes').default(false, fmtVal(false)))
+    .addOption(new Option('-w, --watch <dir>', 'watch file changes').default(false, fmtVal(false)))
+    .addOption(new Option('-wi, --watchignore <regexp>', 'ignore file changes').default(false, fmtVal(false)))
     .addOption(new Option('-nc, --noclear', "don't clear on file changes").default(false, fmtVal(false)))
     .addOption(
       new Option('-f, --force', 'kills any process running on defined port before strating the server').default(
@@ -29,7 +30,8 @@ export default (cmd: Command) => {
       )
     )
     .action(async (index, props) => {
-      const { port, watch, noclear, force } = props
+      const { port, watch, watchignore, noclear, force } = props
+      let watch_dir = typeof watch === 'string' ? watch : CWD
       const clear = !noclear
       const indexPath = resolve(CWD, index)
       let g: Galbe
@@ -38,9 +40,9 @@ export default (cmd: Command) => {
 
       if (force) await killPort(port || 3000)
 
-      if (watch) {
+      if (!!watch) {
         await watchDir(
-          CWD,
+          watch_dir,
           async () => {
             g.stop()
             if (clear) await $`clear`
@@ -49,11 +51,11 @@ export default (cmd: Command) => {
             await instanciateRoutes(g)
             await g.listen(port)
           },
-          { ignore: /node_modules/ }
+          { ignore: watchignore ? new RegExp(watchignore) : /node_modules/ }
         )
       }
 
-      if (watch && clear) await $`clear`
+      if (!!watch && clear) await $`clear`
       g = (await import(indexPath)).default
       await instanciateRoutes(g)
       await g.listen(port)

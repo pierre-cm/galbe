@@ -12,10 +12,10 @@ const schemaToMedia = ({ type, format, isJson }: SchemaType) =>
   isJson || (type && ['object', 'number', 'boolean', 'array'].includes(type))
     ? 'application/json'
     : format === 'byte'
-    ? 'application/octet-stream'
-    : type === 'string'
-    ? 'text/plain'
-    : '*/*'
+      ? 'application/octet-stream'
+      : type === 'string'
+        ? 'text/plain'
+        : '*/*'
 
 export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<OpenAPIV3.Document> => {
   let paths: any = {}
@@ -115,9 +115,9 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
         type: type,
         ...(type === 'object'
           ? {
-              properties: Object.fromEntries(Object.entries(props).map(([k, v]) => [k, schemaToOpenapi(v).schema])),
-              ...(required.length ? { required } : {})
-            }
+            properties: Object.fromEntries(Object.entries(props).map(([k, v]) => [k, schemaToOpenapi(v).schema])),
+            ...(required.length ? { required } : {})
+          }
           : {})
       }
     } else if (kind === 'union') {
@@ -178,8 +178,13 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     (routes, c) => ({ ...routes, ...c.routes }),
     {} as Record<string, Record<string, Record<string, any>>>
   )
+  let metaStatic = Object.fromEntries(Object.entries(metaRoutes || {}).filter((([_, d]) => d?.static)))
+
   walkRoutes(g.router.routes, r => {
     let meta = metaRoutes?.[r.path]?.[r.method]
+    if (r.static?.root)
+      meta = metaStatic[r.static?.root]?.static
+    if (meta?.hide) return
     let path = r.path.replaceAll(/:([^\/]+)/g, '{$1}')
     if (!(path in paths)) paths[path] = {}
     let tags = [
@@ -196,19 +201,19 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       : []
     let headerParam = r.schema?.headers
       ? Object.entries(r.schema?.headers as Record<string, STSchema>)
-          .map(([k, v]) => {
-            let p = parseParam(k, v, 'header')
-            if (k.match(/authorization/i)) {
-              // TODO: handle other auth methods
-              if (v.pattern && v?.pattern?.toString() === '/^Bearer /') {
-                security.push({ bearerAuth: [] })
-                components.securitySchemes = { bearerAuth: { type: 'http', scheme: 'bearer' } }
-                return null
-              }
+        .map(([k, v]) => {
+          let p = parseParam(k, v, 'header')
+          if (k.match(/authorization/i)) {
+            // TODO: handle other auth methods
+            if (v.pattern && v?.pattern?.toString() === '/^Bearer /') {
+              security.push({ bearerAuth: [] })
+              components.securitySchemes = { bearerAuth: { type: 'http', scheme: 'bearer' } }
+              return null
             }
-            return p
-          })
-          .filter(p => p)
+          }
+          return p
+        })
+        .filter(p => p)
       : []
     // TODO cookieParam
     let parameters = [...pathParam, ...queryParam, ...headerParam]
@@ -242,7 +247,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
             description: v.description || HttpStatus[Number(s) as keyof typeof HttpStatus] || 'Response',
             content: { [media]: { schema: schema } }
           }
-          if (components.responses && r.schema.response?.[s].id) {
+          if (components.responses && r.schema.response?.[s]?.id) {
             components.responses[r.schema.response?.[s].id as string] = response
             //@ts-ignore
             response = { $ref: `#/components/responses/${r.schema.response?.[s].id}` }

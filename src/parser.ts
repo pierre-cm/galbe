@@ -89,8 +89,8 @@ export const requestBodyParser = async (
         let received = contentType?.match(FORM_HEADER_RX)
           ? 'urlForm'
           : contentType?.match(MP_HEADER_RX)
-          ? 'multipartForm'
-          : contentType
+            ? 'multipartForm'
+            : contentType
         throw new RequestError({ status: 400, payload: { body: `Expected ${kind}, received ${received}` } })
       } else if (!contentType || contentType === BA_HEADER) {
         if (!schema) {
@@ -377,7 +377,7 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
       payload: { body: `Missing field${reqKeys.length > 1 ? 's' : ''}: ${reqKeys.join(', ')}` }
     })
 }
-const parseMultipartHeader = (header: string): { name: string; [key: string]: string } | null => {
+const parseMultipartHeader = (header: string): { name: string;[key: string]: string } | null => {
   if (!header) return null
   let disposition = 'form-data'
   const multipartHeader = [
@@ -537,24 +537,24 @@ const paramParser = (
       if (typeof value === 'boolean') return value
       if (value === 'true') return true
       if (value === 'false') return false
-      else throw `${value} is not a valid boolean. Should be 'true' or 'false'`
+      else throw `Not a valid boolean. Should be 'true' or 'false'`
     } else if (type[Kind] === 'integer') {
-      if (value === null || value === undefined) throw `${value} is not a valid integer`
+      if (value === null || value === undefined) throw `Not a valid integer`
       const parsedValue = parseInt(value, 10)
-      if (isNaN(parsedValue) || String(parsedValue) !== String(value)) throw `${value} is not a valid integer`
+      if (isNaN(parsedValue) || String(parsedValue) !== String(value)) throw `Not a valid integer`
       validate(parsedValue, type)
       return parsedValue
     } else if (type[Kind] === 'number') {
-      if (value === null || value === undefined) throw `${value} is not a valid number`
+      if (value === null || value === undefined) throw `Not a valid number`
       const parsedValue = Number(value)
-      if (isNaN(parsedValue) || String(parsedValue) !== String(value)) throw `${value} is not a valid number`
+      if (isNaN(parsedValue) || String(parsedValue) !== String(value)) throw `Not a valid number`
       validate(parsedValue, type)
       return parsedValue
     } else if (type[Kind] === 'string') {
       validate(value, type)
       return value
     } else if (type[Kind] === 'literal') {
-      if (value !== type.value) throw `${value} is not a valid value`
+      if (value !== type.value) throw `Not a valid value`
       return value
     } else if (type[Kind] === 'array') {
       return [paramParser(value, type.items as STMultipartFormValues) as Static<STUrlFormValues>]
@@ -569,9 +569,9 @@ const paramParser = (
           continue
         }
       }
-      throw `${value} could not be parsed to any of ${union
+      throw `Could not be parsed to any of [${union
         .map(u => (u as STLiteral)?.value ?? (u as STSchema)[Kind])
-        .join(', ')}`
+        .join(', ')}]`
     } else if (type[Kind] === 'any') {
       return value
     }
@@ -645,7 +645,12 @@ export const parseEntry = <T extends STProps>(
 export const responseParser = (response: any, ctx: Context, schema?: STResponse) => {
   const details = {
     status: ctx.set.status || 200,
-    headers: new Headers(ctx.set.headers)
+    headers: new Headers()
+  }
+  for (const [key, value] of Object.entries(ctx.set.headers)) {
+    if (Array.isArray(value)) {
+      value.forEach(v => details.headers.append(key, v))
+    } else details.headers.set(key, value)
   }
   if (response instanceof Response) return response
   else if (typeof response === 'string') {

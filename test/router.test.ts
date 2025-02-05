@@ -125,7 +125,7 @@ describe('router', () => {
     } catch (err: any) {
       expect(err).toBeInstanceOf(NotFoundError)
       expect(err.status).toBe(404)
-      expect(err.payload).toBe('Not found')
+      expect(err.payload).toBe('Not Found')
     }
 
     try {
@@ -134,7 +134,7 @@ describe('router', () => {
     } catch (err: any) {
       expect(err).toBeInstanceOf(NotFoundError)
       expect(err.status).toBe(404)
-      expect(err.payload).toBe('Not found')
+      expect(err.payload).toBe('Not Found')
     }
   })
 

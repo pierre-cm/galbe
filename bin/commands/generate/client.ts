@@ -6,7 +6,7 @@ import { resolve, extname } from 'path'
 import { rm } from 'fs/promises'
 import { transformSync } from '@swc/core'
 import { CWD, fmtList, instanciateRoutes, silentExec } from '../../util'
-import { $T, Galbe, GalbeCLICommand, Method, Route } from '../../../src'
+import { $T, Galbe, GalbeCLICommand, Method, Route, STResponse } from '../../../src'
 import { walkRoutes } from '../../../src/util'
 import { schemaToTypeStr, Optional, STSchema } from '../../../src/schema'
 
@@ -36,10 +36,10 @@ export default (cmd: Command) => {
       let pckg: any = {}
       try {
         pckg = await Bun.file(resolve(CWD, 'package.json')).json()
-      } catch (e) {}
+      } catch (e) { }
 
       let error = null
-      process.stdout.write('💻 \x1b[1;30mBuilding \x1b[36mGalbe\x1b[0m\x1b[1;30m client\x1b[0m')
+      Bun.write(Bun.stdout, '💻 \x1b[1;30mBuilding \x1b[36mGalbe\x1b[0m\x1b[1;30m client\x1b[0m')
       let g: Galbe = await silentExec(async () => {
         try {
           const g = (await import(resolve(CWD, index))).default
@@ -65,6 +65,7 @@ export default (cmd: Command) => {
         options: [],
         head: []
       }
+      const types: Record<string, STResponse> = {}
       let commands: GalbeCLICommand[] = []
       const metaRoutes = g.meta?.reduce(
         (routes, c) => ({ ...routes, ...c.routes }),
@@ -73,9 +74,13 @@ export default (cmd: Command) => {
 
       walkRoutes(g.router.routes, r => {
         let meta = metaRoutes?.[r.path]?.[r.method]
+        let [_, summary, description] = meta?.head?.match(/^([^\n]*)\n\n(.*)/) || []
+        if(!summary) description = meta?.head
         let route = {
           ...r,
           ...(meta?.operationId ? { alias: meta?.operationId } : {}),
+          ...(summary ? { summary } : {}),
+          ...(description ? { description } : {}),
           pathT: r.path.replaceAll(/:([^\/]+)/g, '${$1}'),
           params:
             Object.fromEntries(
@@ -84,11 +89,11 @@ export default (cmd: Command) => {
                 {
                   ...(r.schema?.params?.[m?.[1]]
                     ? {
-                        type: schemaToTypeStr(r.schema.params[m[1]]),
-                        ...(r.schema.params[m[1]]?.description
-                          ? { description: r.schema.params[m[1]].description as string }
-                          : {})
-                      }
+                      type: schemaToTypeStr(r.schema.params[m[1]]),
+                      ...(r.schema.params[m[1]]?.description
+                        ? { description: r.schema.params[m[1]].description as string }
+                        : {})
+                    }
                     : { type: 'string' })
                 }
               ])
@@ -99,18 +104,22 @@ export default (cmd: Command) => {
             ...(r.schema.body ? { body: schemaToTypeStr(r.schema.body) } : {}),
             ...(r.schema.response
               ? {
-                  response: Object.fromEntries(
-                    Object.entries(r.schema.response).map(([k, v]) => [k === 'default' ? 200 : k, schemaToTypeStr(v)])
-                  )
-                }
+                response: Object.fromEntries(
+                  Object.entries(r.schema.response).map(([k, v]) => [k === 'default' ? '"default"' : k, schemaToTypeStr(v as STSchema)])
+                )
+              }
               : {})
           }
         }
+        Object.values(r.schema.response || {}).filter(s => s?.id).forEach(s => {
+          //@ts-ignore
+          types[s.id] = schemaToTypeStr(s)
+        })
         routes[r.method.toLocaleLowerCase()].push(route)
         if (target === 'cli' && meta?.operationId)
           commands.push({
             name: meta.operationId,
-            description: meta.head,
+            description: route.summary || route.description,
             route,
             arguments:
               Object.entries((route?.params || {}) as Record<string, { type: string; description?: string }>)?.map(
@@ -144,7 +153,8 @@ export default (cmd: Command) => {
           const sandbox = {
             console,
             version: pckg?.version || '0.1.0',
-            routes
+            routes,
+            types,
           }
           createContext(sandbox)
           let res = script.runInNewContext(sandbox)
@@ -195,6 +205,7 @@ export default (cmd: Command) => {
         await rm(resolve(CWD, '.galbe'), { recursive: true })
       }
 
-      process.stdout.write(' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')
+      Bun.write(Bun.stdout, ' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')
+      process.exit(0)
     })
 }

@@ -232,7 +232,7 @@ describe('parser', () => {
           body: {
             headers: {
               'neg-number': 'Required',
-              'boolean-true': "a is not a valid boolean. Should be 'true' or 'false'"
+              'boolean-true': "Not a valid boolean. Should be 'true' or 'false'"
             }
           }
         }
@@ -259,9 +259,9 @@ describe('parser', () => {
           status: 400,
           body: {
             params: {
-              p2: 'test is not a valid number',
-              p3: '42.5 is not a valid integer',
-              p4: "a is not a valid boolean. Should be 'true' or 'false'"
+              p2: 'Not a valid number',
+              p3: 'Not a valid integer',
+              p4: "Not a valid boolean. Should be 'true' or 'false'"
             }
           }
         }
@@ -291,8 +291,8 @@ describe('parser', () => {
           status: 400,
           body: {
             query: {
-              p2: 'a is not a valid number',
-              p3: "0 is not a valid boolean. Should be 'true' or 'false'",
+              p2: 'Not a valid number',
+              p3: "Not a valid boolean. Should be 'true' or 'false'",
               p4: 'Required'
             }
           }
@@ -400,9 +400,9 @@ describe('parser', () => {
           resp: {
             body: {
               ba: 'Not a valid byteArray',
-              string: '42 is not a valid string',
-              number: 'a is not a valid number',
-              bool: "x is not a valid boolean. Should be 'true' or 'false'",
+              string: 'Not a valid string',
+              number: 'Not a valid number',
+              bool: "Not a valid boolean. Should be 'true' or 'false'",
               object: 'Expected an object, not an array',
               array: 'Not a valid array',
               null: 'Expected null value got ',
@@ -496,10 +496,10 @@ describe('parser', () => {
           resp: {
             body: {
               string: 'Multiple values found',
-              number: 'aaa is not a valid number',
-              bool: "1 is not a valid boolean. Should be 'true' or 'false'",
-              literal: 'y is not a valid value',
-              union: 'X could not be parsed to any of number, boolean'
+              number: 'Not a valid number',
+              bool: "Not a valid boolean. Should be 'true' or 'false'",
+              literal: 'Not a valid value',
+              union: 'Could not be parsed to any of [number, boolean]'
             }
           }
         }
@@ -576,7 +576,7 @@ describe('parser', () => {
           status: 400,
           type: 'object',
           resp: {
-            body: { numArray: 'x is not a valid number' }
+            body: { numArray: 'Not a valid number' }
           }
         }
       },
@@ -588,7 +588,7 @@ describe('parser', () => {
           status: 400,
           resp: {
             body: {
-              literal: 'y is not a valid value'
+              literal: 'Not a valid value'
             }
           }
         }
@@ -782,10 +782,10 @@ describe('parser', () => {
           resp: {
             body: {
               string: 'Multiple values found',
-              number: 'aaa is not a valid number',
-              bool: "1 is not a valid boolean. Should be 'true' or 'false'",
-              literal: 'y is not a valid value',
-              union: 'X could not be parsed to any of: number, boolean'
+              number: 'Not a valid number',
+              bool: "Not a valid boolean. Should be 'true' or 'false'",
+              literal: 'Not a valid value',
+              union: 'Could not be parsed to any of [number, boolean]'
             }
           }
         }
@@ -973,7 +973,7 @@ describe('parser', () => {
           status: 400,
           resp: {
             body: {
-              number: 'aaa is not a valid number'
+              number: 'Not a valid number'
             }
           }
         }
@@ -1199,9 +1199,9 @@ describe('parser', () => {
           status: 400,
           body: {
             query: {
-              int: '10 is less or equal to 10',
-              num: '42.01 is greater or equal to 42',
-              str: ['xxxxxxxxxx length is too large (8 char max)', 'xxxxxxxxxx does not match pattern /^a.*z/']
+              int: 'Is less or equal to 10',
+              num: 'Is greater or equal to 42',
+              str: ['Length is too large (8 char max)', 'Does not match pattern /^a.*z/']
             }
           }
         }
@@ -1239,17 +1239,17 @@ describe('parser', () => {
     )
     expect(type).toBe(
       `{` +
-        `'boolean':boolean;` +
-        `'byteArray':Uint8Array;` +
-        `'number':number;` +
-        `'integer':number;` +
-        `'string':string;` +
-        `'any':any;` +
-        `'literal':'literal';` +
-        `'array':Array<string>;` +
-        `'object':{'foo':string};` +
-        `'union':number|string` +
-        `}`
+      `'boolean':boolean;` +
+      `'byteArray':Uint8Array;` +
+      `'number':number;` +
+      `'integer':number;` +
+      `'string':string;` +
+      `'any':any;` +
+      `'literal':'literal';` +
+      `'array':Array<string>;` +
+      `'object':{'foo':string};` +
+      `'union':number|string` +
+      `}`
     )
   })
 })
