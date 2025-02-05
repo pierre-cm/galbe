@@ -538,7 +538,7 @@ describe('parser', () => {
           status: 200,
           type: 'object',
           resp: {
-            ba: new Uint8Array(),
+            ba: {},
             string: '',
             number: 0,
             bool: false,
@@ -556,7 +556,7 @@ describe('parser', () => {
           status: 200,
           type: 'object',
           resp: {
-            ba: new Uint8Array([72, 101, 108, 108, 111]),
+            ba: Object.fromEntries(new Uint8Array([72, 101, 108, 108, 111]).entries()),
             string: 'Mom!',
             number: 42,
             bool: true,
@@ -823,7 +823,7 @@ describe('parser', () => {
           type: 'AsyncIterator',
           resp: [
             {
-              content: new Uint8Array(),
+              content: {},
               headers: {
                 name: 'ba'
               }
@@ -885,7 +885,7 @@ describe('parser', () => {
           type: 'AsyncIterator',
           resp: [
             {
-              content: Uint8Array.from('Hello', c => c.charCodeAt(0)),
+              content: Object.fromEntries(Uint8Array.from('Hello', c => c.charCodeAt(0)).entries()),
               headers: {
                 name: 'ba'
               }

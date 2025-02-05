@@ -486,7 +486,7 @@ describe('requests', () => {
       {
         body: 'test',
         schema: 'stream/ba',
-        expected: { status: 200, type: 'AsyncIterator', resp: new Uint8Array([116, 101, 115, 116]) }
+        expected: { status: 200, type: 'AsyncIterator', resp: Object.fromEntries([116, 101, 115, 116].entries()) }
       },
       { body: 'test', schema: 'stream/str', expected: { status: 200, type: 'AsyncIterator', resp: 'test' } },
       { body: 'test', schema: 'stream/form', expected: { status: 400 } },
@@ -504,9 +504,12 @@ describe('requests', () => {
 
       let respBody = (await resp.json()) as { type: string; content: any }
 
+      console.log(respBody)
+
       expect(resp.status).toBe(expected.status)
       if (expected.type) expect(respBody.type).toEqual(expected.type)
       if (respBody.type === 'object' && expected.resp === null) expect(respBody.content).toBeNull
+      // else if (respBody.type === 'AsyncIterator') expect(new Uint8Array(Object.values(respBody.content))).toEqual(expected.resp)
       else expect(respBody.content).toEqual(expected.resp)
     }
   })
@@ -549,7 +552,7 @@ describe('requests', () => {
         body: 'test',
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'AsyncIterator', resp: new Uint8Array([116, 101, 115, 116]) }
+        expected: { status: 200, type: 'AsyncIterator', resp: Object.fromEntries(new Uint8Array([116, 101, 115, 116]).entries()) }
       },
       {
         body: 'test',
@@ -625,7 +628,7 @@ describe('requests', () => {
         body: 'test',
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'AsyncIterator', resp: new Uint8Array([116, 101, 115, 116]) }
+        expected: { status: 200, type: 'AsyncIterator', resp: Object.fromEntries(new Uint8Array([116, 101, 115, 116]).entries()) }
       },
       {
         body: 'test',
@@ -695,7 +698,7 @@ describe('requests', () => {
         body: 'test',
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'AsyncIterator', resp: new Uint8Array([116, 101, 115, 116]) }
+        expected: { status: 200, type: 'AsyncIterator', resp: Object.fromEntries(new Uint8Array([116, 101, 115, 116]).entries()) }
       },
       {
         body: 'test',
@@ -743,7 +746,7 @@ describe('requests', () => {
         body: strBody,
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'AsyncIterator', resp: Uint8Array.from(strBody, c => c.charCodeAt(0)) }
+        expected: { status: 200, type: 'AsyncIterator', resp: Object.fromEntries(Uint8Array.from(strBody, c => c.charCodeAt(0)).entries()) }
       },
       {
         body: strBody,
