@@ -1,12 +1,16 @@
 # Getting started
 
-Galbe is a Javascript web framework for building fast and versatile backend servers with Bun.
+Galbe is a Javascript web framework for building fast and versatile backend
+servers with Bun.
 
-Designed with simplicity in mind, Galbe allows you to quickly create and set up a project. In addition to its ease of use, Galbe also offers a range of useful features that help you focus on the core logic of your application.
+Designed with simplicity in mind, Galbe allows you to quickly create and set up
+a project. In addition to its ease of use, Galbe also offers a range of useful
+features that help you focus on the core logic of your application.
 
 ## Requirements
 
-To start developing your Galbe project, you first need to install [Bun](https://bun.sh).
+To start developing your Galbe project, you first need to install
+[Bun](https://bun.sh).
 
 ## Automatic installation
 
@@ -16,7 +20,9 @@ This is the recommended way of setting up a Galbe project.
 $ bun create galbe app
 ```
 
-The Galbe starter CLI will request you to chose a template and a target language for your project. Let's select `hello` as template and `ts` as language. This will create a new project under `app` directory.
+The Galbe starter CLI will request you to chose a template and a target language
+for your project. Let's select `hello` as template and `ts` as language. This
+will create a new project under `app` directory.
 
 Now you can navigate to your newly created project and install it:
 
@@ -46,8 +52,9 @@ $ curl localhost:3000/hello/John?age=32
 Hello John! You're 32 y.o.
 ```
 
-> [!TIP]  
-> If you want to have a more complete view of Galbe capabilities, feel free to take a look at the `demo` template from the Galbe starter CLI.
+> [!TIP]
+> If you want to have a more complete view of Galbe capabilities, feel free to
+> take a look at the `demo` template from the Galbe starter CLI.
 
 ## Manual installation
 
@@ -70,30 +77,37 @@ Open `package.json` file and add the following scripts:
 }
 ```
 
-As you can see, those scripts rely on Galbe CLI to run and build the application. You will find more info about it on the [CLI](cli.md) page.
+As you can see, those scripts rely on Galbe CLI to run and build the
+application. You will find more info about it on the [CLI](cli.md) page.
 
-This require your `index.ts` to export a default Galbe instance in order to work. As in the following example:
+This require your `index.ts` to export a default Galbe instance in order to
+work. As in the following example:
 
 ```ts
-import { Galbe } from 'galbe'
+import { Galbe } from "galbe";
 
-const galbe = new Galbe({ port: 3000 })
-galbe.get('/hello', () => 'Hello Mom!')
+const galbe = new Galbe({ port: 3000 });
+galbe.get("/hello", () => "Hello Mom!");
 
-export default galbe
+export default galbe;
 ```
 
-This is the recommended way to proceed but it is not mandatory. Galbe instances also provide a `listen` method that will allow you to manually start your server instance from the code.
+This is the recommended way to proceed but it is not mandatory. Galbe instances
+also provide a `listen` method that will allow you to manually start your server
+instance from the code.
 
 > [!WARNING]
-> In the case you decide to not rely on Galbe CLI to run/build your app, you will not have access to [Automatic Route Analyzer](routes.md#automatic-route-analyzer) feature.
+> In the case you decide to not rely on Galbe CLI to run/build your app, you
+> will not have access to
+> [Automatic Route Analyzer](routes.md#automatic-route-analyzer) feature.
 
 ## Configuration
 
-To configure your Galbe server, you should pass your configuration to the Galbe constructor when you instanciate it.
+To configure your Galbe server, you should pass your configuration to the Galbe
+constructor when you instanciate it.
 
 ```ts
-const galbe = new Galbe(configuration)
+const galbe = new Galbe(configuration);
 ```
 
 ### Properties
@@ -112,11 +126,14 @@ The base path is added as a prefix to all the routes created.
 
 **routes**
 
-A Glob Pattern or a list of Glob patterns defining the route files to be analyzed by the [Automatic Route Analyzer](routes.md#automatic-route-analyzer). Default is `src/**/*.route.{js,ts}`.
+A Glob Pattern or a list of Glob patterns defining the route files to be
+analyzed by the [Automatic Route Analyzer](routes.md#automatic-route-analyzer).
+Default is `src/**/*.route.{js,ts}`.
 
 **plugin**
 
-A property that can be used by plugins to add plugin's specific configuration. Every key should correspond to a [Unique Plugin Identifier](plugins.md).
+A property that can be used by plugins to add plugin's specific configuration.
+Every key should correspond to a [Unique Plugin Identifier](plugins.md).
 
 **tls**
 
@@ -130,15 +147,21 @@ Enable or disable TLS support. Default value is `false`.
 
 **requestValidator.enabled**
 
-Enable or disable the _request_ schema validation (See [Request Schema definition](schemas.md#request-schema-definition)). Default value is `true`.
+Enable or disable the _request_ schema validation (See
+[Request Schema definition](schemas.md#request-schema-definition)). Default
+value is `true`.
 
 **responseValidator.enabled**
 
-Enable or disable the _response_ schema validation (See [Request Schema definition](schemas.md#request-schema-definition)). Default value is `true`.
+Enable or disable the _response_ schema validation (See
+[Request Schema definition](schemas.md#request-schema-definition)). Default
+value is `true`.
 
 ### Examples
 
-A common way to handle server configuration is to create new file `galbe.config.(js|ts|json)` at the root of your project directory and import it in your code. Here is an example:
+A common way to handle server configuration is to create new file
+`galbe.config.(js|ts|json)` at the root of your project directory and import it
+in your code. Here is an example:
 
 galbe.config.js
 
@@ -152,27 +175,31 @@ export default {
 index.js
 
 ```js
-import { Galbe } from 'galbe'
-import config from './galbe.config'
+import { Galbe } from "galbe";
+import config from "./galbe.config";
 
-export default new Galbe(config)
+export default new Galbe(config);
 ```
 
-> [!TIP]  
-> If you are using Typescript, you can import `GalbeConfig` type from galbe package to ensure type consistency for your configuration. Here is an example:
+> [!TIP]
+> If you are using Typescript, you can import `GalbeConfig` type from galbe
+> package to ensure type consistency for your configuration. Here is an example:
 >
 > ```ts
-> import type { GalbeConfig } from 'galbe'
+> import type { GalbeConfig } from "galbe";
 > const config: GalbeConfig = {
 >   port: Number(Bun.env.GALBE_PORT),
->   routes: 'routes/*.route.ts'
-> }
-> export default config
+>   routes: "routes/*.route.ts",
+> };
+> export default config;
 > ```
 
 ## Project structure
 
-One key aspect of Galbe, is its versatility in terms of project structure. This is partly allowed by the [Automatic Route Analyzer](routes.md#automatic-route-analyzer) and the `routes` config property which defaults to `src/**/*.route.{js,ts}`.
+One key aspect of Galbe, is its versatility in terms of project structure. This
+is partly allowed by the
+[Automatic Route Analyzer](routes.md#automatic-route-analyzer) and the `routes`
+config property which defaults to `src/**/*.route.{js,ts}`.
 
 Here are two examples of valid project structures by default:
 
@@ -214,18 +241,26 @@ Here are two examples of valid project structures by default:
 └── tsconfig.json
 ```
 
-In both cases, the [Automatic Route Analyzer](routes.md#automatic-route-analyzer) will analyze `foo.route.ts` and `bar.route.ts` Route Files to find route definitions.
+In both cases, the
+[Automatic Route Analyzer](routes.md#automatic-route-analyzer) will analyze
+`foo.route.ts` and `bar.route.ts` Route Files to find route definitions.
 
-You can find more info about Route Files definition in the [Routes Files](routes.md#route-files) section.
+You can find more info about Route Files definition in the
+[Routes Files](routes.md#route-files) section.
 
 > [!NOTE]
-> The examples provided above will work with the default configuration, but you can easily customize the routes property to fit your own project structure. Simply redefine the `routes` property with your own pattern(s) to to fit your own project structure.
+> The examples provided above will work with the default configuration, but you
+> can easily customize the routes property to fit your own project structure.
+> Simply redefine the `routes` property with your own pattern(s) to to fit your
+> own project structure.
 
 ## How to debug
 
-The easiest way to debug your app is by installing the [VSCode Bun extension](https://marketplace.visualstudio.com/items?itemName=oven.bun-vscode).
+The easiest way to debug your app is by installing the
+[VSCode Bun extension](https://marketplace.visualstudio.com/items?itemName=oven.bun-vscode).
 
-You can then create a `.vscode/launch.json` config file in your project root directory. Here is an example of configuration:
+You can then create a `.vscode/launch.json` config file in your project root
+directory. Here is an example of configuration:
 
 ```json
 {
@@ -239,7 +274,7 @@ You can then create a `.vscode/launch.json` config file in your project root dir
       "env": { "TERM": "xterm" },
       "cwd": "${workspaceFolder}",
       "runtime": "bun",
-      "runtimeArgs": ["dev", "index.ts", "--watch", "--force"]
+      "runtimeArgs": ["dev", "index.ts", "-w", "."]
     }
   ]
 }
