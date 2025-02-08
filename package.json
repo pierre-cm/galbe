@@ -29,6 +29,7 @@
   "license": "MIT",
   "scripts": {
     "test": "bun test",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false",
     "postinstall": "bun run ./scripts/postinstall.ts",
     "release": "release-it"
   },
