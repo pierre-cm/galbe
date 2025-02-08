@@ -96,6 +96,7 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
 export const validateResponse = (response: any, schema: STResponse, status: number) => {
   if (!(status in schema)) return
   const s = schema?.[status] || schema?.['default']
+  if(!s) return
   if (response instanceof ReadableStream) {
     if (!s[Stream]) throw new InternalError(`Expected ${s[Kind]} response, but got ReadableStream`)
   } else if (isIterator(response)) {

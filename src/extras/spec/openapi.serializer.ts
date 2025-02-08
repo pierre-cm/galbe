@@ -239,6 +239,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     if (r.schema.response && Object.keys(r.schema.response).length) {
       responses = Object.fromEntries(
         Object.entries(r.schema.response).map(([status, v]) => {
+          if(!v) return []
           let s = Number(status) as keyof typeof HttpStatus
           let { schema, isJson } = schemaToOpenapi(v)
           let { type, format } = resolveRef(schema)
@@ -248,7 +249,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
             content: { [media]: { schema: schema } }
           }
           if (components.responses && r.schema.response?.[s]?.id) {
-            components.responses[r.schema.response?.[s].id as string] = response
+            components.responses[r.schema.response?.[s]?.id as string] = response
             //@ts-ignore
             response = { $ref: `#/components/responses/${r.schema.response?.[s].id}` }
           }

@@ -52,7 +52,7 @@ export type STResponseValue =
   | STStream
   | STAny
   | STNull
-export type STResponse = Record<number | 'default', STResponseValue>
+export type STResponse = Partial<Record<number | 'default', STResponseValue>>
 
 export type MaybeArray<T> = T | T[]
 export type MaybeSTArray<T extends STSchema> = T | STArray<T>
@@ -136,7 +136,7 @@ export type RequestSchema<
   P extends Partial<STParams<Path>> = Partial<STParams<Path>>,
   Q extends STQuery = STQuery,
   B extends STBody = STBody,
-  R extends Partial<STResponse> = Partial<STResponse>
+  R extends Partial<STResponse> = STResponse
 > = {
   headers?: H
   params?: P
@@ -194,7 +194,7 @@ export type Endpoint<M extends Method> = {
     H extends STHeaders = any,
     Q extends STQuery = any,
     B extends STBody = any,
-    R extends Partial<STResponse> = Partial<STResponse>
+    R extends STResponse = STResponse
   >(
     path: Path,
     schema: RequestSchema<M, Path, H, P, Q, B, R>,
@@ -207,7 +207,7 @@ export type Endpoint<M extends Method> = {
     H extends STHeaders = any,
     Q extends STQuery = any,
     B extends STBody = any,
-    R extends Partial<STResponse> = Partial<STResponse>
+    R extends STResponse = STResponse
   >(
     path: Path,
     schema: RequestSchema<M, Path, H, P, Q, B, R>,
@@ -219,7 +219,7 @@ export type Endpoint<M extends Method> = {
     H extends STHeaders = any,
     Q extends STQuery = any,
     B extends STBody = any,
-    R extends Partial<STResponse> = Partial<STResponse>
+    R extends STResponse = STResponse
   >(
     path: Path,
     hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[],
@@ -231,7 +231,7 @@ export type Endpoint<M extends Method> = {
     H extends STHeaders = any,
     Q extends STQuery = any,
     B extends STBody = any,
-    R extends Partial<STResponse> = Partial<STResponse>
+    R extends STResponse = STResponse
   >(
     path: Path,
     handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
@@ -267,7 +267,7 @@ export type Route<
   H extends STHeaders = STHeaders,
   Q extends STQuery = STQuery,
   B extends STBody = STBody,
-  R extends Partial<STResponse> = Partial<STResponse>,
+  R extends STResponse = STResponse,
   SP extends string = string,
   SR extends string = string
 > = {

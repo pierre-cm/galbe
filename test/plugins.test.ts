@@ -1,5 +1,5 @@
 import { expect, test, describe, afterEach, mock } from 'bun:test'
-import { Context, Galbe, GalbePlugin, Route } from '../src'
+import { type Context, Galbe, type GalbePlugin, type Route } from '../src'
 
 const port = 7361
 

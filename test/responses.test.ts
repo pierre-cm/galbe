@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeAll } from 'bun:test'
-import { Galbe, $T } from '../src'
+import { Galbe, $T, type Context } from '../src'
 import { decoder } from './test.utils'
 
 const port = 7359
@@ -21,7 +21,7 @@ const rsTxt = (text: string) => {
   })
 }
 
-const handleResp = ctx => ctx.body
+const handleResp = (ctx: Context) => ctx.body
 
 describe('responses', () => {
   beforeAll(async () => {
@@ -143,6 +143,7 @@ describe('responses', () => {
 
     expect(resp.status).toBe(200)
     expect(resp.headers.get('content-type')).toBe('application/octet-stream')
+    //@ts-ignore
     expect(body).toEqual(reqBody)
   })
 

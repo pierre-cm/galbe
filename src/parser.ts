@@ -655,7 +655,7 @@ export const responseParser = (response: any, ctx: Context, schema?: STResponse)
   if (response instanceof Response) return response
   else if (typeof response === 'string') {
     if (!details?.headers?.has('content-type')) {
-      if (schema?.[details.status][Kind] === 'json') {
+      if (schema?.[details.status]?.[Kind] === 'json') {
         details?.headers?.set('content-type', 'application/json')
         response = `"${response}"`
       } else details?.headers?.set('content-type', 'text/plain')
