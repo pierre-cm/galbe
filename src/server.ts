@@ -172,14 +172,20 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
             headers: { 'Content-Type': 'application/json' }
           })
         } else if (error instanceof RequestError) {
-          let payload = ''
-          if (typeof error.payload === 'string') payload = error.payload
-          try {
-            payload = JSON.stringify(error.payload)
-          } catch (err) { }
+          let payload = error.payload
+          let headers = new Headers(error?.headers || {})
+          if (!headers.has('content-type')) {
+            if (typeof error.payload === 'string') headers.set('content-type', 'text/plain')
+            else {
+              headers.set('content-type', 'application/json')
+              try {
+                payload = JSON.stringify(error.payload)
+              } catch (err) { }
+            }
+          }
           return new Response(payload, {
             status: error.status,
-            headers: { 'Content-Type': 'application/json' }
+            headers
           })
         } else console.log(error)
         return new Response('"Internal Server Error"', {

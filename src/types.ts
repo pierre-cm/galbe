@@ -245,10 +245,12 @@ export type StaticEndpoint<P extends string = string, T extends string = string>
 
 export class RequestError {
   status: number
-  payload: any
-  constructor(options: { status?: number; payload?: any }) {
+  payload?: any
+  headers?: Record<string, string>
+  constructor(options: { status?: number; payload?: any, headers?: Record<string, string> }) {
     this.status = options.status ?? 500
     this.payload = options.payload
+    this.headers = options.headers
   }
 }
 
