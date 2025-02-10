@@ -1,8 +1,8 @@
 import { relative } from 'path'
 import { watch } from 'chokidar'
-import { Galbe, Route } from '../src'
+import { Galbe, type Route } from '../src'
 import { logRoute, walkRoutes } from '../src/util'
-import { GalbeProxy, RouteMeta, defineRoutes } from '../src/routes'
+import { GalbeProxy, type RouteMeta, defineRoutes } from '../src/routes'
 
 export { default as pckg } from '../package.json'
 
@@ -15,7 +15,7 @@ export const fmtVal = (v: any) => {
   if (typeof v === 'number') return `\x1b[36m${v}\x1b[0m`
   return v
 }
-export const fmtList = (l: any) => `[${l.map(v => fmtVal(v)).join(', ')}]`
+export const fmtList = (l: any) => `[${l.map((v:any) => fmtVal(v)).join(', ')}]`
 export const fmtInterval = (a: any, b: any) => `[${fmtVal(a)}-${fmtVal(b)}]`
 
 export const silentExec = async (fn: () => any) => {
@@ -93,16 +93,6 @@ export const instanciateRoutes = async (g: Galbe) => {
     console.log("")
   }
   console.log('\x1b[1;30m\x1b[32mdone\x1b[0m\n')
-}
-
-export const softMerge = (base, override) => {
-  for (const key in override) {
-    if (override[key] instanceof Object && !(override[key] instanceof Array)) {
-      if (!base[key]) Object.assign(base, { [key]: {} })
-      softMerge(base[key], override[key])
-    } else Object.assign(base, { [key]: override[key] })
-  }
-  return base
 }
 
 export const killPort = async (port: number) => {

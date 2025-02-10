@@ -9,9 +9,16 @@ import { CWD, fmtVal, silentExec } from '../util'
 import { Galbe } from '../../src'
 import { defineRoutes, GalbeProxy } from '../../src/routes'
 import { BuildConfig } from 'bun'
+import { existsSync } from 'fs'
 
 const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string) => {
   const buildPath = resolve(tmpdir(), buildId)
+  const indexDir = dirname(indexPath)
+
+  let configPath = ''
+  if (existsSync(`${indexDir}/galbe.config.ts`)) configPath = `${indexDir}/galbe.config.ts`
+  else if (existsSync(`${indexDir}/galbe.config.js`)) configPath = `${indexDir}/galbe.config.js`
+
   const routes = new Map<string, { filepath: string, static?: { path: string, root: string } }>()
   let errors: any[] = []
   // Create GalbeProxy here
@@ -30,6 +37,9 @@ const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string) =>
 
   let buildIndex =
     `import galbe from '${relative(buildPath, indexPath)}';\n` +
+    (configPath ? `import config from '${relative(buildPath, configPath)}';\n` : '') + 
+    (configPath ? `import {softMerge} from '${relative(buildPath, `${indexDir}/node_modules/galbe/src/util`)}';\n` : '') +
+    (configPath ? `let conf = galbe.config;\ngalbe.config = softMerge(config, conf)\n` : '') +
     `${[...routes.values()].map((r, idx) => `import _${idx} from '${relative(buildPath, r.filepath)}'`).join(';\n')}\n` +
     `Bun.env.BUN_ENV = 'production';\n` +
     `Bun.env.GALBE_BUILD = '${buildId}';\n` +

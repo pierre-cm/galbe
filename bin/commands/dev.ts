@@ -1,9 +1,11 @@
 import { $ } from 'bun'
 import { Command, Option } from 'commander'
-import { resolve } from 'path'
+import { resolve, dirname } from 'path'
 
 import { CWD, fmtInterval, fmtVal, instanciateRoutes, killPort, watchDir } from '../util'
 import { Galbe } from '../../src'
+import { softMerge } from '../../src/util'
+import { existsSync } from 'fs'
 
 const defaultPort = 3000
 
@@ -31,10 +33,18 @@ export default (cmd: Command) => {
     )
     .action(async (index, props) => {
       const { port, watch, watchignore, noclear, force } = props
-      let watch_dir = typeof watch === 'string' ? watch : CWD
-      const clear = !noclear
       const indexPath = resolve(CWD, index)
+      const indexDir = dirname(indexPath)
+      let watch_dir = typeof watch === 'string' ? watch : indexDir
+      const clear = !noclear
+      let galbeConfig = {}
       let g: Galbe
+
+      if (existsSync(`${indexDir}/galbe.config.ts`)) {
+        galbeConfig = (await import(`${indexDir}/galbe.config.ts`)).default
+      } else if (existsSync(`${indexDir}/galbe.config.js`)) {
+        galbeConfig = (await import(`${indexDir}/galbe.config.js`)).default
+      }
 
       if (!Bun.env.BUN_ENV) Bun.env.BUN_ENV = 'development'
 
@@ -57,6 +67,8 @@ export default (cmd: Command) => {
 
       if (!!watch && clear) await $`clear`
       g = (await import(indexPath)).default
+      let conf = g.config
+      g.config = softMerge(galbeConfig, conf)
       await instanciateRoutes(g)
       await g.listen(port)
     })

@@ -12,6 +12,15 @@ const METHOD_COLOR: Record<string, string> = {
 }
 const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g
 
+export const softMerge = <T> (base: T, override: T): T => {
+  for (const key in override) {
+    if (override[key] instanceof Object && !(override[key] instanceof Array)) {
+      if (!base[key]) Object.assign(base as any, { [key]: {} })
+      softMerge(base[key], override[key])
+    } else Object.assign(base as any, { [key]: override[key] })
+  }
+  return base
+}
 export const logRoute = (
   r: { method: string; path: string, static?: { path: string, root: string } },
   meta?: RouteMeta,

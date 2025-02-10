@@ -1,9 +1,11 @@
 import { Command, Option } from 'commander'
 import { resolve, relative, extname } from 'path'
 import { dump as ymlDump, load as ymlLoad } from 'js-yaml'
-import { CWD, fmtList, instanciateRoutes, silentExec, softMerge } from '../../util'
+import { CWD, fmtList, instanciateRoutes, silentExec } from '../../util'
 import { Galbe } from '../../../src'
 import { OpenAPISerializer } from '../../../src/extras'
+import { softMerge } from '../../../src/util'
+import { OpenAPIV3 } from 'openapi-types'
 
 const specTargets = ['openapi:3.0:json', 'openapi:3.0:yaml']
 const parsePckgAuthoRgx = /^\s*([^<(]*)(?:<([^>]+)>)?\s*(?:\(([^)]*)\))?\s*$/
@@ -85,7 +87,7 @@ export default (cmd: Command) => {
             version: pckg?.version || '0.1.0'
           }
         }
-        openapiSpec = softMerge(openapiSpec, baseSpec)
+        openapiSpec = softMerge(openapiSpec, baseSpec) as OpenAPIV3.Document
         Bun.write(resolve(CWD, out), tFormat === 'json' ? JSON.stringify(openapiSpec, null, 2) : ymlDump(openapiSpec))
       }
 

@@ -111,6 +111,8 @@ export const $T = new SchemaType()
 
 export { RequestError } from './types'
 
+export const config = (config: GalbeConfig) => config
+
 /**
  * #### Galbe Server
  * Instanciate a Galbe web server
