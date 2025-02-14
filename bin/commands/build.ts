@@ -10,6 +10,7 @@ import { Galbe } from '../../src'
 import { defineRoutes, GalbeProxy } from '../../src/routes'
 import { BuildConfig } from 'bun'
 import { existsSync } from 'fs'
+import { softMerge } from '../../src/util'
 
 const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string) => {
   const buildPath = resolve(tmpdir(), buildId)
@@ -61,9 +62,18 @@ export default (cmd: Command) => {
     .option('-c, --config <file>', 'bun js or ts config file')
     .action(async (index, props) => {
       const { out, compile, config } = props
-
+      const indexPath = resolve(CWD, index)
+      const indexDir = dirname(indexPath)
       const buildID = crypto.randomUUID()
       const outPath = resolve(CWD, out)
+
+      let galbeConfig = {}
+
+      if (existsSync(`${indexDir}/galbe.config.ts`)) {
+        galbeConfig = (await import(`${indexDir}/galbe.config.ts`)).default
+      } else if (existsSync(`${indexDir}/galbe.config.js`)) {
+        galbeConfig = (await import(`${indexDir}/galbe.config.js`)).default
+      }
 
       Bun.env.GALBE_BUILD = buildID
       Bun.env.GALBE_BUILD_OUT = outPath
@@ -77,6 +87,8 @@ export default (cmd: Command) => {
       let g: Galbe = await silentExec(async () => {
         try {
           const g = (await import(resolve(CWD, index))).default
+          let conf = g.config
+          g.config = softMerge(galbeConfig, conf)
           return g
         } catch (err) {
           error = err
