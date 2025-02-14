@@ -102,10 +102,10 @@ export default (cmd: Command) => {
 
       const buildConfig: BuildConfig = {
         publicPath: `${outPath}/`,
-        ...Object.fromEntries(Object.entries(bunfig).filter(([k, v]) => v)),
+        sourcemap: 'external',
+        ...Object.fromEntries(Object.entries(bunfig).filter(([_, v]) => v)),
         entrypoints: [buildIndex],
         outdir: outPath,
-        sourcemap: 'external',
         target: 'bun',
       }
 

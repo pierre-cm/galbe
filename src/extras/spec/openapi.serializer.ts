@@ -240,12 +240,12 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       responses = Object.fromEntries(
         Object.entries(r.schema.response).map(([status, v]) => {
           if(!v) return []
-          let s = Number(status) as keyof typeof HttpStatus
+          let s = status as keyof typeof HttpStatus | 'default'
           let { schema, isJson } = schemaToOpenapi(v)
           let { type, format } = resolveRef(schema)
           let media = schemaToMedia({ type, format, isJson } as SchemaType)
           let response: OpenAPIV3.ResponseObject = {
-            description: v.description || HttpStatus[Number(s) as keyof typeof HttpStatus] || 'Response',
+            description: v.description || HttpStatus[s as keyof typeof HttpStatus] || 'Response',
             content: { [media]: { schema: schema } }
           }
           if (components.responses && r.schema.response?.[s]?.id) {
@@ -261,9 +261,12 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
         default: { description: HttpStatus[200] }
       }
     }
+    let summary = meta?.head.match(/^([^\n]+)/)?.[1]
+    console.log('#', r.method, r.path)
+    console.log(r.schema.body)
     paths[path][r.method] = {
       tags: tags.length ? tags : undefined,
-      summary: meta?.head,
+      summary: summary,
       operationId: meta?.operationId,
       parameters: parameters.length ? parameters : undefined,
       requestBody,

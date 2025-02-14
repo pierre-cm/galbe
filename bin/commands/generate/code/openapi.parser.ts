@@ -282,7 +282,7 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
   )
 
   let body = ''
-  if(!['get', 'options', 'head'].includes(method)){
+  if(!['get', 'delete', 'options', 'head'].includes(method)){
     let _rb = def?.requestBody as OpenAPIV3.ReferenceObject
     if (_rb?.$ref) {
       body = unref(`  body: %ref:${_rb.$ref}%`, m => {

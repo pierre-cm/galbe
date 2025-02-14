@@ -2,12 +2,12 @@ import { $ } from 'bun'
 import { Command, Option } from 'commander'
 import { resolve, dirname } from 'path'
 
-import { CWD, fmtInterval, fmtVal, instanciateRoutes, killPort, watchDir } from '../util'
+import { CWD, fmtInterval, fmtVal, instanciateRoutes, watchDir } from '../util'
 import { Galbe } from '../../src'
 import { softMerge } from '../../src/util'
 import { existsSync } from 'fs'
 
-const defaultPort = 3000
+const DEFAULT_PORT = 3000
 
 export default (cmd: Command) => {
   cmd
@@ -20,22 +20,16 @@ export default (cmd: Command) => {
           console.log(`error: port range must be between ${fmtInterval(1, 65535)}`)
           process.exit(1)
         })
-        .default(null, fmtVal(defaultPort))
+        .default(null, fmtVal(DEFAULT_PORT))
     )
-    .addOption(new Option('-w, --watch <dir>', 'watch file changes').default(false, fmtVal(false)))
+    .addOption(new Option('-w, --watch [dir]', 'watch file changes').default(false, fmtVal(false)))
     .addOption(new Option('-wi, --watchignore <regexp>', 'ignore file changes').default(false, fmtVal(false)))
     .addOption(new Option('-nc, --noclear', "don't clear on file changes").default(false, fmtVal(false)))
-    .addOption(
-      new Option('-f, --force', 'kills any process running on defined port before strating the server').default(
-        false,
-        fmtVal(false)
-      )
-    )
     .action(async (index, props) => {
-      const { port, watch, watchignore, noclear, force } = props
+      const { port, watch, watchignore, noclear } = props
       const indexPath = resolve(CWD, index)
       const indexDir = dirname(indexPath)
-      let watch_dir = typeof watch === 'string' ? watch : indexDir
+      let watch_dir = typeof watch === 'string' ? watch : watch ? indexDir : ''
       const clear = !noclear
       let galbeConfig = {}
       let g: Galbe
@@ -48,9 +42,7 @@ export default (cmd: Command) => {
 
       if (!Bun.env.BUN_ENV) Bun.env.BUN_ENV = 'development'
 
-      if (force) await killPort(port || 3000)
-
-      if (!!watch) {
+      if (!!watch_dir) {
         await watchDir(
           watch_dir,
           async () => {
@@ -65,7 +57,7 @@ export default (cmd: Command) => {
         )
       }
 
-      if (!!watch && clear) await $`clear`
+      if (!!watch_dir && clear) await $`clear`
       g = (await import(indexPath)).default
       let conf = g.config
       g.config = softMerge(galbeConfig, conf)
