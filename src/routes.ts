@@ -234,7 +234,7 @@ export const defineRoutes = async (
   options: Pick<GalbeConfig, 'routes'>,
   proxy: GalbeProxy,
 ) => {
-  const routes = options?.routes === true ? DEFAULT_ROUTE_PATTERN : options?.routes
+  const routes = options?.routes === undefined || options?.routes === true ? DEFAULT_ROUTE_PATTERN : options?.routes
   if (!routes) return
   const root = process.cwd()
   if (typeof routes === 'string') {

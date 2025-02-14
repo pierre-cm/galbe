@@ -99,15 +99,25 @@ export type STQuery = Record<string, STQueryValue>
  * ```
  */
 export type GalbeConfig = {
+  /** The port number that the server will be listening on. */
   port?: number
+  /** Allow to share the same port across processes (Linux only). */
+  reusePort?: boolean
+  /** The hostname of the server. */
   hostname?: string
+  /** The base path is added as a prefix to all the routes created. */
   basePath?: string
+  /** Enable or disable TLS support. */
   tls?: TLSOptions
   server?: Exclude<ServeOptions, 'port'> | TLSServeOptions
+  /** A Glob Pattern or a list of Glob patterns defining the route files to be analyzed by the Automatic Route Analyzer. */
   routes?: boolean | string | string[]
   router?: { cacheEnabled: boolean }
+  /** A property that can be used by plugins to add plugin's specific configuration. */
   plugin?: Record<string, any>
+  /** Enable or disable the request schema validation.*/
   requestValidator?: { enabled: boolean }
+  /** Enable or disable the response schema validation.*/
   responseValidator?: { enabled: boolean }
 }
 /**

@@ -30,6 +30,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
 
   const server = Bun.serve({
     port: port || galbe.config?.port || 3000,
+    reusePort: galbe?.config?.reusePort,
     hostname: hostname || galbe.config?.hostname || 'localhost',
     tls: galbe.config?.tls,
 
@@ -81,7 +82,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         context.params = inParams
 
         // request validation
-        if (galbe.config?.requestValidator?.enabled) {
+        if (galbe.config?.requestValidator?.enabled !== false) {
           let errors: RequestError[] = []
           try {
             if (schema?.headers)
@@ -150,7 +151,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
 
         const parsedResponse = responseParser(response, context as Context, schema.response)
 
-        if (galbe.config?.responseValidator?.enabled && schema.response)
+        if (galbe.config?.responseValidator?.enabled !== false && schema.response)
           validateResponse(response, schema.response, parsedResponse.status || 200)
 
         for (const p of pluginsCb.afterHandle) {

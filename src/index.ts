@@ -138,13 +138,10 @@ export class Galbe {
   plugins: GalbePlugin[] = []
   constructor(config?: GalbeConfig) {
     this.config = config ?? {}
-    this.config.routes = this.config.routes ?? true
     this.router = new GalbeRouter({
       prefix: this.config?.basePath || '',
       cacheEnabled: this.config?.router?.cacheEnabled
     })
-    this.config.requestValidator = config?.requestValidator ?? { enabled: true }
-    this.config.responseValidator = config?.responseValidator ?? { enabled: true }
   }
   private add(route: any) {
     this.router.add(route)
