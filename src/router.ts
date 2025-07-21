@@ -55,8 +55,8 @@ export class GalbeRouter {
     const isStatic = !route.path.match(/(:[\w\d-]+|\*)/)
     if (isStatic) this.cachedRoutes.set(`[${route.method.toUpperCase()}]${route.path}`, route)
     route.path = `${this.prefix || ''}${route.path}`
-    let path = route.path.replace(/^\/$(.*)\/?$/, '$1').split('/')
-    path.shift()
+    let path = route.path.replace(/^\/+|\/+$/g, '').split('/')
+    if (path[0] === '') path.shift()
     let r = this.routes
     if (!path.length) {
       r.routes[route.method] = route
