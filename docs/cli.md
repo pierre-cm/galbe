@@ -26,11 +26,11 @@ Start a dev server running your Galbe application.
 
 | Name  | Description                                              |
 | ----- | -------------------------------------------------------- |
-| index | The js or ts file that export you Galbe server instance. |
+| index | The js or ts file that export your Galbe server instance. |
 
 #### Options
 
-| Short | Long      | Descritpion                 | Default |
+| Short | Long      | Description                 | Default |
 | ----- | --------- | --------------------------- | ------- |
 | -p    | --port    | port number [1-65535]       | 3000    |
 | -w    | --watch   | watch file changes          | false   |
@@ -61,11 +61,11 @@ Bundle your Galbe application.
 
 | Name  | Description                                              |
 | ----- | -------------------------------------------------------- |
-| index | The js or ts file that export you Galbe server instance. |
+| index | The js or ts file that export your Galbe server instance. |
 
 #### Options
 
-| Short | Long      | Descritpion                    | Default  |
+| Short | Long      | Description                    | Default  |
 | ----- | --------- | ------------------------------ | -------- |
 | -o    | --out     | output directory               | dist/app |
 | -C    | --compile | create a standalone executable | false    |
@@ -87,7 +87,7 @@ $ galbe build index.js
 
 ## generate
 
-Generate resources arround your Galbe application.
+Generate resources around your Galbe application.
 
 ### client
 
@@ -97,11 +97,11 @@ Generate a client for your Galbe application.
 
 | Name  | Description                                              |
 | ----- | -------------------------------------------------------- |
-| index | The js or ts file that export you Galbe server instance. |
+| index | The js or ts file that export your Galbe server instance. |
 
 #### Options
 
-| Short | Long     | Descritpion                | Default                              |
+| Short | Long     | Description                | Default                              |
 | ----- | -------- | -------------------------- | ------------------------------------ |
 | -o    | --out    | output file                | dist/(client.ts \| client.js \| cli) |
 | -t    | --target | build target [ts, js, cli] | ts                                   |
@@ -195,7 +195,7 @@ Hello Pierre! You're 29 y.o.
 ```
 
 > [!IMPORTANT]
-> A `GCLI_SERVER_URL` environment variable must be defined. It should indicates the url of the Galbe server you want to target.
+> A `GCLI_SERVER_URL` environment variable must be defined. It should indicate the url of the Galbe server you want to target.
 > In that specific case `http://localhost:3000`.
 
 ### spec
@@ -206,11 +206,11 @@ Generate the spec of your Galbe application.
 
 | Name  | Description                                              |
 | ----- | -------------------------------------------------------- |
-| index | The js or ts file that export you Galbe server instance. |
+| index | The js or ts file that export your Galbe server instance. |
 
 #### Options
 
-| Short | Long     | Descritpion                                      | Default                 |
+| Short | Long     | Description                                      | Default                 |
 | ----- | -------- | ------------------------------------------------ | ----------------------- |
 | -t    | --target | spec target [openapi:3.0:json, openapi:3.0:yaml] | openapi:3.0:yaml        |
 | -b    | --base   | base spec file                                   |                         |
@@ -218,7 +218,7 @@ Generate the spec of your Galbe application.
 
 #### Example
 
-Let's try to generate the specof the project defined in the previous client section. You can then run:
+Let's try to generate the spec of the project defined in the previous client section. You can then run:
 
 ```bash
 $ galbe generate spec index.ts
@@ -263,7 +263,7 @@ Generate the code and project structure from spec.
 
 #### Options
 
-| Short | Long     | Descritpion                                       | Default                    |
+| Short | Long     | Description                                       | Default                    |
 | ----- | -------- | ------------------------------------------------- | -------------------------- |
 | -f    | --format | input format [openapi:3.0:yaml, openapi:3.0:json] | openapi:3.0:(yaml \| json) |
 | -t    | --target | source target [ts, js]                            | ts                         |

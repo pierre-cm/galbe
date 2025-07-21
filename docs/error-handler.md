@@ -4,7 +4,7 @@ Any error happening during a request lifecycle will be intercepted by the error
 handler.
 
 You can customize the default error handling behavior by defining a custom error
-handler using Galbe's intance `onError` method.
+handler using Galbe's instance `onError` method.
 
 ```js
 const galbe = new Galbe();
@@ -13,7 +13,7 @@ galbe.onError(customErrorHandler);
 
 ## Definition
 
-The error handler should be a function that takes two aguments: an
+The error handler should be a function that takes two arguments: an
 [Error](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error)
 and a [Context](context.md). This function may potentially return a
 [Response type](handler.md#response-types).
@@ -39,7 +39,7 @@ throw a `RequestError` with a `400` status.
 
 ## Request Error
 
-The `RequestError` class is utilized to instanciate a runtime request error in
+The `RequestError` class is utilized to instantiate a runtime request error in
 Galbe. It has two optional attributes: a `status` and a `payload`.
 
 If your application throws a `RequestError` instance, Galbe will, by default,

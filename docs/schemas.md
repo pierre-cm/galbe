@@ -22,7 +22,7 @@ const boolSchema = $T.boolean()
 
 #### String
 
-Schema Type matching `string` vlues.
+Schema Type matching `string` values.
 
 ```ts
 const strSchema = $T.string(options)
@@ -102,7 +102,7 @@ const unionSchema = $T.union([$T.string(), $T.number()])
 
 ## Request Schema definition
 
-The Request Schema definition allows you to define a schema for your request on your [Route Definition](routes.md#route-defintion). It must be defined right after the path of your route.
+The Request Schema definition allows you to define a schema for your request on your [Route Definition](routes.md#route-definition). It must be defined right after the path of your route.
 
 ```js
 const schema = {}
@@ -149,7 +149,7 @@ const schema = {
 ```
 
 > [!WARNING]
-> Every key should match an existing [route path](routes.md#route-defintion) parameter. Otherwise Typescript will show an error.
+> Every key should match an existing [route path](routes.md#route-definition) parameter. Otherwise Typescript will show an error.
 >
 > By default, if no schema is defined for a given parameter. Galbe will assume it is of type `string`.
 
@@ -176,7 +176,7 @@ const schema = {
 
 <!-- prettier-ignore -->
 ```ts
-body: STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | STObject | STArray | STMulripartForm | STUrlForm | STStream
+body: STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | STObject | STArray | STMultipartForm | STUrlForm | STStream
 ```
 
 #### Object
@@ -214,7 +214,7 @@ const urlBody = $T.urlForm({
 
 #### Stream
 
-Some body request types can be streamed by using `STStream` Schema Type wrapper. The streamable Schema Types are `STByteArray`, `STString`, `STUrlForm` and `STMultipartForm`. This can be usefull to imporve performances in case you have heavy body payloads and you want to perform early validations on the body.
+Some body request types can be streamed by using `STStream` Schema Type wrapper. The streamable Schema Types are `STByteArray`, `STString`, `STUrlForm` and `STMultipartForm`. This can be useful to improve performances in case you have heavy body payloads and you want to perform early validations on the body.
 
 Let's look at a concrete example where this could be useful. Imagine you want a `multipart/form-data` body request that has two properties: `username` and `heavyImageFile`. In a normal case, you would define something like this:
 
@@ -238,7 +238,7 @@ galbe.post(
 
 This means that in the case where the username wouldn't pass the validation, the full request body, including the `heavyImageFile`, would have been processed for nothing, as it is not used. This would induce unnecessary time and resource consumption.
 
-The `STStream` Schema Type wrapper was created to remediate to remediate this issue. In practice it allows you to perform validations on the fly. Now in your handler, instead of receiving an object as `ctx.body`, you will receive an [AsyncGenerator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncGenerator).
+The `STStream` Schema Type wrapper was created to remediate this issue. In practice it allows you to perform validations on the fly. Now in your handler, instead of receiving an object as `ctx.body`, you will receive an [AsyncGenerator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncGenerator).
 
 ```ts
 galbe.post(

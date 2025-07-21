@@ -20,6 +20,9 @@ cd app
 bun install && bun dev
 ```
 
+The Galbe CLI ships with the package. You can invoke it with `bunx galbe` or
+install it globally using `bun install -g galbe`.
+
 ## Documentation
 
 The detailed documentation is available at [galbe.dev](https://galbe.dev).
