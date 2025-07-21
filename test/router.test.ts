@@ -214,4 +214,18 @@ describe('router', () => {
       expect(err).toBeInstanceOf(MethodNotAllowedError)
     }
   })
+
+  test('trailing slash routes', async () => {
+    const galbe = new Galbe()
+    const router = galbe.router
+
+    const handler = () => {}
+    galbe.get('/test/', handler)
+
+    expect(router.routes.children?.test?.routes.get?.handler).toBe(handler)
+
+    const r = router.find('get', '/test')
+    expect(r.path).toBe('/test/')
+    expect(r.handler).toBe(handler)
+  })
 })
