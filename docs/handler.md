@@ -4,13 +4,13 @@ A handler is a function that gets executed when a request matches the route defi
 
 ## Handler declaration
 
-The handler should be declared as last argument of the [Route Definition](routes.md#route-defintion) method.
+The handler should be declared as last argument of the [Route Definition](routes.md#route-definition) method.
 
 ```js
 galbe.get('foo', schema, [hook1, hook2], ctx => {})
 ```
 
-Handler are called after the last hook call, or right after the request parsing if no hook is declared. To get a better understanding of the request lifecycle, you can refer to the [Lifecycle](https://galbe.dev/documentation/lifecycle) section.
+Handlers are called after the last hook call, or right after the request parsing if no hook is declared. To get a better understanding of the request lifecycle, you can refer to the [Lifecycle](https://galbe.dev/documentation/lifecycle) section.
 
 ## Handler definition
 
@@ -25,7 +25,7 @@ The handler function takes a `context` object as single argument and might retur
 
 **context**
 
-The `context` object contains the request information as well as a `set` object that serves as a response modifier. You can find more detailed informations about the `context` object in the [Context](context.md) section.
+The `context` object contains the request information as well as a `set` object that serves as a response modifier. You can find more detailed information about the `context` object in the [Context](context.md) section.
 
 **response**
 
