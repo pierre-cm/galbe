@@ -392,7 +392,7 @@ const parseMultipartHeader = (header: string): { name: string;[key: string]: str
     acc[key] = v[2]
     return acc
   }, {})
-  if (disposition !== 'form-data') null
+  if (disposition !== 'form-data') return null
   //@ts-ignore
   return multipartHeader
 }
