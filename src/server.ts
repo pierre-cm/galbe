@@ -71,7 +71,13 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         const inHeaders: Record<string, any> = {}
         for (let [k, v] of req.headers) inHeaders[k] = v
         let inQuery: Record<string, any> = {}
-        for (let [k, v] of url.searchParams) inQuery[k] = v
+        for (let [k, v] of url.searchParams) {
+          if (k in inQuery) {
+            const cur = inQuery[k]
+            if (Array.isArray(cur)) inQuery[k] = [...cur, v]
+            else inQuery[k] = [cur, v]
+          } else inQuery[k] = v
+        }
         let inParams = requestPathParser(url.pathname, route.path)
 
         context.body = !EMPTY_BODY_METHODS.includes(req.method)

@@ -300,16 +300,31 @@ describe('parser', () => {
       }
     ]
 
-    for (let { p, expected } of cases) {
-      let search = new URLSearchParams()
-      for (const [k, v] of Object.entries(p)) search.append(k, v as string)
+  for (let { p, expected } of cases) {
+    let search = new URLSearchParams()
+    for (const [k, v] of Object.entries(p)) search.append(k, v as string)
 
-      let resp = await fetch(`http://localhost:${port}/query/params/schema?${search.toString()}`)
-      let body = await resp.json()
+    let resp = await fetch(`http://localhost:${port}/query/params/schema?${search.toString()}`)
+    let body = await resp.json()
 
-      expect(resp.status).toBe(expected.status ?? 200)
-      expect(body).toEqual(expected.body)
-    }
+    expect(resp.status).toBe(expected.status ?? 200)
+    expect(body).toEqual(expected.body)
+  }
+})
+
+  test('query params, duplicates', async () => {
+    const search = new URLSearchParams()
+    search.append('p1', 'one')
+    search.append('p1', 'two')
+    search.append('p2', '3.14')
+    search.append('p3', 'true')
+    search.append('p4', '42')
+
+    let resp = await fetch(`http://localhost:${port}/query/params/schema?${search.toString()}`)
+    let body = await resp.json()
+
+    expect(resp.status).toBe(400)
+    expect(body).toEqual({ query: { p1: 'Multiple values found' } })
   })
 
   test('body, json, schema object', async () => {
