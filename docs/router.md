@@ -1,8 +1,8 @@
 # Router
 
-Galbe router employs a hybrid approach to store and locating routes.
+Galbe router employs a hybrid approach to store and locate routes.
 
-The static routes are maintained in a Map structure. This ensure that any incoming request path matching a static route is resolved in a constant time `O(1)`.
+The static routes are maintained in a Map structure. This ensures that any incoming request path matching a static route is resolved in a constant time `O(1)`.
 
 > [!NOTE]
 > A static route is a route that doesn't contain any parameter (e.g.,`:param`) or wildcards `*`.

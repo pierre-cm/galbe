@@ -25,17 +25,17 @@ The `next` function calls the next hook in the hook list or the handler if the c
 > [!TIP]
 > Hooks are interruptible objects, meaning they can return a response at any moment. This provides a powerful mechanism for implementing custom logic, such as authentication, authorization, caching, and more.
 >
-> To learn more about response types, ou can take a look at the [Response types](handler.md#response-types) section.
+> To learn more about response types, you can take a look at the [Response types](handler.md#response-types) section.
 
 ## Hooks declaration
 
-Hooks should be declared just before the handler method in the [Route Definition](routes.md#route-defintion) method as a list of Hooks.
+Hooks should be declared just before the handler method in the [Route Definition](routes.md#route-definition) method as a list of Hooks.
 
 ```ts
 galbe.get('foo', [ hook1, hook2, ... ], ctx => {})
 ```
 
-Hooks are called just before the [Handler](handler.md) in the order that they have been declared in the hook list of the [Route Definition](routes.md#route-defintion). To get a better understanding of hooks execution during the request lifecycle, you can refer to the [Lifecycle](https://galbe.dev/documentation/lifecycle) section.
+Hooks are called just before the [Handler](handler.md) in the order that they have been declared in the hook list of the [Route Definition](routes.md#route-definition). To get a better understanding of hooks execution during the request lifecycle, you can refer to the [Lifecycle](https://galbe.dev/documentation/lifecycle) section.
 
 ### Examples
 

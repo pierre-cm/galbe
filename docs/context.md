@@ -1,9 +1,9 @@
 # Context
 
-An instance of the context object is created when a new request is initiated and carrieds out along durring all the request lifecycle.
+An instance of the context object is created when a new request is initiated and carried out along during all the request lifecycle.
 See the [Lifecycle](https://galbe.dev/documentation/lifecycle) section to get more details.
 
-Its purpose is to carrie all the relevent information about the request and to allow sharing informations between each step of the request lifecycle.
+Its purpose is to carry all the relevant information about the request and to allow sharing information between each step of the request lifecycle.
 
 ## Definition
 
@@ -15,7 +15,7 @@ An instance of the [Request](https://developer.mozilla.org/en-US/docs/Web/API/Re
 
 **headers**
 
-A javascript object representing the `headers` of the current request.
+A JavaScript object representing the `headers` of the current request.
 
 - key (string): header name
 - value: (string | [schema defined](schemas.md#headers)): header value
@@ -32,7 +32,7 @@ A javascript object representing the `headers` of the current request.
 
 **params**
 
-A javascript object representing the request `parameters` of the current request.
+A JavaScript object representing the request `parameters` of the current request.
 
 - key (string): parameter name
 - value: (string | [schema defined](schemas.md#params)): parameter value
@@ -45,7 +45,7 @@ galbe.get('/default/:p1/foo/:p2', ctx => console.log(ctx.params))
 
 **query**
 
-A javascript object representing the request `query parameters` of the current request.
+A JavaScript object representing the request `query parameters` of the current request.
 
 - key (string): query parameter name
 - value: (string | [schema defined](schemas.md#query)): query parameter value
@@ -75,7 +75,7 @@ If a [Schema](schemas.md) is defined, Galbe will parse the body type according t
 
 **set**
 
-The set property contains modifiable properties which purpose are to give informations to the Response parser.
+The set property contains modifiable properties which purpose are to give information to the Response parser.
 
 - `status`: Set the response status
 - `headers`: Set the response headers
@@ -89,7 +89,7 @@ galbe.get('/example', ctx => {
 
 **state**
 
-The state property purpose is to carry custom user object accross request lifecycle. In general it is used to share informations between the [hooks](hooks.md) and the [handler](handler.md).
+The state property purpose is to carry custom user object across request lifecycle. In general it is used to share information between the [hooks](hooks.md) and the [handler](handler.md).
 
 - key (string): user defined key
 - value (any): user defined object
@@ -115,4 +115,4 @@ bar
 
 **remoteAddress**
 
-An instance of the [SocketAdress](https://github.com/oven-sh/bun/blob/fe62a614046948ebba260bed87db96287e67921f/packages/bun-types/bun.d.ts#L2600-L2613) representing the remote address of the client.
+An instance of the [SocketAddress](https://github.com/oven-sh/bun/blob/fe62a614046948ebba260bed87db96287e67921f/packages/bun-types/bun.d.ts#L2600-L2613) representing the remote address of the client.

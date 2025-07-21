@@ -1,6 +1,6 @@
 # Getting started
 
-Galbe is a Javascript web framework for building fast and versatile backend
+Galbe is a JavaScript web framework for building fast and versatile backend
 servers with Bun.
 
 Designed with simplicity in mind, Galbe allows you to quickly create and set up
@@ -104,7 +104,7 @@ instance from the code.
 ## Configuration
 
 To configure your Galbe server, you should pass your configuration to the Galbe
-constructor when you instanciate it.
+constructor when you instantiate it.
 
 ```ts
 const galbe = new Galbe(configuration);
