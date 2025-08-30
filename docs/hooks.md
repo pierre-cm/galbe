@@ -1,45 +1,45 @@
 # Hooks
 
-Hooks provide a simple way to perform specific actions before and/or after reaching a specific route endpoint.
+Hooks provide a simple way to execute specific actions before and/or after reaching a route endpoint in Galbe.
 
-## Hook definition
+## Defining Hooks
 
 ```ts
-const hook = (context, next) => {
+const hook = async (context, next) => {
   context.state['foo'] = 'bar'
   await next()
   console.log('Hook end')
 }
 ```
 
-The hook takes only two arguments, a `context` object and a `next` function.
+A hook takes two arguments: `context` and `next`.
 
-**context**
+### context
 
-The `context` object contains the request information along with a state property that is modifiable and preserved across all hooks and the handler. It is useful for sharing information or objects across hooks and handler. You can find more information about it in the [Context](context.md) section.
+The `context` object contains request information and a modifiable `state` property that persists across all hooks and the handler. This is useful for sharing data across hooks and handlers. More details are available in the [Context](context.md) section.
 
-**next**
+### next
 
-The `next` function calls the next hook in the hook list or the handler if the current hook is the last one declared. The `next` function should be called at most once. If it is omitted, Galbe will call it automatically at the end of the execution of the current hook.
+The `next` function calls the next hook in the list, or the handler if the current hook is the last one. The `next` function should be called at most once. If omitted, Galbe will automatically call it at the end of the current hook’s execution.
 
 > [!TIP]
-> Hooks are interruptible objects, meaning they can return a response at any moment. This provides a powerful mechanism for implementing custom logic, such as authentication, authorization, caching, and more.
+> Hooks are interruptible, meaning they can return a response at any time. This is useful for implementing custom logic such as authentication, authorization, and caching.
 >
-> To learn more about response types, you can take a look at the [Response types](handler.md#response-types) section.
+> For more details on response handling, see [Response Types](handler.md#response-types).
 
-## Hooks declaration
+## Declaring Hooks
 
-Hooks should be declared just before the handler method in the [Route Definition](routes.md#route-definition) method as a list of Hooks.
+Hooks should be declared before the handler method in the [Route Definition](routes.md#route-definition) as a list of hook functions.
 
 ```ts
-galbe.get('foo', [ hook1, hook2, ... ], ctx => {})
+galbe.get('/foo', [hook1, hook2, ...], ctx => {})
 ```
 
-Hooks are called just before the [Handler](handler.md) in the order that they have been declared in the hook list of the [Route Definition](routes.md#route-definition). To get a better understanding of hooks execution during the request lifecycle, you can refer to the [Lifecycle](https://galbe.dev/documentation/lifecycle) section.
+Hooks execute in the order they are declared, just before the [Handler](handler.md). For a deeper understanding of their execution in the request lifecycle, see the [Lifecycle](https://galbe.dev/documentation/lifecycle) section.
 
 ### Examples
 
-Linear hooks declaration:
+#### Linear Hook Execution
 
 ```ts
 const hook1 = context => {
@@ -61,7 +61,7 @@ hook2
 handler
 ```
 
-Nested hooks declaration:
+#### Nested Hook Execution
 
 ```ts
 const hook1 = async (context, next) => {

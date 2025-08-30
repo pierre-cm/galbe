@@ -1,10 +1,10 @@
 # Plugins
 
-Galbe provides a powerful plugin system that allows developers to extend and customize the behavior of the framework. The plugin capabilities are centered around the [Request Lifecycle](https://galbe.dev/documentation/lifecycle).
+Galbe provides a powerful plugin system that allows developers to extend and customize the framework’s behavior. The plugin capabilities integrate with the [Request Lifecycle](https://galbe.dev/documentation/lifecycle).
 
 ## Definition
 
-### Signature
+### Plugin Signature
 
 ```ts
 type GalbePlugin = {
@@ -17,52 +17,49 @@ type GalbePlugin = {
 }
 ```
 
-**name**
+### name
+The plugin name should be a Unique Plugin Identifier to prevent conflicts with other plugins. Ideally, it follows the format `com.example.myplugin`.
 
-The name should be a Unique Plugin Identifier. It should be chosen to be unique to avoid conflicts with other potential plugins. Ideally, it will have the form of `com.example.myplugin`.
+### init
+This method is called immediately after the server starts. It receives two arguments:
+- `config`: The plugin-specific configuration (See [Configuration](getting-started.md#properties) `plugin` property).
+- `galbe`: The Galbe server instance, from which you can retrieve routes using `galbe.router.routes`.
 
-**init**
+### onFetch
+This method is executed at the beginning of an incoming request. It receives a `context` object representing the [Request Context](context.md).
 
-This method is called right after the server starts. It takes two arguments: a `config` and a `galbe` instance. The `config` holds the configuration for the specific scope of the current plugin (See [Configuration](getting-started.md#properties) `plugin` property for more details). The `galbe` argument is the instance of the current server; you can for instance retrieve the current routes definitions with `galbe.router.routes`.
+It is **preemptable**, meaning that if a response is returned, it will be sent to the client immediately, bypassing further processing.
 
-**onFetch**
+### onRoute
+Executed after the router identifies a matching route for the request. It takes a `context` argument and is **preemptable**, meaning it can return an early response.
 
-This method is called at the beginning of an incoming request. It takes a single `context` argument representing the current request [Context](context.md).
+### beforeHandle
+Runs after request validation but before route hooks and the handler are called. Like the previous lifecycle methods, it is **preemptable**.
 
-It is preemptable, meaning that any returned value will be interpreted as a response to send back to the client. Therefore, the method should only return [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response) instances or nothing.
+### afterHandle
+Called after the route handler is executed but before sending the response. It receives two arguments:
+- `response`: The [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response) object from the handler.
+- `context`: The request [Context](context.md).
 
-**onRoute**
+It is also **preemptable**, meaning any returned response will override the original handler response.
 
-This method is called after the router has found a matching route for the current request. Its takes a single `context` argument representing the current request [Context](context.md).
+## Plugin Registration
 
-It is preemptable, meaning that any returned value will be interpreted as a response to send back to the client. Therefore, the method should only return [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response) instances or nothing.
-
-**beforeHandle**
-
-This method is called after the request has been validated and before the route hooks and the handler are called. It takes a single `context` argument representing the current request [Context](context.md).
-
-It is preemptable, meaning that any returned value will be interpreted as a response to send back to the client. Therefore, the method should only return [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response) instances or nothing.
-
-**afterHandle**
-
-This method is called after the route handler has been called and before the response is sent. Its takes two arguments: a `response` object containing the [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response) returned by the handler, and a `context` argument representing the current request [Context](context.md).
-
-It is preemptable, meaning that any returned value will be interpreted as a response to send back to the client. Therefore, the method should only return [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response) instances or nothing.
-
-### Usage
-
-To register a plugin with your Galbe server, you must use the `use` method from you galbe instance.
+To register a plugin with your Galbe server, use the `use` method on your Galbe instance.
 
 ```js
 const galbe = new Galbe()
 galbe.use(plugin)
 ```
 
-## Create a plugin
+## How to Create a Plugin
+
+This section will walk you through the process of creating a plugin.
+Before creating a plugin, don't forget to check if there's an existing plugin that can be used. You can take a look at the official [Plugin List](https://galbe.dev/plugins).
 
 ### 1. Scaffolding
 
-The Galbe starter CLI provides a template that can be used to setup a Galbe plugin project.
+The Galbe starter CLI provides a template for setting up a plugin project:
 
 ```bash
 $ bun create galbe my-plugin --template plugin
@@ -70,51 +67,48 @@ $ cd my-plugin
 $ bun install
 ```
 
-Now you should be ready to start developing your plugin. Following section will present an example of a plugin implementation.
-
 ### 2. Implementation
 
-Here is an example of a plugin implementation that handles routes tagged with `@deprecated` metadata (See [Route files](routes.md#route-files) section about metadata).
+Below is an example of a plugin that handles routes tagged with `@deprecated` metadata (See [Route Files](routes.md#route-files) for metadata usage).
 
 deprecated.plugin.ts
-
 ```ts
-import type { GalbePlugin } from 'galbe'
+import type { GalbePlugin, Route } from 'galbe'
 import { walkMetaRoutes } from 'galbe/utils'
 
 const PLUGIN_ID = 'dev.galbe.deprecated'
 
-export default () => {
+export default (): GalbePlugin => {
   let deprecateds = new Set<string>()
+  const isRouteDeprecated = (route?: Route) => 
+    deprecateds.has(JSON.stringify({ method: route?.method, path: route?.path }))
+  
   return {
     name: PLUGIN_ID,
     // Init the plugin, check for deprecated metadata tags
     init(_config, galbe) {
-      if (galbe.meta) {
-        walkMetaRoutes(galbe.meta, (method, path, meta) => {
-          if (meta.deprecated) deprecateds.add(JSON.stringify({ method, path }))
-        })
-      }
+      walkMetaRoutes(galbe.meta || [], (method, path, meta) => {
+        if (meta.deprecated) deprecateds.add(JSON.stringify({ method, path }))
+      })
     },
     // Check if the current route is deprecated; if so, flag it as such and log it
     onRoute(context) {
       let r = context.route
-      if (!r) return
-      if (deprecateds.has(JSON.stringify({ method: r.method, path: r.path }))) {
-        console.warn(`Call to deprecated route "${r.method} ${r.path}"`)
+      if (isRouteDeprecated(r)) {
+        console.warn(`Call to deprecated route "${r?.method} ${r?.path}"`)
       }
     },
     // Add a header to the response if the route has been flagged as deprecated
     afterHandle(response, context) {
-      let r = context.route
-      if (!r) return
-      if (deprecateds.has(JSON.stringify({ method: r.method, path: r.path }))) {
+      if (isRouteDeprecated(context.route)) {
         response.headers.set('x-deprecated', 'true')
       }
     }
   } as GalbePlugin
 }
 ```
+
+Register the plugin with your Galbe server:
 
 ```ts
 import { Galbe } from 'galbe'
@@ -128,26 +122,25 @@ export default galbe
 
 ### 3. Publishing
 
-If you want to submit your plugin to the [official plugin list](https://galbe.dev/plugins), you should follow these steps:
+To submit your plugin to the [official plugin list](https://galbe.dev/plugins), follow these steps:
 
-1. Create a **public** Github repository for your plugin. Make sure to include the following information in the README at the root of your repository:
+1. **Create a public GitHub repository** for your plugin, ensuring that the `README.md` includes:
+   - A clear description of your plugin.
+   - Installation and configuration instructions.
+   - Usage examples.
 
-   - A description of your plugin and what it does.
-   - How to install and configure it.
-   - How to use it.
+2. _(Optional)_ Publish your plugin to [NPM](https://npmjs.com).
 
-2. (_Optional_) Publish your plugin to [NPM](https://npmjs.com).
-
-3. Create a Pull Request adding your plugin config to [plugins.json](https://github.com/pierre-cm/galbe-website/blob/main/plugins.json) file. The config should be in the following format:
+3. **Submit a Pull Request** to add your plugin configuration to [plugins.json](https://github.com/pierre-cm/galbe-website/blob/main/plugins.json) in the following format:
 
 ```json
 "plugin-id": {
   "name": "Plugin Name",
   "description": "Plugin description",
   "repo": "https://github.com/<username>/<repo-name>",
-  "npm": "https://www.npmjs.com/package/<package-name>",
+  "npm": "https://www.npmjs.com/package/<package-name>"
 }
 ```
 
 > [!IMPORTANT]
-> Please provide any relevant information about the plugin in the Pull Request description. It will be reviewed by the project maintainers as soon as possible. Be sure to check the [Galbe Contributing Guide](https://github.com/pierre-cm/galbe/blob/main/docs/CONTRIBUTING.md) before submitting any request. Same rules will apply here.
+> Provide all relevant details in the Pull Request description. It will be reviewed by project maintainers as soon as possible. Check the [Galbe Contributing Guide](https://github.com/pierre-cm/galbe/blob/main/docs/CONTRIBUTING.md) before submitting.

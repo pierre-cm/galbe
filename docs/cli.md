@@ -9,7 +9,7 @@ However, if you want to use it directly from your terminal, you must either:
 Install it globally using the following command:
 
 ```bash
-$ bun install -g galbe
+$ bun i -g galbe
 ```
 
 Or run it with `bunx`:
@@ -30,11 +30,12 @@ Start a dev server running your Galbe application.
 
 #### Options
 
-| Short | Long      | Description                 | Default |
-| ----- | --------- | --------------------------- | ------- |
-| -p    | --port    | port number [1-65535]       | 3000    |
-| -w    | --watch   | watch file changes          | false   |
-| -nc   | --noclear | don't clear on file changes | false   |
+| Short | Long            | Descritpion                 | Default |
+| ----- | --------------- | --------------------------- | ------- |
+| -p    | --port          | port number [1-65535]       | 3000    |
+| -w    | --watch         | watch file changes dir      | false   |
+| -wi   | --watchignore   | ignored watch files regex   |         |
+| -nc   | --noclear       | don't clear on file changes | false   |
 
 #### Example
 
@@ -51,6 +52,13 @@ export default g
 
 ```bash
 $ galbe dev index.js -p 7357 -w
+🏗️  Constructing routes
+
+    [GET]     /example
+
+done
+
+🚀 Server running at http://localhost:7357
 ```
 
 ## build
@@ -74,7 +82,6 @@ Bundle your Galbe application.
 #### Example
 
 index.js
-
 ```js
 import { Galbe } from 'galbe'
 
@@ -115,10 +122,6 @@ $ bun create galbe galbe-example --template hello --lang ts
 $ cd galbe-example
 $ bun install
 ```
-
-> [!NOTE]
-> In order for the following examples to work, you must ensure that an instance of you galbe app is running on port 3000.
-> You can do that by running `bun run dev`.
 
 ##### JS or TS client
 

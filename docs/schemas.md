@@ -1,18 +1,18 @@
-# Shemas
+# Schemas
 
-Galbe provides a custom Schema Type processor that offers type safety, data parsing, and validation. The primary purpose of this feature is to simplify request input validation and error handling automatically. Additionally, it enhances the developer's experience by inferring static TypeScript types from schema definitions.
+Galbe provides a custom Schema Type processor that offers type safety, data parsing, and validation. The use of Schemas highly simplifies request input validation and automatic error handling. Additionally, it enhances the developer experience by inferring static TypeScript types from schema definitions.
 
 ## Schema Types
 
-To start using Schema definitions, import `$T` from the `galbe` library:
+To use Schema definitions, import `$T` from the `galbe` library:
 
 ```js
 import { $T } from 'galbe'
 ```
 
-Here the list of available Schema types in Galbe:
+Here is the list of available Schema types in Galbe:
 
-#### Boolean
+#### boolean
 
 Schema Type matching `boolean` values.
 
@@ -20,7 +20,7 @@ Schema Type matching `boolean` values.
 const boolSchema = $T.boolean()
 ```
 
-#### String
+#### string
 
 Schema Type matching `string` values.
 
@@ -28,7 +28,7 @@ Schema Type matching `string` values.
 const strSchema = $T.string(options)
 ```
 
-#### Number
+#### number
 
 Schema Type matching `number` values.
 
@@ -36,7 +36,7 @@ Schema Type matching `number` values.
 const numSchema = $T.number(options)
 ```
 
-#### Integer
+#### integer
 
 Schema Type matching integer `number` values.
 
@@ -44,7 +44,7 @@ Schema Type matching integer `number` values.
 const intSchema = $T.integer(options)
 ```
 
-#### Null
+#### null
 
 Schema Type matching `null` values.
 
@@ -52,7 +52,7 @@ Schema Type matching `null` values.
 const nullSchema = $T.null(options)
 ```
 
-#### Any
+#### any
 
 Schema Type matching `any` of the previous Schema Types.
 
@@ -60,7 +60,7 @@ Schema Type matching `any` of the previous Schema Types.
 const anySchema = $T.any()
 ```
 
-#### Array
+#### array
 
 Schema Type matching `array` values.
 
@@ -68,41 +68,41 @@ Schema Type matching `array` values.
 const arraySchema = $T.array($T.any(), options)
 ```
 
-#### Optional
+#### optional
 
-Makes any type optional. This allows for `undefined` values.
+Makes any type optional, allowing `undefined` values.
 
 ```ts
 const optionalSchema = $T.optional($T.string())
 ```
 
-#### Nullable
+#### nullable
 
-Makes any type nullable. This allows for `null` values.
+Makes any type nullable, allowing `null` values.
 
 ```ts
 const nullableSchema = $T.nullable($T.string())
 ```
 
-#### Nullish
+#### nullish
 
-Makes any type nullish. This allows for `undefined` and `null` values.
+Makes any type nullish, allowing both `undefined` and `null` values.
 
 ```ts
 const nullishSchema = $T.nullish($T.string())
 ```
 
-#### Union
+#### union
 
-Creates an union of Schema Types.
+Creates a union of Schema Types.
 
 ```ts
 const unionSchema = $T.union([$T.string(), $T.number()])
 ```
 
-## Request Schema definition
+## Request Schema Definition
 
-The Request Schema definition allows you to define a schema for your request on your [Route Definition](routes.md#route-definition). It must be defined right after the path of your route.
+The Request Schema definition allows you to define a schema for your request in your [Route Definition](routes.md#route-definition). It must be defined right after the route path.
 
 ```js
 const schema = {}
@@ -117,9 +117,9 @@ The Request Schema has four optional properties:
 headers: { [key: string]: STString | STBoolean | STNumber | STInteger | STLiteral }
 ```
 
-This is a key-value object where each key represents a request header name, and the value is the associated Schema.
+Defines request headers with their respective Schema types.
 
-**Example**:
+**Example:**
 
 ```ts
 const schema = {
@@ -135,9 +135,9 @@ const schema = {
 params: { [key: string]: STString | STBoolean | STNumber | STInteger | STLiteral }
 ```
 
-This is a key-value object where each key represents a request path parameter name, and the value is the associated Schema.
+Defines route parameters with their respective Schema types.
 
-**Example**:
+**Example:**
 
 ```ts
 const schema = {
@@ -149,9 +149,7 @@ const schema = {
 ```
 
 > [!WARNING]
-> Every key should match an existing [route path](routes.md#route-definition) parameter. Otherwise Typescript will show an error.
->
-> By default, if no schema is defined for a given parameter. Galbe will assume it is of type `string`.
+> Every key should match an existing [route path](routes.md#route-definition) parameter. Otherwise, TypeScript will show an error. If no schema is defined for a given parameter, Galbe assumes it is of type `string`.
 
 ### query
 
@@ -159,9 +157,9 @@ const schema = {
 query: { [key: string]: STString | STBoolean | STNumber | STInteger | STLiteral }
 ```
 
-This is a key-value object where each key represents a request query parameter name, and the value is the associated Schema.
+Defines query parameters with their respective Schema types.
 
-**Example**:
+**Example:**
 
 ```ts
 const schema = {
@@ -179,9 +177,11 @@ const schema = {
 body: STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | STObject | STArray | STMultipartForm | STUrlForm | STStream
 ```
 
-#### Object
+Defines the request body Schema type based on content type.
 
-To define an `application/json` request body, use `STObject` Schema Type. Example:
+#### object
+
+Defines an `application/json` request body.
 
 ```ts
 const jsonBody = $T.object({
@@ -190,33 +190,36 @@ const jsonBody = $T.object({
 })
 ```
 
-#### Multipart
+#### multipartForm
 
-To define a `multipart/form-data` request body, use `TMultipartForm` Schema Type. Example:
+Defines a `multipart/form-data` request body.
 
 ```ts
 const multipartBody = $T.multipartForm({
   name: $T.string(),
-  age: $T.integer({ minimum: 0 })
+  age: $T.integer({ min: 0 })
 })
 ```
 
-#### Url Form
+#### urlForm
 
-To define an `application/x-www-form-urlencoded` request body, use `TUrlForm` Schema Type. Example:
+Defines an `application/x-www-form-urlencoded` request body.
 
 ```ts
 const urlBody = $T.urlForm({
   name: $T.string(),
-  age: $T.integer({ minimum: 0 })
+  age: $T.integer({ min: 0 })
 })
 ```
 
-#### Stream
+#### stream
 
-Some body request types can be streamed by using `STStream` Schema Type wrapper. The streamable Schema Types are `STByteArray`, `STString`, `STUrlForm` and `STMultipartForm`. This can be useful to improve performances in case you have heavy body payloads and you want to perform early validations on the body.
+Certain request body types can be streamed using `STStream` wrapper, improving performance by validating data incrementally.
+This can be usefull to imporve performances in case you have heavy body payloads by leveraging early validation and fail fast behaviors.
 
-Let's look at a concrete example where this could be useful. Imagine you want a `multipart/form-data` body request that has two properties: `username` and `heavyImageFile`. In a normal case, you would define something like this:
+**Example**
+
+Let's consider a `multipart/form-data` body request that has two properties: `username` and `heavyImageFile`:
 
 ```ts
 galbe.post(
@@ -236,9 +239,9 @@ galbe.post(
 })
 ```
 
-This means that in the case where the username wouldn't pass the validation, the full request body, including the `heavyImageFile`, would have been processed for nothing, as it is not used. This would induce unnecessary time and resource consumption.
+In that case, even if the `username` doesn't pass the validation, the full request body, including the `heavyImageFile` is processed before sending the response. This induces unnecessary time and resource consumption because the `heavyImageFile` is processed despite never been used.
 
-The `STStream` Schema Type wrapper was created to remediate this issue. In practice it allows you to perform validations on the fly. Now in your handler, instead of receiving an object as `ctx.body`, you will receive an [AsyncGenerator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncGenerator).
+A better approach would consist in leveraging `STStream` wrapper to implement early validation and fail fast behavior. By defining the request body as a stream. Instead of receiving a plain js object as `ctx.body`, you will receive an [AsyncGenerator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncGenerator).
 
 ```ts
 galbe.post(
@@ -249,7 +252,7 @@ galbe.post(
       heavyImageFile: $T.byteArray()
     }))
   },
-  ctx => {
+  async ctx => {
     // At that point, the body has not been processed yet.
     for await (const [key, value] of ctx.body) {
       if (key === "username" && !isValid(value)) {
@@ -266,16 +269,22 @@ galbe.post(
 
 <!-- prettier-ignore -->
 ```ts
-response: Record<number, STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | STObject | STArray | STStream>
+response: Record<number | 'default', STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | STObject | STArray | STStream>
 ```
 
-Same as for request body validation but to validate handler responses. Every schema type must be associated to a specific response status.
+Defines response validation by associating schema types with specific HTTP status codes. The special key `default` can also be used to define the Response Schema for the remaining status codes.
 
-#### Example
+**Example:**
 
 ```ts
 const response = {
-  200: $T.object({ data: $T.array($T.number()) })
-  404: $T.literal("Not found")
+  200: $T.object({ data: $T.array($T.number()) }),
+  404: $T.literal("Not found"),
+  default: $T.string(),
 }
 ```
+
+This ensures all responses adhere to the defined schema.
+
+> [!NOTE]
+> The response validation is enabled by default, meaning that every enpoint response that has a schema defined will be validated at runtime. To disable runtime validation, you can set the `responseValidator?.enabled` option to `false` in the [configuration](getting-started.md#configuration).
