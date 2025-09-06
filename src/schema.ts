@@ -45,6 +45,7 @@ export interface STSchema extends Options {
     | 'multipartForm'
     | 'any'
     | 'union'
+    | 'intersection'
   [Optional]?: boolean
   [Stream]?: boolean
   params: unknown[]
@@ -94,7 +95,7 @@ export interface STNull extends STSchema, Options {
 export function _Null(options: Options = {}): STNull {
   return {
     ...options,
-    [Kind]: 'null'
+    [Kind]: 'null',
   } as unknown as STNull
 }
 // ByteArray
@@ -105,7 +106,7 @@ export interface STByteArray extends STSchema, ByteArrayOptions {
 export function _ByteArray(options: ByteArrayOptions = {}): STByteArray {
   return {
     ...options,
-    [Kind]: 'byteArray'
+    [Kind]: 'byteArray',
   } as unknown as STByteArray
 }
 // Boolean
@@ -116,7 +117,7 @@ export interface STBoolean extends STSchema, Options {
 export function _Bool(options: Options = {}): STBoolean {
   return {
     ...options,
-    [Kind]: 'boolean'
+    [Kind]: 'boolean',
   } as unknown as STBoolean
 }
 // String
@@ -127,7 +128,7 @@ export interface STString extends STSchema, NumberOptions {
 export function _String(options: StringOptions = {}): STString {
   return {
     ...options,
-    [Kind]: 'string'
+    [Kind]: 'string',
   } as unknown as STString
 }
 // Number
@@ -138,7 +139,7 @@ export interface STNumber extends STSchema, NumberOptions {
 export function _Number(options: NumberOptions = {}): STNumber {
   return {
     ...options,
-    [Kind]: 'number'
+    [Kind]: 'number',
   } as unknown as STNumber
 }
 // Integer
@@ -149,7 +150,7 @@ export interface STInteger extends STSchema, NumberOptions {
 export function _Integer(options: NumberOptions = {}): STInteger {
   return {
     ...options,
-    [Kind]: 'integer'
+    [Kind]: 'integer',
   } as unknown as STInteger
 }
 // Literal
@@ -164,7 +165,7 @@ export function _Literal<T extends STLiteralValue>(value: T, options: Options = 
     ...options,
     [Kind]: 'literal',
     static: value,
-    value
+    value,
   } as unknown as STLiteral<T>
 }
 // Any
@@ -176,7 +177,7 @@ export interface STAny extends STSchema, Options {
 export function _Any(options: Options = {}): STAny {
   return {
     ...options,
-    [Kind]: 'any'
+    [Kind]: 'any',
   } as unknown as STAny
 }
 
@@ -218,36 +219,36 @@ function _Json<T extends STBoolean | STNumber | STString | STObject>(value?: T, 
 }
 
 // UrlForm
-export type STUrlFormValues =
-  | STByteArray
-  | STString
-  | STBoolean
-  | STNumber
-  | STInteger
-  | STString
-  | STLiteral
-  | STUnion
-  | STAny
-  | STArray
-export type STUrlFormProps = Record<string, STUrlFormValues>
-export interface STUrlForm<T extends STUrlFormProps = STUrlFormProps> extends STSchema {
-  [Kind]: 'urlForm'
-  static: T extends undefined ? Record<string, any> : ObjectStatic<T, this['params']>
-  props: T
-}
-function _UrlForm<T extends STUrlFormProps>(properties?: T, options: Options = {}): STUrlForm<T> {
-  if (!properties) return { ...options, [Kind]: 'urlForm' } as unknown as STUrlForm<T>
-  const propertyKeys = globalThis.Object.getOwnPropertyNames(properties)
-  const optionalKeys = propertyKeys.filter(key => properties[key]?.[Optional])
-  const requiredKeys = propertyKeys.filter(name => !optionalKeys.includes(name))
-  const clonedProperties = propertyKeys.reduce(
-    (acc, key) => ({ ...acc, [key]: { ...properties[key] } }),
-    {} as STUrlFormProps
-  )
-  return (requiredKeys.length > 0
-    ? { ...options, [Kind]: 'urlForm', props: clonedProperties, required: requiredKeys }
-    : { ...options, [Kind]: 'urlForm', props: clonedProperties }) as unknown as STUrlForm<T>
-}
+// export type STUrlFormValues =
+//   | STByteArray
+//   | STBoolean
+//   | STNumber
+//   | STInteger
+//   | STString
+//   | STLiteral
+//   | STObject
+//   | STUnion
+//   | STAny
+//   | STArray
+// export type STUrlFormProps = Record<string, STUrlFormValues>
+// export interface STUrlForm<T extends STUrlFormProps = STUrlFormProps> extends STSchema {
+//   [Kind]: 'urlForm'
+//   static: T extends undefined ? Record<string, any> : ObjectStatic<T, this['params']>
+//   props: T
+// }
+// function _UrlForm<T extends STUrlFormProps>(properties?: T, options: Options = {}): STUrlForm<T> {
+//   if (!properties) return { ...options, [Kind]: 'urlForm' } as unknown as STUrlForm<T>
+//   const propertyKeys = globalThis.Object.getOwnPropertyNames(properties)
+//   const optionalKeys = propertyKeys.filter(key => properties[key]?.[Optional])
+//   const requiredKeys = propertyKeys.filter(name => !optionalKeys.includes(name))
+//   const clonedProperties = propertyKeys.reduce(
+//     (acc, key) => ({ ...acc, [key]: { ...properties[key] } }),
+//     {} as STUrlFormProps
+//   )
+//   return (requiredKeys.length > 0
+//     ? { ...options, [Kind]: 'urlForm', props: clonedProperties, required: requiredKeys }
+//     : { ...options, [Kind]: 'urlForm', props: clonedProperties }) as unknown as STUrlForm<T>
+// }
 
 // MultipartForm
 export type STMultipartFormValues = STSchema
@@ -293,7 +294,7 @@ export function _Array<T extends STSchema>(schema?: T, options: ArrayOptions = {
   return {
     ...options,
     [Kind]: 'array',
-    items: schema ?? _Any()
+    items: schema ?? _Any(),
   } as unknown as STArray<T>
 }
 
@@ -311,35 +312,59 @@ export function _Union<T extends STSchema[]>(schemas: [...T], options: Options):
     ...options,
     [Kind]: 'union',
     anyOf: schemas.map(s => ({ ...s, ...options })) as T,
-    optional: () => ({ ...s, [Optional]: true })
+    optional: () => ({ ...s, [Optional]: true }),
   }
   return s as unknown as STUnion<T>
 }
+
+// Intersection
+type IntersectionStatic<T extends readonly STSchema[], P extends unknown[]> = T extends readonly [infer H, ...infer R]
+  ? H extends STSchema
+    ? R extends readonly STSchema[]
+      ? Static<H, P> & IntersectionStatic<R, P>
+      : never
+    : never
+  : unknown
+export interface STIntersection<T extends STSchema[] = STSchema[]> extends STSchema {
+  [Kind]: 'intersection'
+  static: IntersectionStatic<T, this['params']>
+  allOf: T
+}
+export function _Intersection<T extends STSchema[]>(schemas: [...T], options: Options): STIntersection<T> {
+  const s = {
+    ...options,
+    [Kind]: 'intersection',
+    allOf: schemas.map(s => ({ ...s, ...options })) as T,
+    optional: () => ({ ...s, [Optional]: true }),
+  }
+  return s as unknown as STIntersection<T>
+}
+
 // Stream
-type STStreamable = STByteArray | STString | STUrlForm | STMultipartForm
+type STStreamable = STByteArray | STString | STMultipartForm
 export function _Stream<T extends STStreamable>(schema: T): STStream<T> {
   return {
     ...schema,
-    [Stream]: true
+    [Stream]: true,
   } as unknown as STStream<T>
 }
 // Nullable
 type STNullable<T extends STSchema> = STUnion<[T, STNull]>
 // Nullish
-type STNullish<T extends STSchema> = STOptional<STNullable<T>>
+type STNullish<T extends STSchema> = (T | STNull) & { [Kind]: 'union'; anyOf: [T, STNull]; [Optional]: true }
 
 export class SchemaType {
-  /** Creates an Optional Schema Type Wrapper*/
+  /** Creates an Optional Schema Type Wrapper */
   public optional<T extends STSchema>(schema: T): STOptional<T> {
     return { ...schema, [Optional]: true }
   }
-  /** Creates an Nullable Schema Type Wrapper*/
+  /** Creates an Nullable Schema Type Wrapper */
   public nullable<T extends STSchema>(schema: T): STNullable<T> {
     return { ..._Union([schema, _Null()], {}) }
   }
-  /** Creates an Nullish Schema Type Wrapper*/
+  /** Creates an Nullish Schema Type Wrapper */
   public nullish<T extends STSchema>(schema: T): STNullish<T> {
-    return { ..._Union([schema, _Null()], {}), [Optional]: true }
+    return { ..._Union([schema, _Null()], {}), [Optional]: true } as STNullish<T>
   }
   /** Creates a Null Schema Type */
   public null(options: Options = {}): STNull {
@@ -385,28 +410,32 @@ export class SchemaType {
     return _Json(value, options)
   }
   /** Creates an UrlForm Schema Type */
-  public urlForm<T extends STUrlFormProps>(properties?: T, options: Options = {}): STUrlForm<T> {
-    return _UrlForm(properties, options)
-  }
-  /** Creates an MultipartForm Schema Type */
+  // public urlForm<T extends STUrlFormProps>(properties?: T, options: Options = {}): STUrlForm<T> {
+  //   return _UrlForm(properties, options)
+  // }
+  /** Creates a MultipartForm Schema Type */
   public multipartForm<T extends STProps>(properties?: T, options: Options = {}): STMultipartForm<T> {
     return _MultipartForm(properties, options)
   }
-  /** Crates an Array Schema Type */
+  /** Creates an Array Schema Type */
   public array<T extends STSchema>(schema?: T, options: Options = {}): STArray<T> {
     return _Array(schema, options)
   }
-  /** Crates an Union Schema Type */
+  /** Creates an Union Schema Type */
   public union<T extends STSchema[]>(schemas: [...T], options: Options = {}): STUnion<T> {
     return _Union(schemas, options)
   }
-  /** Crates an Stream Schema Type */
-  public stream<T extends STUrlForm>(
+  /** Creates an Intersection Schema Type */
+  public intersection<T extends STSchema[]>(schemas: [...T], options: Options = {}): STIntersection<T> {
+    return _Intersection(schemas, options)
+  }
+  /** Creates a Stream Schema Type */
+  public stream<T extends STObject>(
     schema: T
   ): Omit<STStream<T>, 'static'> & {
     static: AsyncGenerator<
       T['props'] extends undefined
-        ? { [k: string]: Static<STUrlFormValues> }
+        ? { [k: string]: Static<STPropsValue> }
         : { [K in keyof T['props']]: [K, Static<T['props'][K]>] }[keyof T['props']]
     >
     params: unknown[]

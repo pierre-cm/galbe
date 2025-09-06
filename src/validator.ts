@@ -1,5 +1,5 @@
 import { InternalError, type STResponse } from './index'
-import type { STSchema, STProps, STUnion } from './schema'
+import type { STSchema, STProps, STUnion, STIntersection } from './schema'
 import { Kind, Optional, Stream } from './schema'
 import { isIterator } from './util'
 
@@ -71,9 +71,9 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
   } else if (schema[Kind] === 'union') {
     const union = Object.values((schema as STUnion).anyOf)
     let valid = false
-    for (const u of union) {
+    for (const s of union) {
       try {
-        elt = validate(elt, u as STSchema, parse)
+        elt = validate(elt, s as STSchema, parse)
         valid = true
         break
       } catch (err) {
@@ -82,6 +82,19 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
     }
     // @ts-ignore
     if (!valid) throw `Could not be parsed to any of [${union.map(u => u?.value ?? u[Kind]).join(', ')}]`
+  } else if (schema[Kind] === 'intersection') {
+    const intersection = Object.values((schema as STIntersection).allOf)
+    let valid = true
+    for (const s of intersection) {
+      try {
+        elt = validate(elt, s as STSchema, parse)
+      } catch (err) {
+        valid = false
+        break
+      }
+    }
+    // @ts-ignore
+    if (!valid) throw `Could not be parsed to all of [${intersection.map(u => u?.value ?? u[Kind]).join(', ')}]`
   } else if (schema[Kind] === 'any') {
   } else {
     throw `Unsupported schema type ${schema[Kind]}`
@@ -96,7 +109,7 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
 export const validateResponse = (response: any, schema: STResponse, status: number) => {
   if (!(status in schema)) return
   const s = schema?.[status] || schema?.['default']
-  if(!s) return
+  if (!s) return
   if (response instanceof ReadableStream) {
     if (!s[Stream]) throw new InternalError(`Expected ${s[Kind]} response, but got ReadableStream`)
   } else if (isIterator(response)) {
@@ -116,11 +129,9 @@ const schemaValidation = (value: any, schema: STSchema) => {
     if (schema.exclusiveMin !== undefined)
       if ((value as number) <= schema.exclusiveMin) errors.push(`Is less or equal to ${schema.exclusiveMin}`)
     if (schema.exclusiveMax !== undefined)
-      if ((value as number) >= schema.exclusiveMax)
-        errors.push(`Is greater or equal to ${schema.exclusiveMax}`)
+      if ((value as number) >= schema.exclusiveMax) errors.push(`Is greater or equal to ${schema.exclusiveMax}`)
     if (schema.min !== undefined) if ((value as number) < schema.min) errors.push(`Is less than ${schema.min}`)
-    if (schema.max !== undefined)
-      if ((value as number) > schema.max) errors.push(`Is greater than ${schema.max}`)
+    if (schema.max !== undefined) if ((value as number) > schema.max) errors.push(`Is greater than ${schema.max}`)
   } else if (schema[Kind] === 'string') {
     if (schema.minLength !== undefined && (value as string).length < schema.minLength)
       errors.push(`Length is too small (${schema.minLength} char min)`)

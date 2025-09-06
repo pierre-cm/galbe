@@ -7,7 +7,8 @@ import {
   handleBody,
   schema_objectBase,
   handleUrlFormStream,
-  isAsyncIterator
+  isAsyncIterator,
+  EMPTY_BA_STR,
 } from './test.utils'
 import { Galbe, $T } from '../src'
 import { schemaToTypeStr } from '../src/schema'
@@ -29,8 +30,8 @@ describe('parser', () => {
           float: $T.number(),
           integer: $T.integer(),
           'boolean-true': $T.boolean(),
-          'boolean-false': $T.boolean()
-        }
+          'boolean-false': $T.boolean(),
+        },
       },
       ctx => {
         return ctx.headers
@@ -44,8 +45,8 @@ describe('parser', () => {
           p1: $T.string(),
           p2: $T.number(),
           p3: $T.integer(),
-          p4: $T.boolean()
-        }
+          p4: $T.boolean(),
+        },
       },
       ctx => {
         return ctx.params
@@ -60,8 +61,8 @@ describe('parser', () => {
           p2: $T.number(),
           p3: $T.boolean(),
           p4: $T.union([$T.number(), $T.boolean()]),
-          p5: $T.optional($T.string())
-        }
+          p5: $T.optional($T.string()),
+        },
       },
       ctx => {
         return ctx.query
@@ -74,66 +75,86 @@ describe('parser', () => {
           default: $T.optional($T.string({ default: 'DEFAULT_VALUE' })),
           int: $T.integer({ exclusiveMin: 10, max: 42 }),
           num: $T.number({ min: 10, exclusiveMax: 42 }),
-          str: $T.string({ minLength: 4, maxLength: 8, pattern: /^a.*z/ })
-        }
+          str: $T.string({ minLength: 4, maxLength: 8, pattern: /^a.*z/ }),
+        },
       },
       ctx => {
         return ctx.query
       }
     )
 
-    galbe.post('/obj/schema/base', { body: $T.object(schema_object) }, handleBody)
+    galbe.post('/obj/schema/base', { body: { json: $T.object(schema_object) } }, handleBody)
 
     galbe.post(
       '/form/schema/base',
       {
-        body: $T.urlForm({
-          ...schema_objectBase,
-          union: $T.optional($T.union([$T.number(), $T.boolean()])),
-          literal: $T.optional($T.literal('x')),
-          array: $T.array()
-        })
+        body: {
+          urlForm: $T.object({
+            ...schema_objectBase,
+            object: $T.optional($T.object({ nested: $T.object({ foo: $T.literal('bar') }), baz: $T.number() })),
+            union: $T.optional($T.union([$T.number(), $T.boolean()])),
+            literal: $T.optional($T.literal('x')),
+            array: $T.array(),
+          }),
+        },
       },
       handleBody
     )
     galbe.post(
       '/form/stream/schema/base',
       {
-        body: $T.stream(
-          $T.urlForm({
-            ...schema_objectBase,
-            union: $T.optional($T.union([$T.number(), $T.boolean()])),
-            literal: $T.optional($T.literal('x')),
-            array: $T.array($T.any()),
-            numArray: $T.optional($T.array($T.number()))
-          })
-        )
+        body: {
+          urlForm: $T.stream(
+            $T.object({
+              ...schema_objectBase,
+              union: $T.optional($T.union([$T.number(), $T.boolean()])),
+              literal: $T.optional($T.literal('x')),
+              array: $T.array($T.any()),
+              numArray: $T.optional($T.array($T.number())),
+            })
+          ),
+        },
       },
       handleUrlFormStream
     )
     galbe.post(
       '/mp/schema/base',
       {
-        body: $T.multipartForm({
-          ...schema_objectBase,
-          union: $T.optional($T.union([$T.number(), $T.boolean()])),
-          literal: $T.optional($T.literal('x')),
-          array: $T.array($T.any())
-        })
+        body: {
+          multipart: $T.multipartForm({
+            ...schema_objectBase,
+            union: $T.optional($T.union([$T.number(), $T.boolean()])),
+            literal: $T.optional($T.literal('x')),
+            array: $T.array($T.any()),
+          }),
+        },
+      },
+      handleBody
+    )
+    galbe.post(
+      '/mp/schema/file',
+      {
+        body: {
+          multipart: $T.multipartForm({
+            foo: $T.byteArray(),
+          }),
+        },
       },
       handleBody
     )
     galbe.post(
       '/mp/stream/schema/base',
       {
-        body: $T.stream(
-          $T.multipartForm({
-            ...schema_objectBase,
-            union: $T.optional($T.union([$T.number(), $T.boolean()])),
-            literal: $T.optional($T.literal('x')),
-            array: $T.array($T.any())
-          })
-        )
+        body: {
+          multipart: $T.stream(
+            $T.multipartForm({
+              ...schema_objectBase,
+              union: $T.optional($T.union([$T.number(), $T.boolean()])),
+              literal: $T.optional($T.literal('x')),
+              array: $T.array($T.any()),
+            })
+          ),
+        },
       },
       handleBody
     )
@@ -144,17 +165,21 @@ describe('parser', () => {
       bool: $T.boolean(),
       arrayStr: $T.array($T.string()),
       arrayNumber: $T.array($T.number()),
-      arrayBool: $T.array($T.boolean())
+      arrayBool: $T.array($T.boolean()),
     }
 
     galbe.post(
       '/mp/file',
-      { body: $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }) },
+      { body: { multipart: $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }) } },
       handleBody
     )
     galbe.post(
       '/mp/stream/file',
-      { body: $T.stream($T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })) },
+      {
+        body: {
+          multipart: $T.stream($T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })),
+        },
+      },
       async ctx => {
         if (isAsyncIterator(ctx.body)) {
           const chunks: any[] = []
@@ -169,14 +194,14 @@ describe('parser', () => {
         }
       }
     )
-    galbe.post('/ba/file', { body: $T.byteArray() }, async ctx => {
+    galbe.post('/ba/file', { body: { byteArray: $T.byteArray() } }, async ctx => {
       if (ctx?.body instanceof Uint8Array) {
         return { type: 'byteArray', content: await fileHash(ctx.body) }
       } else {
         return { type: null, content: 'error' }
       }
     })
-    galbe.post('/ba/stream/file', { body: $T.stream($T.byteArray()) }, async ctx => {
+    galbe.post('/ba/stream/file', { body: { byteArray: $T.stream($T.byteArray()) } }, async ctx => {
       if (isAsyncIterator(ctx.body)) {
         let bytes = new Uint8Array()
         for await (const b of ctx.body) {
@@ -202,7 +227,7 @@ describe('parser', () => {
           float: '3.14',
           integer: '42',
           'boolean-true': 'true',
-          'boolean-false': 'false'
+          'boolean-false': 'false',
         },
         expected: {
           body: {
@@ -213,9 +238,9 @@ describe('parser', () => {
             float: 3.14,
             integer: 42,
             'boolean-true': true,
-            'boolean-false': false
-          }
-        }
+            'boolean-false': false,
+          },
+        },
       },
       {
         h: {
@@ -225,18 +250,18 @@ describe('parser', () => {
           float: '3.14',
           integer: '42',
           'boolean-true': 'a',
-          'boolean-false': 'false'
+          'boolean-false': 'false',
         },
         expected: {
           status: 400,
           body: {
             headers: {
               'neg-number': 'Required',
-              'boolean-true': "Not a valid boolean. Should be 'true' or 'false'"
-            }
-          }
-        }
-      }
+              'boolean-true': "Not a valid boolean. Should be 'true' or 'false'",
+            },
+          },
+        },
+      },
     ]
 
     for (let { h, expected } of cases) {
@@ -251,7 +276,7 @@ describe('parser', () => {
     const cases: any = [
       {
         p: { p1: 'one', p2: '3.14', p3: '42', p4: 'true' },
-        expected: { body: { p1: 'one', p2: 3.14, p3: 42, p4: true } }
+        expected: { body: { p1: 'one', p2: 3.14, p3: 42, p4: true } },
       },
       {
         p: { p1: '_', p2: 'test', p3: '42.5', p4: 'a' },
@@ -261,11 +286,11 @@ describe('parser', () => {
             params: {
               p2: 'Not a valid number',
               p3: 'Not a valid integer',
-              p4: "Not a valid boolean. Should be 'true' or 'false'"
-            }
-          }
-        }
-      }
+              p4: "Not a valid boolean. Should be 'true' or 'false'",
+            },
+          },
+        },
+      },
     ]
     for (let { p, expected } of cases) {
       let resp = await fetch(`http://localhost:${port}/params/schema/${p.p1}/${p.p2}/${p.p3}/${p.p4}`)
@@ -279,11 +304,11 @@ describe('parser', () => {
     const cases: any = [
       {
         p: { p1: 'one', p2: '3.14', p3: 'false', p4: '42' },
-        expected: { body: { p1: 'one', p2: 3.14, p3: false, p4: 42 } }
+        expected: { body: { p1: 'one', p2: 3.14, p3: false, p4: 42 } },
       },
       {
         p: { p1: 'one', p2: '3.14', p3: 'true', p4: 'true', p5: 'hello' },
-        expected: { body: { p1: 'one', p2: 3.14, p3: true, p4: true, p5: 'hello' } }
+        expected: { body: { p1: 'one', p2: 3.14, p3: true, p4: true, p5: 'hello' } },
       },
       {
         p: { p1: '36', p2: 'a', p3: '0' },
@@ -293,24 +318,24 @@ describe('parser', () => {
             query: {
               p2: 'Not a valid number',
               p3: "Not a valid boolean. Should be 'true' or 'false'",
-              p4: 'Required'
-            }
-          }
-        }
-      }
+              p4: 'Required',
+            },
+          },
+        },
+      },
     ]
 
-  for (let { p, expected } of cases) {
-    let search = new URLSearchParams()
-    for (const [k, v] of Object.entries(p)) search.append(k, v as string)
+    for (let { p, expected } of cases) {
+      let search = new URLSearchParams()
+      for (const [k, v] of Object.entries(p)) search.append(k, v as string)
 
-    let resp = await fetch(`http://localhost:${port}/query/params/schema?${search.toString()}`)
-    let body = await resp.json()
+      let resp = await fetch(`http://localhost:${port}/query/params/schema?${search.toString()}`)
+      let body = await resp.json()
 
-    expect(resp.status).toBe(expected.status ?? 200)
-    expect(body).toEqual(expected.body)
-  }
-})
+      expect(resp.status).toBe(expected.status ?? 200)
+      expect(body).toEqual(expected.body)
+    }
+  })
 
   test('query params, duplicates', async () => {
     const search = new URLSearchParams()
@@ -342,7 +367,7 @@ describe('parser', () => {
           any: false,
           null: null,
           nullable: null,
-          nullish: 42
+          nullish: 42,
         }),
         type,
         schema,
@@ -359,9 +384,9 @@ describe('parser', () => {
             any: false,
             null: null,
             nullable: null,
-            nullish: 42
-          }
-        }
+            nullish: 42,
+          },
+        },
       },
       {
         body: JSON.stringify({
@@ -375,7 +400,7 @@ describe('parser', () => {
           optional: 'optional',
           null: null,
           nullable: 'test',
-          nullish: null
+          nullish: null,
         }),
         type,
         schema,
@@ -393,9 +418,9 @@ describe('parser', () => {
             optional: 'optional',
             null: null,
             nullable: 'test',
-            nullish: null
-          }
-        }
+            nullish: null,
+          },
+        },
       },
       {
         body: JSON.stringify({
@@ -406,7 +431,7 @@ describe('parser', () => {
           object: [],
           array: {},
           any: {},
-          null: ''
+          null: '',
         }),
         type,
         schema,
@@ -421,17 +446,17 @@ describe('parser', () => {
               object: 'Expected an object, not an array',
               array: 'Not a valid array',
               null: 'Expected null value got ',
-              nullable: 'Required'
-            }
-          }
-        }
-      }
+              nullable: 'Required',
+            },
+          },
+        },
+      },
     ]
     for (let { body, type, schema, expected } of cases) {
       let resp = await fetch(`http://localhost:${port}/${schema}`, {
         method: 'POST',
         body,
-        headers: { ...(type ? { 'content-type': type } : {}) }
+        headers: { ...(type ? { 'content-type': type } : {}) },
       })
       let respBody = (await resp.json()) as { type: string; content: any }
 
@@ -460,15 +485,15 @@ describe('parser', () => {
           status: 200,
           type: 'object',
           resp: {
-            ba: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+            ba: EMPTY_BA_STR,
             string: '',
             number: 0,
             bool: false,
             any: 'false',
             union: true,
-            array: []
-          }
-        }
+            array: [],
+          },
+        },
       },
       {
         body: 'ba=Hello&string=Mom!&number=42&bool=true&any=36&optional=optional&array=1&array=2&literal=x&union=42',
@@ -486,9 +511,9 @@ describe('parser', () => {
             optional: 'optional',
             literal: 'x',
             union: 42,
-            array: ['1', '2']
-          }
-        }
+            array: ['1', '2'],
+          },
+        },
       },
       {
         body: 'optional=optional',
@@ -498,9 +523,9 @@ describe('parser', () => {
           status: 400,
           type: 'object',
           resp: {
-            body: 'Missing fields: ba, string, number, bool, any'
-          }
-        }
+            body: 'Missing fields: ba, string, number, bool, any',
+          },
+        },
       },
       {
         body: 'ba=&string=Hello&string=Mom!&number=aaa&bool=1&any=36&literal=y&union=X',
@@ -514,20 +539,60 @@ describe('parser', () => {
               number: 'Not a valid number',
               bool: "Not a valid boolean. Should be 'true' or 'false'",
               literal: 'Not a valid value',
-              union: 'Could not be parsed to any of [number, boolean]'
-            }
-          }
-        }
-      }
+              union: 'Could not be parsed to any of [number, boolean]',
+            },
+          },
+        },
+      },
+      {
+        body: 'object=%7B%22nested%22%3A%7B%22foo%22%3A%22bar%22%7D%2C%22baz%22%3A42%7D&ba=&string=&number=0&bool=false&any=any',
+        type,
+        schema,
+        expected: {
+          status: 200,
+          resp: {
+            object: { nested: { foo: 'bar' }, baz: 42 },
+            any: 'any',
+            string: '',
+            array: [],
+            ba: EMPTY_BA_STR,
+            bool: false,
+            number: 0,
+          },
+        },
+      },
+      {
+        body: 'object=&ba=&string=&number=0&bool=false&any=any',
+        type,
+        schema,
+        expected: {
+          status: 400,
+          resp: {
+            body: { object: 'Not a valid object' },
+          },
+        },
+      },
+      {
+        body: 'object=%7B%22nested%22%3A%7B%22foo%22%3A%22toto%22%7D%2C%22baz%22%3A42%7D&ba=&string=&number=0&bool=false&any=any',
+        type,
+        schema,
+        expected: {
+          status: 400,
+          resp: {
+            body: { object: { nested: { foo: 'Not a valid value' } } },
+          },
+        },
+      },
     ]
     for (let { body, type, schema, expected } of cases) {
       let resp = await fetch(`http://localhost:${port}/${schema}`, {
         method: 'POST',
         body,
-        headers: { ...(type ? { 'content-type': type } : {}) }
+        headers: { ...(type ? { 'content-type': type } : {}) },
       })
       let respBody = (await resp.json()) as { type: string; content: any }
 
+      console.log(respBody)
       expect(resp.status).toBe(expected.status)
       if (resp.status === 200) {
         if (expected.type) expect(respBody.type).toEqual(expected.type)
@@ -559,9 +624,9 @@ describe('parser', () => {
             bool: false,
             any: 'false',
             union: true,
-            array: []
-          }
-        }
+            array: [],
+          },
+        },
       },
       {
         body: 'ba=Hello&string=Mom!&number=42&bool=true&any=36&optional=optional&array=1&array=2&literal=x&union=42',
@@ -579,9 +644,9 @@ describe('parser', () => {
             optional: 'optional',
             literal: 'x',
             union: 42,
-            array: ['1', '2']
-          }
-        }
+            array: ['1', '2'],
+          },
+        },
       },
       {
         body: 'ba=Hello&string=Mom!&number=42&bool=true&any=36&optional=optional&array=1&array=2&literal=x&union=42&numArray=x',
@@ -591,9 +656,9 @@ describe('parser', () => {
           status: 400,
           type: 'object',
           resp: {
-            body: { numArray: 'Not a valid number' }
-          }
-        }
+            body: { numArray: 'Not a valid number' },
+          },
+        },
       },
       {
         body: 'ba=&string=Hello&string=Mom!&number=1&bool=true&any=36&literal=y&union=X',
@@ -603,10 +668,10 @@ describe('parser', () => {
           status: 400,
           resp: {
             body: {
-              literal: 'Not a valid value'
-            }
-          }
-        }
+              literal: 'Not a valid value',
+            },
+          },
+        },
       },
       {
         body: 'optional=otpional',
@@ -615,16 +680,16 @@ describe('parser', () => {
         expected: {
           status: 400,
           resp: {
-            body: 'Missing fields: ba, string, number, bool, any'
-          }
-        }
-      }
+            body: 'Missing fields: ba, string, number, bool, any',
+          },
+        },
+      },
     ]
     for (let { body, type, schema, expected } of cases) {
       let resp = await fetch(`http://localhost:${port}/${schema}`, {
         method: 'POST',
         body,
-        headers: { ...(type ? { 'content-type': type } : {}) }
+        headers: { ...(type ? { 'content-type': type } : {}) },
       })
       let respBody = (await resp.json()) as any
 
@@ -643,6 +708,9 @@ describe('parser', () => {
   test('body, MultipartForm, schema object', async () => {
     const schema = 'mp/schema/base'
 
+    const formWithHeader = formdata({})
+    formWithHeader.append('foo', new Blob([new Uint8Array()], { type: 'image/png' }), 'foo.png')
+
     const cases: Case[] = [
       {
         body: formdata({ ba: '', string: '', number: '0', bool: 'false', any: 'false', union: 'true' }),
@@ -652,49 +720,67 @@ describe('parser', () => {
           type: 'object',
           resp: {
             ba: {
-              content: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+              content: EMPTY_BA_STR,
               headers: {
-                name: 'ba'
-              }
+                name: 'ba',
+              },
             },
             string: {
               content: '',
               headers: {
-                name: 'string'
-              }
+                name: 'string',
+              },
             },
             number: {
               content: 0,
               headers: {
-                name: 'number'
-              }
+                name: 'number',
+              },
             },
             bool: {
               content: false,
               headers: {
-                name: 'bool'
-              }
+                name: 'bool',
+              },
             },
             any: {
               content: 'false',
               headers: {
-                name: 'any'
-              }
+                name: 'any',
+              },
             },
             union: {
               content: true,
               headers: {
-                name: 'union'
-              }
+                name: 'union',
+              },
             },
             array: {
               content: [],
               headers: {
-                name: 'array'
-              }
-            }
-          }
-        }
+                name: 'array',
+              },
+            },
+          },
+        },
+      },
+      {
+        body: formWithHeader,
+        schema: 'mp/schema/file',
+        expected: {
+          status: 200,
+          type: 'object',
+          resp: {
+            foo: {
+              content: EMPTY_BA_STR,
+              headers: {
+                name: 'foo',
+                filename: 'foo.png',
+                type: 'image/png',
+              },
+            },
+          },
+        },
       },
       {
         body: formdata({
@@ -706,7 +792,7 @@ describe('parser', () => {
           optional: 'optional',
           array: ['1', '2'],
           literal: 'x',
-          union: '42'
+          union: '42',
         }),
         schema,
         expected: {
@@ -716,59 +802,59 @@ describe('parser', () => {
             ba: {
               content: '185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969',
               headers: {
-                name: 'ba'
-              }
+                name: 'ba',
+              },
             },
             string: {
               content: 'Mom!',
               headers: {
-                name: 'string'
-              }
+                name: 'string',
+              },
             },
             number: {
               content: 42,
               headers: {
-                name: 'number'
-              }
+                name: 'number',
+              },
             },
             bool: {
               content: true,
               headers: {
-                name: 'bool'
-              }
+                name: 'bool',
+              },
             },
             any: {
               content: '36',
               headers: {
-                name: 'any'
-              }
+                name: 'any',
+              },
             },
             optional: {
               content: 'optional',
               headers: {
-                name: 'optional'
-              }
+                name: 'optional',
+              },
             },
             array: {
               content: ['1', '2'],
               headers: {
-                name: 'array'
-              }
+                name: 'array',
+              },
             },
             literal: {
               content: 'x',
               headers: {
-                name: 'literal'
-              }
+                name: 'literal',
+              },
             },
             union: {
               content: 42,
               headers: {
-                name: 'union'
-              }
-            }
-          }
-        }
+                name: 'union',
+              },
+            },
+          },
+        },
       },
       {
         body: formdata({ optional: 'optional' }),
@@ -777,9 +863,9 @@ describe('parser', () => {
           status: 400,
           type: 'object',
           resp: {
-            body: 'Missing fields: ba, string, number, bool, any'
-          }
-        }
+            body: 'Missing fields: ba, string, number, bool, any',
+          },
+        },
       },
       {
         body: formdata({
@@ -789,7 +875,7 @@ describe('parser', () => {
           bool: '1',
           any: '36',
           literal: 'y',
-          union: 'X'
+          union: 'X',
         }),
         schema,
         expected: {
@@ -800,17 +886,17 @@ describe('parser', () => {
               number: 'Not a valid number',
               bool: "Not a valid boolean. Should be 'true' or 'false'",
               literal: 'Not a valid value',
-              union: 'Could not be parsed to any of [number, boolean]'
-            }
-          }
-        }
-      }
+              union: 'Could not be parsed to any of [number, boolean]',
+            },
+          },
+        },
+      },
     ]
     for (let { body, type, schema, expected } of cases) {
       let resp = await fetch(`http://localhost:${port}/${schema}`, {
         method: 'POST',
         body,
-        headers: { ...(type ? { 'content-type': type } : {}) }
+        headers: { ...(type ? { 'content-type': type } : {}) },
       })
       let respBody = (await resp.json()) as { type: string; content: any }
 
@@ -840,47 +926,47 @@ describe('parser', () => {
             {
               content: {},
               headers: {
-                name: 'ba'
-              }
+                name: 'ba',
+              },
             },
             {
               content: '',
               headers: {
-                name: 'string'
-              }
+                name: 'string',
+              },
             },
             {
               content: 0,
               headers: {
-                name: 'number'
-              }
+                name: 'number',
+              },
             },
             {
               content: false,
               headers: {
-                name: 'bool'
-              }
+                name: 'bool',
+              },
             },
             {
               content: 'false',
               headers: {
-                name: 'any'
-              }
+                name: 'any',
+              },
             },
             {
               content: true,
               headers: {
-                name: 'union'
-              }
+                name: 'union',
+              },
             },
             {
               content: [],
               headers: {
-                name: 'array'
-              }
-            }
-          ]
-        }
+                name: 'array',
+              },
+            },
+          ],
+        },
       },
       {
         body: formdata({
@@ -892,7 +978,7 @@ describe('parser', () => {
           optional: 'optional',
           array: ['1', '2'],
           literal: 'x',
-          union: '42'
+          union: '42',
         }),
         schema,
         expected: {
@@ -902,65 +988,65 @@ describe('parser', () => {
             {
               content: Object.fromEntries(Uint8Array.from('Hello', c => c.charCodeAt(0)).entries()),
               headers: {
-                name: 'ba'
-              }
+                name: 'ba',
+              },
             },
             {
               content: 'Mom!',
               headers: {
-                name: 'string'
-              }
+                name: 'string',
+              },
             },
             {
               content: 42,
               headers: {
-                name: 'number'
-              }
+                name: 'number',
+              },
             },
             {
               content: true,
               headers: {
-                name: 'bool'
-              }
+                name: 'bool',
+              },
             },
             {
               content: '36',
               headers: {
-                name: 'any'
-              }
+                name: 'any',
+              },
             },
             {
               content: 'optional',
               headers: {
-                name: 'optional'
-              }
+                name: 'optional',
+              },
             },
             {
               content: '1',
               headers: {
-                name: 'array'
-              }
+                name: 'array',
+              },
             },
             {
               content: '2',
               headers: {
-                name: 'array'
-              }
+                name: 'array',
+              },
             },
             {
               content: 'x',
               headers: {
-                name: 'literal'
-              }
+                name: 'literal',
+              },
             },
             {
               content: 42,
               headers: {
-                name: 'union'
-              }
-            }
-          ]
-        }
+                name: 'union',
+              },
+            },
+          ],
+        },
       },
       {
         body: formdata({ optional: 'optional' }),
@@ -969,9 +1055,9 @@ describe('parser', () => {
           status: 400,
           type: 'object',
           resp: {
-            body: 'Missing fields: ba, string, number, bool, any'
-          }
-        }
+            body: 'Missing fields: ba, string, number, bool, any',
+          },
+        },
       },
       {
         body: formdata({
@@ -981,24 +1067,24 @@ describe('parser', () => {
           bool: '1',
           any: '36',
           literal: 'y',
-          union: 'X'
+          union: 'X',
         }),
         schema,
         expected: {
           status: 400,
           resp: {
             body: {
-              number: 'Not a valid number'
-            }
-          }
-        }
-      }
+              number: 'Not a valid number',
+            },
+          },
+        },
+      },
     ]
     for (let { body, type, schema, expected } of cases) {
       let resp = await fetch(`http://localhost:${port}/${schema}`, {
         method: 'POST',
         body,
-        headers: { ...(type ? { 'content-type': type } : {}) }
+        headers: { ...(type ? { 'content-type': type } : {}) },
       })
       let respBody = (await resp.json()) as { type: string; content: any }
 
@@ -1035,8 +1121,8 @@ describe('parser', () => {
               headers: {
                 name: 'imgFile',
                 filename: 'test/resources/image.png',
-                type: 'image/png'
-              }
+                type: 'image/png',
+              },
             },
             jsonFile: {
               content: {
@@ -1045,16 +1131,16 @@ describe('parser', () => {
                 bool: true,
                 arrayStr: ['un', 'deux', 'trois'],
                 arrayNumber: [0],
-                arrayBool: [true, false]
+                arrayBool: [true, false],
               },
               headers: {
                 name: 'jsonFile',
                 filename: 'test/resources/object.json',
-                type: 'application/json'
-              }
-            }
-          }
-        }
+                type: 'application/json',
+              },
+            },
+          },
+        },
       },
       {
         body: formdata({ imgFile, jsonFile: missingJsonFile }),
@@ -1062,9 +1148,9 @@ describe('parser', () => {
         expected: {
           status: 400,
           resp: {
-            body: { jsonFile: { arrayBool: 'Required', arrayStr: 'Required' } }
-          }
-        }
+            body: { jsonFile: { arrayBool: 'Required', arrayStr: 'Required' } },
+          },
+        },
       },
       {
         body: formdata({ imgFile, jsonFile: badSyntaxJsonFile }),
@@ -1072,25 +1158,26 @@ describe('parser', () => {
         expected: {
           status: 400,
           resp: {
-            body: { jsonFile: "JSON Parse error: Expected '}'" }
-          }
-        }
+            body: { jsonFile: "JSON Parse error: Expected '}'" },
+          },
+        },
       },
       {
         body: imgFileBytes,
         schema: '/ba/file',
+        type: 'application/octet-stream',
         expected: {
           status: 200,
           type: 'byteArray',
-          resp: await fileHash(imgFileBytes)
-        }
-      }
+          resp: await fileHash(imgFileBytes),
+        },
+      },
     ]
     for (let { body, type, schema, expected } of cases) {
       let resp = await fetch(`http://localhost:${port}/${schema}`, {
         method: 'POST',
         body,
-        headers: { ...(type ? { 'content-type': type } : {}) }
+        headers: { ...(type ? { 'content-type': type } : {}) },
       })
       let respBody = (await resp.json()) as { type: string; content: any }
 
@@ -1127,8 +1214,8 @@ describe('parser', () => {
               headers: {
                 name: 'imgFile',
                 filename: 'test/resources/image.png',
-                type: 'image/png'
-              }
+                type: 'image/png',
+              },
             },
             {
               content: {
@@ -1137,16 +1224,16 @@ describe('parser', () => {
                 bool: true,
                 arrayStr: ['un', 'deux', 'trois'],
                 arrayNumber: [0],
-                arrayBool: [true, false]
+                arrayBool: [true, false],
               },
               headers: {
                 name: 'jsonFile',
                 filename: 'test/resources/object.json',
-                type: 'application/json'
-              }
-            }
-          ]
-        }
+                type: 'application/json',
+              },
+            },
+          ],
+        },
       },
       {
         body: formdata({ imgFile, jsonFile: missingJsonFile }),
@@ -1154,9 +1241,9 @@ describe('parser', () => {
         expected: {
           status: 400,
           resp: {
-            body: { jsonFile: { arrayBool: 'Required', arrayStr: 'Required' } }
-          }
-        }
+            body: { jsonFile: { arrayBool: 'Required', arrayStr: 'Required' } },
+          },
+        },
       },
       {
         body: formdata({ imgFile, jsonFile: badSyntaxJsonFile }),
@@ -1164,25 +1251,26 @@ describe('parser', () => {
         expected: {
           status: 400,
           resp: {
-            body: { jsonFile: "JSON Parse error: Expected '}'" }
-          }
-        }
+            body: { jsonFile: "JSON Parse error: Expected '}'" },
+          },
+        },
       },
       {
         body: imgFileBytes,
         schema: '/ba/stream/file',
+        type: 'application/octet-stream',
         expected: {
           status: 200,
           type: 'AsyncIterator',
-          resp: await fileHash(imgFileBytes)
-        }
-      }
+          resp: await fileHash(imgFileBytes),
+        },
+      },
     ]
     for (let { body, type, schema, expected } of cases) {
       let resp = await fetch(`http://localhost:${port}/${schema}`, {
         method: 'POST',
         body,
-        headers: { ...(type ? { 'content-type': type } : {}) }
+        headers: { ...(type ? { 'content-type': type } : {}) },
       })
       let respBody = (await resp.json()) as { type: string; content: any }
 
@@ -1202,11 +1290,11 @@ describe('parser', () => {
     const cases: any = [
       {
         p: { int: '11', num: '10', str: 'aaaz' },
-        expected: { body: { default: 'DEFAULT_VALUE', int: 11, num: 10, str: 'aaaz' } }
+        expected: { body: { default: 'DEFAULT_VALUE', int: 11, num: 10, str: 'aaaz' } },
       },
       {
         p: { default: '', int: '42', num: '41.5', str: 'a______z' },
-        expected: { body: { default: '', int: 42, num: 41.5, str: 'a______z' } }
+        expected: { body: { default: '', int: 42, num: 41.5, str: 'a______z' } },
       },
       {
         p: { int: '10', num: '42.01', str: 'xxxxxxxxxx' },
@@ -1216,11 +1304,11 @@ describe('parser', () => {
             query: {
               int: 'Is less or equal to 10',
               num: 'Is greater or equal to 42',
-              str: ['Length is too large (8 char max)', 'Does not match pattern /^a.*z/']
-            }
-          }
-        }
-      }
+              str: ['Length is too large (8 char max)', 'Does not match pattern /^a.*z/'],
+            },
+          },
+        },
+      },
     ]
 
     for (let { p, expected } of cases) {
@@ -1247,24 +1335,24 @@ describe('parser', () => {
         literal: $T.literal('literal'),
         array: $T.array($T.string()),
         object: $T.object({
-          foo: $T.string()
+          foo: $T.string(),
         }),
-        union: $T.union([$T.number(), $T.string()])
+        union: $T.union([$T.number(), $T.string()]),
       })
     )
     expect(type).toBe(
       `{` +
-      `'boolean':boolean;` +
-      `'byteArray':Uint8Array;` +
-      `'number':number;` +
-      `'integer':number;` +
-      `'string':string;` +
-      `'any':any;` +
-      `'literal':'literal';` +
-      `'array':Array<string>;` +
-      `'object':{'foo':string};` +
-      `'union':number|string` +
-      `}`
+        `'boolean':boolean;` +
+        `'byteArray':Uint8Array;` +
+        `'number':number;` +
+        `'integer':number;` +
+        `'string':string;` +
+        `'any':any;` +
+        `'literal':'literal';` +
+        `'array':Array<string>;` +
+        `'object':{'foo':string};` +
+        `'union':number|string` +
+        `}`
     )
   })
 })

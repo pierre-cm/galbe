@@ -17,7 +17,7 @@ const rsTxt = (text: string) => {
       const words = text.split(' ')
       for (const w of words) controller.enqueue(w)
       controller.close()
-    }
+    },
   })
 }
 
@@ -30,8 +30,8 @@ describe('responses', () => {
     galbe.post(
       '/none',
       {
-        body: $T.optional($T.object($T.any())),
-        query: { text: $T.optional($T.string()), stream: $T.optional($T.string()) }
+        body: { json: $T.optional($T.object($T.any())) },
+        query: { text: $T.optional($T.string()), stream: $T.optional($T.string()) },
       },
       ctx => {
         if (ctx.query.text) {
@@ -67,7 +67,7 @@ describe('responses', () => {
   test('response, no schema, string', async () => {
     const reqTxt = 'Hello Mom!'
     let resp = await fetch(`http://localhost:${port}/none?text=${reqTxt}`, {
-      method: 'POST'
+      method: 'POST',
     })
 
     const body = await resp.text()
@@ -83,8 +83,8 @@ describe('responses', () => {
       method: 'POST',
       body: JSON.stringify(reqBody),
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     const body = await resp.json()
@@ -102,8 +102,8 @@ describe('responses', () => {
       let resp = await fetch(`http://localhost:${port}/none?text=${reqTxt}&stream=${c.stream}`, {
         method: 'POST',
         headers: {
-          'content-type': 'application/json'
-        }
+          'content-type': 'application/json',
+        },
       })
       const reader = resp.body?.getReader()
       let body = ''
@@ -126,8 +126,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/octet-stream'
-      }
+        'content-type': 'application/octet-stream',
+      },
     })
 
     const reader = resp.body?.getReader()
@@ -154,8 +154,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'text/plain'
-      }
+        'content-type': 'text/plain',
+      },
     })
 
     expect(resp.status).toBe(500)
@@ -169,8 +169,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     const body = await resp.json()
@@ -187,8 +187,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'text/plain'
-      }
+        'content-type': 'text/plain',
+      },
     })
 
     expect(resp.status).toBe(500)
@@ -202,8 +202,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     const body = await resp.json()
@@ -220,8 +220,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     expect(resp.status).toBe(500)
@@ -234,8 +234,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'text/plain'
-      }
+        'content-type': 'text/plain',
+      },
     })
 
     const body = await resp.text()
@@ -253,8 +253,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     const body = await resp.json()
@@ -271,8 +271,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     expect(resp.status).toBe(500)
@@ -286,8 +286,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     const body = await resp.json()
@@ -304,8 +304,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     expect(resp.status).toBe(500)
@@ -319,8 +319,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     const body = await resp.json()
@@ -337,8 +337,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     expect(resp.status).toBe(500)
@@ -352,8 +352,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     const body = await resp.json()
@@ -370,8 +370,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     expect(resp.status).toBe(500)
@@ -385,8 +385,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     const body = await resp.json()
@@ -403,8 +403,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     expect(resp.status).toBe(500)
@@ -417,8 +417,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'text/plain'
-      }
+        'content-type': 'text/plain',
+      },
     })
 
     const reader = resp.body?.getReader()
@@ -438,7 +438,7 @@ describe('responses', () => {
 
     let resp = await fetch(`http://localhost:${port}/stream/ba`, {
       method: 'POST',
-      body: bodyStr
+      body: bodyStr,
     })
 
     expect(resp.status).toBe(500)
@@ -451,8 +451,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'text/plain'
-      }
+        'content-type': 'text/plain',
+      },
     })
 
     const reader = resp.body?.getReader()
@@ -474,8 +474,8 @@ describe('responses', () => {
       method: 'POST',
       body: bodyStr,
       headers: {
-        'content-type': 'application/json'
-      }
+        'content-type': 'application/json',
+      },
     })
 
     expect(resp.status).toBe(500)
