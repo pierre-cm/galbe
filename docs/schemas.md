@@ -174,42 +174,75 @@ const schema = {
 
 <!-- prettier-ignore -->
 ```ts
-body: STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | STObject | STArray | STMultipartForm | STUrlForm | STStream
+body: {
+  byteArray?: STByteArray | STStream
+  text?: STString | STLiteral | STBoolean | STNumber | STInteger | STUnion | STStream
+  json?: STJson | STObject | STBoolean | STInteger | STNumber | STString | STArray | STUnion
+  urlForm?: STObject | STStream | STUnion
+  multipart?: STMultipartForm | STStream | STUnion
+  default?: STString | STByteArray | STStream | STAny
+}
 ```
 
 Defines the request body Schema type based on content type.
 
-#### object
+#### Byte Array
+
+Defines an `application/octet-stream` request body.
+
+```ts
+const body = {
+  byteArray: $T.byteArray()
+}
+```
+
+#### Text
+
+Defines an `text/*` request body.
+
+```ts
+const body = {
+  text: $T.string()
+}
+```
+
+#### JSON
 
 Defines an `application/json` request body.
 
 ```ts
-const jsonBody = $T.object({
-  name: $T.string(),
-  age: $T.integer({ min: 0 })
-})
+const body = {
+  json: $T.object({
+    name: $T.string(),
+    age: $T.integer({ min: 0 })
+  })
+}
 ```
 
-#### multipartForm
-
-Defines a `multipart/form-data` request body.
-
-```ts
-const multipartBody = $T.multipartForm({
-  name: $T.string(),
-  age: $T.integer({ min: 0 })
-})
-```
-
-#### urlForm
+#### URL Form
 
 Defines an `application/x-www-form-urlencoded` request body.
 
 ```ts
-const urlBody = $T.urlForm({
-  name: $T.string(),
-  age: $T.integer({ min: 0 })
-})
+const body = { 
+  urlForm: {$T.object({
+    name: $T.string(),
+    age: $T.integer({ min: 0 })
+  })
+}
+```
+
+#### Multipart Form
+
+Defines a `multipart/form-data` request body.
+
+```ts
+const body = {
+  multipart: $T.multipartForm({
+    name: $T.string(),
+    age: $T.integer({ min: 0 })
+  })
+}
 ```
 
 #### stream
@@ -225,10 +258,12 @@ Let's consider a `multipart/form-data` body request that has two properties: `us
 galbe.post(
   'user/create',
   {
-    body: $T.multipartForm({
-      username: $T.string(),
-      heavyImageFile: $T.byteArray()
-    })
+    body: {
+      multipart: $T.multipartForm({
+        username: $T.string(),
+        heavyImageFile: $T.byteArray()
+      })
+    }
   },
   ctx => {
     // At that point, the full body request has been processed
@@ -247,10 +282,12 @@ A better approach would consist in leveraging `STStream` wrapper to implement ea
 galbe.post(
   'user/create',
   {
-    body: $T.stream($T.multipartForm({
-      username: $T.string(),
-      heavyImageFile: $T.byteArray()
-    }))
+    body: {
+      multipart: $T.stream($T.multipartForm({
+        username: $T.string(),
+        heavyImageFile: $T.byteArray()
+      }))
+    }
   },
   async ctx => {
     // At that point, the body has not been processed yet.
