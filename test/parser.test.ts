@@ -579,7 +579,7 @@ describe('parser', () => {
         expected: {
           status: 400,
           resp: {
-            body: { object: { nested: { foo: 'Not a valid value' } } },
+            body: { object: { nested: { foo: 'Not a valid value. Found "toto" but expected "bar"' } } },
           },
         },
       },
@@ -885,7 +885,7 @@ describe('parser', () => {
               string: 'Multiple values found',
               number: 'Not a valid number',
               bool: "Not a valid boolean. Should be 'true' or 'false'",
-              literal: 'Not a valid value',
+              literal: 'Not a valid value. Found "y" but expected "x"',
               union: 'Could not be parsed to any of [number, boolean]',
             },
           },

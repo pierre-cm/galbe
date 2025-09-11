@@ -50,6 +50,7 @@ export interface STSchema extends Options {
   [Stream]?: boolean
   params: unknown[]
   static: unknown
+  props?: STProps
   [key: string]: any
 }
 export type STPropsValue =
@@ -68,6 +69,10 @@ export type STProps = Record<string | number, STPropsValue>
 
 type Evaluate<T> = T extends infer O ? { [K in keyof O]: O[K] } : never
 
+type Entries<T extends object> = {
+  [K in keyof T]-?: [K, T[K]]
+}[keyof T]
+
 /**
  * Infer the static TypeScript type from a {@link https://galbe.dev/documentation/schemas#schema-types Schema Type}
  * @example
@@ -77,7 +82,9 @@ type Evaluate<T> = T extends infer O ? { [K in keyof O]: O[K] } : never
  * //   ^? type T = { foo: string }
  * ```
  */
-export type Static<T extends STSchema, P extends unknown[] = unknown[]> = (T & { params: P })['static']
+export type Static<T extends STSchema, P extends unknown[] = unknown[]> = T[typeof Optional] extends true
+  ? (T & { params: P })['static'] | undefined
+  : (T & { params: P })['static']
 
 // Utils
 export type STOptional<T extends STSchema> = T & {
@@ -285,6 +292,7 @@ function _MultipartForm<T extends STProps>(properties?: T, options: Options = {}
 }
 
 // Array
+type NonEmptyArray<T> = [T, ...T[]]
 export interface STArray<T extends STSchema = STSchema> extends STSchema {
   [Kind]: 'array'
   static: Static<T>[]
@@ -302,12 +310,13 @@ export function _Array<T extends STSchema>(schema?: T, options: ArrayOptions = {
 type UnionStatic<T extends STSchema[], P extends unknown[]> = {
   [K in keyof T]: T[K] extends STSchema ? Static<T[K], P> : never
 }[number]
-export interface STUnion<T extends STSchema[] = STSchema[]> extends STSchema {
+export interface STUnion<T extends NonEmptyArray<STSchema> = NonEmptyArray<STSchema>> extends STSchema {
   [Kind]: 'union'
   static: UnionStatic<T, this['params']>
+  props: T[number]['props']
   anyOf: T
 }
-export function _Union<T extends STSchema[]>(schemas: [...T], options: Options): STUnion<T> {
+export function _Union<T extends NonEmptyArray<STSchema>>(schemas: [...T], options: Options): STUnion<T> {
   const s = {
     ...options,
     [Kind]: 'union',
@@ -325,12 +334,18 @@ type IntersectionStatic<T extends readonly STSchema[], P extends unknown[]> = T 
       : never
     : never
   : unknown
-export interface STIntersection<T extends STSchema[] = STSchema[]> extends STSchema {
+export interface STIntersection<T extends NonEmptyArray<STObject | STUnion | STIntersection> = NonEmptyArray<STObject>>
+  extends STSchema {
   [Kind]: 'intersection'
   static: IntersectionStatic<T, this['params']>
+  props: T[number]['props']
   allOf: T
 }
-export function _Intersection<T extends STSchema[]>(schemas: [...T], options: Options): STIntersection<T> {
+
+export function _Intersection<T extends NonEmptyArray<STObject | STUnion | STIntersection>>(
+  schemas: [...T],
+  options: Options
+): STIntersection<T> {
   const s = {
     ...options,
     [Kind]: 'intersection',
@@ -352,7 +367,7 @@ export function _Intersection<T extends STSchema[]>(schemas: [...T], options: Op
 }
 
 // Stream
-type STStreamable = STByteArray | STString | STMultipartForm
+type STStreamable = STByteArray | STString | STMultipartForm | STObject | STUnion | STIntersection
 export function _Stream<T extends STStreamable>(schema: T): STStream<T> {
   return {
     ...schema,
@@ -363,7 +378,6 @@ export function _Stream<T extends STStreamable>(schema: T): STStream<T> {
 type STNullable<T extends STSchema> = STUnion<[T, STNull]>
 // Nullish
 type STNullish<T extends STSchema> = (T | STNull) & { [Kind]: 'union'; anyOf: [T, STNull]; [Optional]: true }
-
 export class SchemaType {
   /** Creates an Optional Schema Type Wrapper */
   public optional<T extends STSchema>(schema: T): STOptional<T> {
@@ -374,8 +388,8 @@ export class SchemaType {
     return { ..._Union([schema, _Null()], {}) }
   }
   /** Creates an Nullish Schema Type Wrapper */
-  public nullish<T extends STSchema>(schema: T): STNullish<T> {
-    return { ..._Union([schema, _Null()], {}), [Optional]: true } as STNullish<T>
+  public nullish<T extends STSchema>(schema: T): STOptional<STNullable<T>> {
+    return this.optional(this.nullable(schema)) as STOptional<STNullable<T>>
   }
   /** Creates a Null Schema Type */
   public null(options: Options = {}): STNull {
@@ -433,11 +447,14 @@ export class SchemaType {
     return _Array(schema, options)
   }
   /** Creates an Union Schema Type */
-  public union<T extends STSchema[]>(schemas: [...T], options: Options = {}): STUnion<T> {
+  public union<T extends NonEmptyArray<STSchema>>(schemas: [...T], options: Options = {}): STUnion<T> {
     return _Union(schemas, options)
   }
   /** Creates an Intersection Schema Type */
-  public intersection<T extends STSchema[]>(schemas: [...T], options: Options = {}): STIntersection<T> {
+  public intersection<T extends NonEmptyArray<STObject | STUnion | STIntersection>>(
+    schemas: [...T],
+    options: Options = {}
+  ): STIntersection<T> {
     return _Intersection(schemas, options)
   }
   /** Creates a Stream Schema Type */
@@ -447,7 +464,35 @@ export class SchemaType {
     static: AsyncGenerator<
       T['props'] extends undefined
         ? { [k: string]: Static<STPropsValue> }
-        : { [K in keyof T['props']]: [K, Static<T['props'][K]>] }[keyof T['props']]
+        : T['props'] extends STProps
+        ? { [K in keyof T['props']]: [K, Static<T['props'][K]>] }[keyof T['props']]
+        : never
+    >
+    params: unknown[]
+  }
+  public stream<T extends STUnion>(
+    schema: T
+  ): Omit<STStream<T>, 'static'> & {
+    static: AsyncGenerator<
+      Entries<{
+        [P in KeysOfUnion<T['props']> as ValueAt<T['props'], P> extends STSchema ? P : never]: Static<
+          ValueAt<T['props'], P>
+        >
+      }>
+    >
+    params: unknown[]
+  }
+  public stream<T extends STIntersection>(
+    schema: T
+  ): Omit<STStream<T>, 'static'> & {
+    static: AsyncGenerator<
+      T['props'] extends undefined
+        ? never
+        : T['props'] extends STProps
+        ? Entries<{
+            [K in keyof Static<T>]: Static<T>[K]
+          }>
+        : never
     >
     params: unknown[]
   }
@@ -483,6 +528,8 @@ export class SchemaType {
     return _Stream(schema)
   }
 }
+type KeysOfUnion<U> = U extends unknown ? keyof U : never
+type ValueAt<U, K extends PropertyKey> = U extends unknown ? (K extends keyof U ? U[K] : never) : never
 
 export const schemaToTypeStr = (schema: STSchema): string => {
   let type = 'unknown'

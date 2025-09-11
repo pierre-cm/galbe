@@ -726,7 +726,8 @@ const unionize = (b: any, schema: STUnion) => {
   let res
   let error
   const discirminants = schema.anyOf.reduce(
-    (acc, obj) => acc.filter(k => k in obj?.props && obj?.props[k]?.[Kind] === 'literal' && !obj?.props[k]?.Optional),
+    (acc, obj) =>
+      acc.filter(k => obj?.props && k in obj.props && obj.props[k]?.[Kind] === 'literal' && !obj.props[k]?.Optional),
     Object.keys(schema.anyOf[0]?.props || {})
   )
   for (let s of schema.anyOf) {

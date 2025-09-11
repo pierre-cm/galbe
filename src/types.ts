@@ -175,6 +175,8 @@ export type Context<
         contentType: M extends 'get' | 'options' | 'head' ? undefined : K
         body: M extends 'get' | 'options' | 'head'
           ? null
+          : Exclude<S['body'], undefined> extends STNull
+          ? null
           : K extends STBodyType
           ? StaticBody<Exclude<Exclude<S['body'], undefined>[K], undefined>>
           : never

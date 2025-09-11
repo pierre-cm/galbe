@@ -266,7 +266,7 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
 
   let meta = '/**\n'
   if (def.summary) meta += ` * ${def.summary}\n *\n`
-  if (def.description) meta += ` * ${def.description.replace('\n', '\n * ')}\n`
+  if (def.description) meta += ` * ${def.description.replace(/\n/g, '\n * ')}\n`
   if (def.operationId) meta += ` * @operationId ${def.operationId}\n`
   if (def.externalDocs) meta += ` * @externalDocs ${def.externalDocs}\n`
   if (def.tags) meta += ` * @tags ${def.tags.join(' ')}\n`
@@ -279,7 +279,11 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
     // @ts-ignore: TODO handle refs cases
     if (_p.$ref) continue
     let p = _p as OpenAPIV3.ParameterObject
-    let o = (s: string) => (p.in !== 'path' && !p.required && !/^\$T.optional\(.*\)$/.test(s) ? `$T.optional(${s})` : s)
+    let o = (s: string) => {
+      const [isOptional, so] = [...(s.match(/^\$T.optional\((.*)\)$/) || [])]
+      s = so ?? s
+      return p.in !== 'path' && !p.required && !isOptional ? `$T.optional(${s})` : s
+    }
     sp[p.in][p.name] = o(
       unref(parseOapiSchema(p.schema, { description: p.description }), m => {
         let l = m.split('/')
