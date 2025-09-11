@@ -3,6 +3,7 @@ import { transformSync } from '@swc/core'
 import { resolve, relative, dirname } from 'path'
 import { load as ymlLoad } from 'js-yaml'
 import { OpenAPIV3 } from 'openapi-types'
+import { inferBodyType } from '../../../../src/util'
 
 type SchemaEntry = {
   key: string
@@ -72,7 +73,7 @@ const serialize = (obj: any) => {
   return JSON.stringify(obj, (k, value) => {
     if (k === 'pattern' && value) return `/${value}/`
     return value
-  }).replace(/"\/(.*)\/([gimsuy]*)"/g, '/$1/$2');
+  }).replace(/"\/(.*)\/([gimsuy]*)"/g, '/$1/$2')
 }
 
 const writeCodeFile = async (path: string, content: string, target: 'js' | 'ts') => {
@@ -80,11 +81,11 @@ const writeCodeFile = async (path: string, content: string, target: 'js' | 'ts')
     content = transformSync(content, {
       jsc: {
         parser: {
-          syntax: 'typescript'
+          syntax: 'typescript',
         },
         preserveAllComments: true,
-        target: 'esnext'
-      }
+        target: 'esnext',
+      },
     }).code
   }
   await Bun.write(`${path}.${target}`, content)
@@ -99,7 +100,8 @@ const parseOapiSchema = (
     return `$T.any(${details && Object.keys(details).length ? JSON.stringify(details) : ''})`
   }
   //@ts-ignore
-  if (os?.$ref) return `%ref:${os.$ref}%`
+  const ref: string | undefined = os?.$ref
+  if (ref) return `%ref:${ref}%`
   os = os as OpenAPIV3.SchemaObject
   let options: typeof details & {
     min?: number
@@ -115,30 +117,51 @@ const parseOapiSchema = (
   } = {
     ...details,
     title: os.title,
-    description: details.description || os.description
+    description: details.description || os.description,
   }
-  if(!os?.type) return `$T.any(${details && Object.keys(details).length ? JSON.stringify(details) : ''})`
+
   let resp = ''
   let hasOptions = Object.values(options).some(v => !!v)
   let optArg = hasOptions ? serialize(options) : ''
   let anyOf = os.oneOf || os.anyOf || os.allOf
+  let allOf = os.oneOf || os.anyOf || os.allOf
   let required = os.required
   let nullable = os.nullable
 
-  if (anyOf?.length) {
+  if (os.discriminator) {
+    const propName = os.discriminator.propertyName
+    const mapEntries = Object.entries(os.discriminator.mapping || {})
+    resp = `$T.union([${mapEntries
+      .map(
+        ([k, s]) =>
+          `$T.intersection([$T.object({\"${propName}\":$T.literal(\"${k}\")}),${parseOapiSchema({
+            $ref: s,
+          })}])`
+      )
+      .join(',')}], ${serialize(options)})`
+  } else if (anyOf?.length) {
     if (anyOf.length === 1) resp = parseOapiSchema(anyOf[0] as OpenAPIV3.SchemaObject, details, extra)
     else {
       resp = `$T.union([${anyOf.map(s => parseOapiSchema(s as OpenAPIV3.SchemaObject)).join(',')}], ${serialize(
         options
       )})`
     }
+  } else if (allOf?.length) {
+    if (allOf.length === 1) resp = parseOapiSchema(allOf[0] as OpenAPIV3.SchemaObject, details, extra)
+    else {
+      resp = `$T.intersection([${allOf.map(s => parseOapiSchema(s as OpenAPIV3.SchemaObject)).join(',')}], ${serialize(
+        options
+      )})`
+    }
+  } else if (!os?.type) {
+    return `$T.any(${details && Object.keys(details).length ? JSON.stringify(details) : ''})`
   } else if (os.type === 'boolean') resp = `$T.boolean(${hasOptions ? serialize(options) : ''})`
   else if (os.type === 'number') {
     let { max, min, exclusiveMax, exclusiveMin } = {
       max: os.maximum !== undefined && !os.exclusiveMaximum ? os.maximum : undefined,
       min: os.minimum !== undefined && !os.exclusiveMinimum ? os.minimum : undefined,
       exclusiveMax: os.maximum !== undefined && os.exclusiveMaximum ? os.maximum : undefined,
-      exclusiveMin: os.minimum !== undefined && os.exclusiveMinimum ? os.minimum : undefined
+      exclusiveMin: os.minimum !== undefined && os.exclusiveMinimum ? os.minimum : undefined,
     }
     options = { ...options, min, max, exclusiveMax, exclusiveMin }
     hasOptions = Object.values(options).some(v => !!v)
@@ -169,14 +192,14 @@ const parseOapiSchema = (
     resp = `$T.array(${parseOapiSchema(os?.items)}, ${optArg})`
   } else if (os.type === 'object') {
     let props = Object.entries(os?.properties || {})
-    .map(([k, v]) => `"${k}":${parseOapiSchema(v)}`)
-    .join(',')
+      .map(([k, v]) => `"${k}":${parseOapiSchema(v)}`)
+      .join(',')
     if (extra?.media === 'multipart/form-data') {
-      resp = `$T.multipartForm({${props}}${optArg ? `, ${optArg}`:''})`
+      resp = `$T.multipartForm({${props}}${optArg ? `, ${optArg}` : ''})`
     } else if (extra?.media === 'application/x-www-form-urlencoded') {
-      resp = `$T.urlForm({${props}}${optArg ? `, ${optArg}`:''})`
+      resp = `$T.object({${props}}${optArg ? `, ${optArg}` : ''})`
     } else {
-      resp = `$T.object({${props}}${optArg ? `, ${optArg}`:''})`
+      resp = `$T.object({${props}}${optArg ? `, ${optArg}` : ''})`
     }
   } else throw new Error(`Unknown schema type ${JSON.stringify(os)}`)
 
@@ -195,20 +218,17 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
     let dependsOn = new Set<string>()
     if (kind === 'schemas') schema = parseOapiSchema(s, { id: k })
     else if (kind === 'requestBodies' || kind === 'responses') {
-      let schemas=[] as string[]
-      if(!!s.content){
-
+      let schemas = [] as string[]
+      if (!!s.content) {
         schemas = [
           ...new Set(
-            Object.entries((s as OpenAPIV3.RequestBodyObject)?.content || {null:{}}).map(([media, v]) => {
+            Object.entries((s as OpenAPIV3.RequestBodyObject)?.content || { null: {} }).map(([media, v]) => {
               return parseOapiSchema(v.schema, { id: k }, { media })
             })
-          )
+          ),
         ]
       } else {
-        schemas = [
-          parseOapiSchema(undefined, {id: k, ...s})
-        ]
+        schemas = [parseOapiSchema(undefined, { id: k, ...s })]
       }
       schema = schemas.length <= 0 ? '' : schemas.length === 1 ? schemas[0] : `$T.union([${schemas.join(',')}])`
     }
@@ -222,7 +242,7 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
       prefix: '',
       schema,
       dependsOn,
-      usedBy: new Set()
+      usedBy: new Set(),
     }
   }
   for (let [k, v] of Object.entries(def.components?.schemas || {})) initSchema(k, v, 'schemas')
@@ -261,7 +281,7 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
     let p = _p as OpenAPIV3.ParameterObject
     let o = (s: string) => (p.in !== 'path' && !p.required && !/^\$T.optional\(.*\)$/.test(s) ? `$T.optional(${s})` : s)
     sp[p.in][p.name] = o(
-      unref(parseOapiSchema(p.schema, {description: p.description }), m => {
+      unref(parseOapiSchema(p.schema, { description: p.description }), m => {
         let l = m.split('/')
         imports[l[l.length - 1]] = m
         return l[l.length - 1]
@@ -272,7 +292,7 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
   let [schemaParams, schemaQuery, schemaHeaders] = [
     { g: 'params', o: 'path' },
     { g: 'query', o: 'query' },
-    { g: 'headers', o: 'header' }
+    { g: 'headers', o: 'header' },
   ].map(({ g, o }) =>
     Object.keys(sp[o]).length
       ? `  ${g}: {${Object.entries(sp[o])
@@ -282,7 +302,7 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
   )
 
   let body = ''
-  if(!['get', 'delete', 'options', 'head'].includes(method)){
+  if (!['get', 'delete', 'options', 'head'].includes(method)) {
     let _rb = def?.requestBody as OpenAPIV3.ReferenceObject
     if (_rb?.$ref) {
       body = unref(`  body: %ref:${_rb.$ref}%`, m => {
@@ -295,16 +315,17 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
       let o = (s: string) => (!rb?.required ? `$T.optional(${s})` : s)
       let bs = [
         ...new Set(
-          Object.entries(rb?.content || {null:{}}).map(([media, v]) =>
+          Object.entries(rb?.content || { null: {} }).map(([media, v]) => [
+            media,
             unref(parseOapiSchema(v.schema, undefined, { media }), m => {
               let l = m.split('/')
               imports[l[l.length - 1]] = m
               return l[l.length - 1]
-            })
-          )
-        )
+            }),
+          ])
+        ),
       ]
-      body = bs.length === 1 ? `  body: ${o(bs[0])}` : bs.length > 1 ? `  body: ${o(`$T.union([${bs.join(',')}])`)}` : ''
+      body = bs.length ? `  body: {${bs.map(([k, v]) => `"${inferBodyType(k)}":${o(v)}`).join(',')}}` : ''
     }
   }
 
@@ -316,11 +337,13 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
       let s: string = Number.isInteger(Number(status)) ? status : 'default'
 
       //@ts-ignore
-      let rootRef = sv?.$ref ? unref(parseOapiSchema(sv), m => {
-        let l = m.split('/')
-        imports[l[l.length - 1]] = m
-        return l[l.length - 1]
-      }) : null
+      let rootRef = sv?.$ref
+        ? unref(parseOapiSchema(sv), m => {
+            let l = m.split('/')
+            imports[l[l.length - 1]] = m
+            return l[l.length - 1]
+          })
+        : null
       if (rootRef) {
         return [s, [rootRef]]
       }
@@ -351,12 +374,12 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
     schema: {
       name: schemaName,
       imports,
-      def: schema.length ? `{\n${schema.join(',\n')}\n}` : ''
+      def: schema.length ? `{\n${schema.join(',\n')}\n}` : '',
     },
     endpoint: {
       meta,
-      def: endpoint
-    }
+      def: endpoint,
+    },
   }
 }
 
@@ -383,7 +406,7 @@ const parseEndpoints = (def: OpenAPIV3.Document) => {
         scope,
         path,
         schema,
-        endpoint
+        endpoint,
       }
     }
   }
@@ -399,7 +422,7 @@ const writeFiles = async (
   const typeMap = {
     schemas: 'commons',
     requestBodies: 'requests',
-    responses: 'responses'
+    responses: 'responses',
   }
   const parseSchemasToFile = (
     schemas: Record<string, SchemaEntry>,
@@ -436,7 +459,7 @@ const writeFiles = async (
   const sMaps = [
     { g: 'commons', o: 'schemas' },
     { g: 'requests', o: 'requestBodies' },
-    { g: 'responses', o: 'responses' }
+    { g: 'responses', o: 'responses' },
   ] as const
   for (let { g, o } of sMaps) {
     let s = parseSchemasToFile(

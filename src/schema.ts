@@ -335,6 +335,17 @@ export function _Intersection<T extends STSchema[]>(schemas: [...T], options: Op
     ...options,
     [Kind]: 'intersection',
     allOf: schemas.map(s => ({ ...s, ...options })) as T,
+    props: schemas.reduce(
+      (b, c) => ({
+        ...b,
+        ...(c.props || {}),
+        ...Object.fromEntries(
+          Object.entries(b).filter(([_, v]) => (v as STSchema)[Kind] === 'literal' || !(v as STSchema)[Optional])
+          // TODO: handle cases where left != right
+        ),
+      }),
+      {}
+    ) as STProps,
     optional: () => ({ ...s, [Optional]: true }),
   }
   return s as unknown as STIntersection<T>

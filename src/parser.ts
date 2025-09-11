@@ -11,6 +11,7 @@ import type {
   STSchema,
   STNull,
   STPropsValue,
+  STUnion,
 } from './schema'
 
 import { readableStreamToArrayBuffer } from 'bun'
@@ -29,12 +30,6 @@ async function* rsToAsyncIterator(readableStream: ReadableStream) {
     readableStream.cancel()
   }
 }
-
-const BA_HEADER = 'application/octet-stream'
-const JSON_HEADER = 'application/json'
-const TXT_HEADER_RX = /^text\//
-const FORM_HEADER_RX = /^application\/x-www-form-urlencoded/
-const MP_HEADER_RX = /^multipart\/form-data/
 
 export const requestBodyParser = async (
   body: ReadableStream | null,
@@ -112,33 +107,17 @@ export const requestBodyParser = async (
             : ''
         if (isStream) return $streamToString(body)
         if (kind === 'union') {
-          let res
-          for (let s of schema.anyOf) {
-            try {
-              res = await streamToString(body, s as STBodyValue)
-              if (res !== undefined) break
-            } catch (_) {}
-          }
-          if (res !== undefined) return res
-          else throw new RequestError({ status: 400, payload: { body: `No matching body schema found` } })
+          let str = streamToString(body)
+          return unionize(str, schema)
         }
         return await streamToString(body, schema as STBodyValue)
       } else if (contentType === 'json') {
         if (!['object', 'json', 'boolean', 'number', 'integer', 'string', 'array', 'union'].includes(kind))
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (kind === 'union') {
-          let res
-          for (let s of schema.anyOf) {
-            try {
-              let str = body === null ? 'null' : await streamToString(body)
-              let json
-              json = JSON.parse(str)
-              res = validate(json, s, true)
-              if (res !== undefined) break
-            } catch (_) {}
-          }
-          if (res !== undefined) return res
-          else throw new RequestError({ status: 400, payload: { body: `No matching body schema found` } })
+          let str = body === null ? 'null' : await streamToString(body)
+          let json = JSON.parse(str)
+          return unionize(json, schema)
         }
         const str = body === null ? 'null' : await streamToString(body)
         let json
@@ -150,9 +129,10 @@ export const requestBodyParser = async (
             payload: { body: err?.message ?? 'Parsing error' },
           })
         }
-        return validate(json, schema, true)
+        return validate(json, schema, { parse: true })
       } else if (contentType === 'urlForm') {
-        if (kind !== 'object') throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
+        if (!['object', 'union'].includes(kind))
+          throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (body === null)
           return isStream
             ? new ReadableStream({
@@ -163,15 +143,8 @@ export const requestBodyParser = async (
               })
             : {}
         if (kind === 'union') {
-          let res
-          for (let s of schema.anyOf) {
-            try {
-              res = await streamToUrlForm(body, s as STObject)
-              if (res !== undefined) break
-            } catch (_) {}
-          }
-          if (res !== undefined) return res
-          else throw new RequestError({ status: 400, payload: { body: `No matching body schema found` } })
+          const b = await streamToUrlForm(body)
+          return unionize(b, schema)
         }
         if (isStream) return $streamToUrlForm(body, schema as STStream<STObject>)
         else return await streamToUrlForm(body, schema as STObject)
@@ -188,15 +161,8 @@ export const requestBodyParser = async (
             : {}
         const boundary = headers?.['content-type'].match(/boundary\="?([^"]*)"?;?.*$/)?.[1] || ''
         if (kind === 'union') {
-          let res
-          for (let s of schema.anyOf) {
-            try {
-              res = await streamToMultipartForm(body, boundary, s as STMultipartForm)
-              if (res !== undefined) break
-            } catch (_) {}
-          }
-          if (res !== undefined) return res
-          else throw new RequestError({ status: 400, payload: { body: `No matching body schema found` } })
+          let mp = await streamToMultipartForm(body, boundary)
+          return unionize(mp, schema)
         }
         if (isStream) return $streamToMultipartForm(body, boundary, schema as STStream<STMultipartForm>)
         return streamToMultipartForm(body, boundary, schema as STMultipartForm)
@@ -215,7 +181,7 @@ async function* $streamToString(body: ReadableStream) {
 const streamToString = async (body: ReadableStream, schema?: STBodyValue): Promise<any> => {
   let res = ''
   for await (const chunk of $streamToString(body)) res += chunk
-  if (schema) return validate(res, schema, true)
+  if (schema) return validate(res, schema, { parse: true })
   return res
 }
 async function* $streamToUrlForm(
@@ -520,11 +486,9 @@ const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary:
       try {
         if (Array.isArray(res[chunk.headers.name].content) && schema?.props?.[chunk.headers.name]?.[Kind] !== 'array')
           throw `Multiple values found`
-        res[chunk.headers.name].content = validate(
-          res[chunk.headers.name].content,
-          schema?.props[chunk.headers.name],
-          true
-        )
+        res[chunk.headers.name].content = validate(res[chunk.headers.name].content, schema?.props[chunk.headers.name], {
+          parse: true,
+        })
         if (schema.props[chunk.headers.name][Kind] === 'array')
           for (let [k, v] of Object.entries(res[chunk.headers.name].content)) {
             try {
@@ -611,7 +575,7 @@ const paramParser = (
       } catch (e) {
         throw `Not a valid object`
       }
-      return validate(json, type, false)
+      return validate(json, type)
     } else if (type[Kind] === 'array') {
       return [paramParser(value, type.items as STMultipartFormValues) as Static<STPropsValue>]
     } else if (type[Kind] === 'byteArray') {
@@ -758,12 +722,22 @@ export const responseParser = (response: any, ctx: Context, schema?: STResponse)
   }
 }
 
-export const inferBodyType = (contentType?: string | null): STBodyType | undefined => {
-  if (!contentType) return 'default'
-  if (contentType === JSON_HEADER) return 'json'
-  if (TXT_HEADER_RX.test(contentType)) return 'text'
-  if (FORM_HEADER_RX.test(contentType)) return 'urlForm'
-  if (MP_HEADER_RX.test(contentType)) return 'multipart'
-  if (contentType === BA_HEADER) return 'byteArray'
-  return 'default'
+const unionize = (b: any, schema: STUnion) => {
+  let res
+  let error
+  const discirminants = schema.anyOf.reduce(
+    (acc, obj) => acc.filter(k => k in obj?.props && obj?.props[k]?.[Kind] === 'literal' && !obj?.props[k]?.Optional),
+    Object.keys(schema.anyOf[0]?.props || {})
+  )
+  for (let s of schema.anyOf) {
+    try {
+      res = validate(b, s, { parse: true })
+      if (res !== undefined) break
+    } catch (err: any) {
+      if (discirminants.every(d => !err?.[d]?.startsWith('Not a valid value'))) error = err
+    }
+  }
+  if (res !== undefined) return res
+  else if (error) throw new RequestError({ status: 400, payload: { body: error } })
+  else throw new RequestError({ status: 400, payload: { body: `No matching body schema found` } })
 }

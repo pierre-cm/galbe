@@ -1,9 +1,10 @@
 import type { Context, Method, Route } from './types'
 
 import { InternalError, RequestError } from './types'
-import { inferBodyType, parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
+import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
 import { Galbe } from './index'
 import { validateResponse } from './validator'
+import { inferBodyType } from './util'
 
 type MakeOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
