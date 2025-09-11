@@ -17,10 +17,12 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
     }
     if (elt !== true && elt !== false) throw `Not a valid boolean. Should be 'true' or 'false'`
   } else if (schema[Kind] === 'integer') {
+    if (elt === '') throw `Not a valid integer`
     if (opt?.parse && typeof elt === 'string') elt = Number(elt)
     if (!Number.isInteger(elt)) throw `Not a valid integer`
     schemaValidation(elt, schema)
   } else if (schema[Kind] === 'number') {
+    if (elt === '') throw `Not a valid number`
     if (opt?.parse && typeof elt === 'string') elt = Number(elt)
     if (!Number.isFinite(elt)) throw `Not a valid number`
     schemaValidation(elt, schema)
@@ -63,6 +65,7 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
       }
     }
     if (!Array.isArray(elt)) throw 'Not a valid array'
+    for (const i of elt) validate(i, schema.items)
     schemaValidation(elt, schema)
   } else if (schema[Kind] === 'byteArray') {
     if (opt?.parse && typeof elt === 'string') elt = Uint8Array.from(elt, c => c.charCodeAt(0))

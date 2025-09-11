@@ -552,8 +552,6 @@ describe('requests', () => {
 
       let respBody = (await resp.json()) as { type: string; content: any }
 
-      console.log(respBody)
-
       expect(resp.status).toBe(expected.status)
       if (expected.type) expect(respBody.type).toEqual(expected.type)
       if (respBody.type === 'object' && expected.resp === null) expect(respBody.content).toBeNull

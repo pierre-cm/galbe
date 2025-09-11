@@ -94,7 +94,7 @@ export const requestBodyParser = async (
         if (isStream) return rsToAsyncIterator(body)
         return new Uint8Array(await readableStreamToArrayBuffer(body))
       } else if (contentType === 'text') {
-        if (!['string', 'boolean', 'number', 'integer', 'union'].includes(kind))
+        if (!['string', 'boolean', 'number', 'integer', 'union', 'literal'].includes(kind))
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (body === null)
           return isStream
@@ -104,10 +104,10 @@ export const requestBodyParser = async (
                   controller.close()
                 },
               })
-            : ''
+            : validate('', schema, { parse: true })
         if (isStream) return $streamToString(body)
         if (kind === 'union') {
-          let str = streamToString(body)
+          let str = await streamToString(body)
           return unionize(str, schema)
         }
         return await streamToString(body, schema as STBodyValue)
@@ -141,7 +141,15 @@ export const requestBodyParser = async (
                   controller.close()
                 },
               })
-            : {}
+            : await streamToUrlForm(
+                new ReadableStream({
+                  start(controller) {
+                    controller.enqueue(new Uint8Array())
+                    controller.close()
+                  },
+                }),
+                schema
+              )
         if (kind === 'union') {
           const b = await streamToUrlForm(body)
           return unionize(b, schema)
@@ -266,7 +274,7 @@ const streamToUrlForm = async (body: ReadableStream<Uint8Array>, schema?: STObje
   let errors: Record<string, any> = {}
   for await (const chunk of $streamToUrlForm(body)) entries.push(chunk)
   const object: Record<string, any> = {}
-  for (let e of entries) {
+  for (let e of entries.filter(([k]) => k)) {
     if (e[0] in object) {
       if (Array.isArray(object[e[0]])) object[e[0]].push(e[1])
       else object[e[0]] = [object[e[0]], e[1]]
@@ -566,8 +574,11 @@ const paramParser = (
       validate(value, type)
       return value
     } else if (type[Kind] === 'literal') {
-      if (value !== type.value) throw `Not a valid value`
-      return value
+      let val: any = value
+      if (typeof type.value === 'boolean') val = value === 'true' ? true : value === 'false' ? false : value
+      if (typeof type.value === 'number') val = Number(value)
+      if (val !== type.value) throw `Not a valid value`
+      return val
     } else if (type[Kind] === 'object') {
       let json
       try {
