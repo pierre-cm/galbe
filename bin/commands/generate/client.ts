@@ -5,7 +5,7 @@ import { Command, Option } from 'commander'
 import { resolve, extname } from 'path'
 import { rm } from 'fs/promises'
 import { transformSync } from '@swc/core'
-import { CWD, fmtList, instanciateRoutes, silentExec } from '../../util'
+import { CWD, fmtList, instanciateRoutes, silentExec, abbreviateVar } from '../../util'
 import { $T, Galbe, GalbeCLICommand, Method, Route, STResponse } from '../../../src'
 import { walkRoutes } from '../../../src/util'
 import { schemaToTypeStr, Optional, STSchema } from '../../../src/schema'
@@ -36,7 +36,7 @@ export default (cmd: Command) => {
       let pckg: any = {}
       try {
         pckg = await Bun.file(resolve(CWD, 'package.json')).json()
-      } catch (e) { }
+      } catch (e) {}
 
       let error = null
       Bun.write(Bun.stdout, '💻 \x1b[1;30mBuilding \x1b[36mGalbe\x1b[0m\x1b[1;30m client\x1b[0m')
@@ -63,7 +63,7 @@ export default (cmd: Command) => {
         patch: [],
         delete: [],
         options: [],
-        head: []
+        head: [],
       }
       const types: Record<string, STResponse> = {}
       let commands: GalbeCLICommand[] = []
@@ -75,7 +75,7 @@ export default (cmd: Command) => {
       walkRoutes(g.router.routes, r => {
         let meta = metaRoutes?.[r.path]?.[r.method]
         let [_, summary, description] = meta?.head?.match(/^([^\n]*)\n\n(.*)/) || []
-        if(!summary) description = meta?.head
+        if (!summary) description = meta?.head
         let route = {
           ...r,
           ...(meta?.operationId ? { alias: meta?.operationId } : {}),
@@ -89,36 +89,51 @@ export default (cmd: Command) => {
                 {
                   ...(r.schema?.params?.[m?.[1]]
                     ? {
-                      type: schemaToTypeStr(r.schema.params[m[1]]),
-                      ...(r.schema.params[m[1]]?.description
-                        ? { description: r.schema.params[m[1]].description as string }
-                        : {})
-                    }
-                    : { type: 'string' })
-                }
+                        type: schemaToTypeStr(r.schema.params[m[1]]),
+                        ...(r.schema.params[m[1]]?.description
+                          ? { description: r.schema.params[m[1]].description as string }
+                          : {}),
+                      }
+                    : { type: 'string' }),
+                },
               ])
             ) || {},
+          contentTypes: Object.keys(r.schema.body || { default: '' })
+            .map(s => `'${s}'`)
+            .join('|'),
           schemas: {
             ...(r.schema.headers ? { headers: schemaToTypeStr($T.object(r.schema.headers)) } : {}),
             ...(r.schema.query ? { query: schemaToTypeStr($T.object(r.schema.query)) } : {}),
-            ...(r.schema.body ? { body: schemaToTypeStr(r.schema.body) } : {}),
+            ...(r.schema.body
+              ? {
+                  body: `{${Object.entries(r.schema.body)
+                    .map(([ct, s]) => `${ct}: ${schemaToTypeStr(s)}`)
+                    .join(';')}}`,
+                }
+              : {}),
             ...(r.schema.response
               ? {
-                response: Object.fromEntries(
-                  Object.entries(r.schema.response).map(([k, v]) => [k === 'default' ? '"default"' : k, schemaToTypeStr(v as STSchema)])
-                )
-              }
-              : {})
-          }
+                  response: Object.fromEntries(
+                    Object.entries(r.schema.response).map(([k, v]) => [
+                      k === 'default' ? '"default"' : k,
+                      schemaToTypeStr(v as STSchema),
+                    ])
+                  ),
+                }
+              : {}),
+          },
         }
-        Object.values(r.schema.response || {}).filter(s => s?.id).forEach(s => {
-          //@ts-ignore
-          types[s.id] = schemaToTypeStr(s)
-        })
+        Object.values(r.schema.response || {})
+          .filter(s => s?.id)
+          .forEach(s => {
+            //@ts-ignore
+            types[s.id] = schemaToTypeStr(s)
+          })
         routes[r.method.toLocaleLowerCase()].push(route)
         if (target === 'cli' && meta?.operationId)
           commands.push({
             name: meta.operationId,
+            tags: meta?.tags ? (Array.isArray(meta.tags) ? meta.tags : [meta.tags]) : [],
             description: route.summary || route.description,
             route,
             arguments:
@@ -127,7 +142,7 @@ export default (cmd: Command) => {
                   return {
                     name: k,
                     type: p.type === 'boolean' ? '' : `<${p.type}>`,
-                    description: p?.description || ''
+                    description: p?.description || '',
                   }
                 }
               ) || [],
@@ -136,12 +151,12 @@ export default (cmd: Command) => {
                 let type = schemaToTypeStr({ ...o, [Optional]: false })
                 return {
                   name: k,
-                  short: k[0],
+                  short: abbreviateVar(k),
                   type: type === 'boolean' ? '' : `<${type}>`,
                   description: o?.description || '',
-                  default: o.default
+                  default: o.default,
                 }
-              }) || []
+              }) || [],
           })
       })
 
@@ -167,11 +182,11 @@ export default (cmd: Command) => {
           filled = transformSync(filled, {
             jsc: {
               parser: {
-                syntax: 'typescript'
+                syntax: 'typescript',
               },
               preserveAllComments: true,
-              target: 'esnext'
-            }
+              target: 'esnext',
+            },
           }).code
         }
 
@@ -182,6 +197,19 @@ export default (cmd: Command) => {
         // Plugin CLI hook
         if (commands) for (let p of g.plugins) if (p.cli) await p.cli(commands)
 
+        const tags = commands.reduce(
+          (p, c) => {
+            if (c.tags.length)
+              for (const t of c.tags) {
+                if (!(t in p)) p[t] = []
+                p[t].push(c)
+              }
+            else p[''].push(c)
+            return p
+          },
+          { '': [] as GalbeCLICommand[] }
+        )
+
         let filled = file.replaceAll(/\/\*\%([\s\S]*?)\%\*\//g, (_match, p) => {
           let idt = p.match(/^\n*([ \t]*)/, p)?.[1] || ''
           const script = new Script(p)
@@ -190,7 +218,7 @@ export default (cmd: Command) => {
             name: pckg?.name || 'Galbe app CLI',
             description: pckg?.description || '',
             version: pckg?.version || '0.1.0',
-            commands
+            tags,
           }
           createContext(sandbox)
           let res = script.runInNewContext(sandbox)

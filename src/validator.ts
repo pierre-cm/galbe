@@ -1,9 +1,9 @@
 import { InternalError, type STResponse } from './index'
-import type { STSchema, STProps, STUnion } from './schema'
+import type { STSchema, STProps, STUnion, STIntersection } from './schema'
 import { Kind, Optional, Stream } from './schema'
 import { isIterator } from './util'
 
-export const validate = (elt: any, schema: STSchema, parse = false): any => {
+export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }): any => {
   type ValidationError = string | string[] | { [key: string]: ValidationError }
   const errors: ValidationError[] = []
   const iElt = elt
@@ -12,25 +12,27 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
     if (elt !== null) throw `Expected null value got ${iElt}`
   } else if (schema[Kind] === 'boolean') {
     if (typeof elt === 'string') {
-      if (parse) elt = elt === 'true' ? true : elt === 'false' ? false : null
+      if (opt?.parse) elt = elt === 'true' ? true : elt === 'false' ? false : null
       else throw `Expected boolean, got string.`
     }
     if (elt !== true && elt !== false) throw `Not a valid boolean. Should be 'true' or 'false'`
   } else if (schema[Kind] === 'integer') {
-    if (parse && typeof elt === 'string') elt = Number(elt)
+    if (elt === '') throw `Not a valid integer`
+    if (opt?.parse && typeof elt === 'string') elt = Number(elt)
     if (!Number.isInteger(elt)) throw `Not a valid integer`
     schemaValidation(elt, schema)
   } else if (schema[Kind] === 'number') {
-    if (parse && typeof elt === 'string') elt = Number(elt)
+    if (elt === '') throw `Not a valid number`
+    if (opt?.parse && typeof elt === 'string') elt = Number(elt)
     if (!Number.isFinite(elt)) throw `Not a valid number`
     schemaValidation(elt, schema)
   } else if (schema[Kind] === 'string') {
     if (!(typeof elt === 'string')) throw `Not a valid string`
     schemaValidation(elt, schema)
   } else if (schema[Kind] === 'literal') {
-    if (elt !== schema.value) throw `Not a valid value`
+    if (elt !== schema.value) throw `Not a valid value. Found "${elt}" but expected "${schema.value}"`
   } else if (schema[Kind] === 'object') {
-    if (parse && typeof elt === 'string') {
+    if (opt?.parse && typeof elt === 'string') {
       try {
         elt = JSON.parse(elt)
       } catch {
@@ -46,16 +48,16 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
         return
       }
       try {
-        validate(elt[k], s, parse)
+        validate(elt[k], s, opt)
       } catch (e) {
         err[k] = e as ValidationError
       }
     })
     if (Object.keys(err).length) errors.push(err)
   } else if (schema[Kind] === 'json') {
-    elt = validate(elt, { ...schema, [Kind]: schema.type }, parse)
+    elt = validate(elt, { ...schema, [Kind]: schema.type }, opt)
   } else if (schema[Kind] === 'array') {
-    if (parse && typeof elt === 'string') {
+    if (opt?.parse && typeof elt === 'string') {
       try {
         elt = JSON.parse(elt)
       } catch (error) {
@@ -63,17 +65,18 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
       }
     }
     if (!Array.isArray(elt)) throw 'Not a valid array'
+    for (const i of elt) validate(i, schema.items)
     schemaValidation(elt, schema)
   } else if (schema[Kind] === 'byteArray') {
-    if (parse && typeof elt === 'string') elt = Uint8Array.from(elt, c => c.charCodeAt(0))
-    else if (parse && Array.isArray(elt)) elt = new Uint8Array(elt)
+    if (opt?.parse && typeof elt === 'string') elt = Uint8Array.from(elt, c => c.charCodeAt(0))
+    else if (opt?.parse && Array.isArray(elt)) elt = new Uint8Array(elt)
     if (!(elt instanceof Uint8Array)) throw 'Not a valid byteArray'
   } else if (schema[Kind] === 'union') {
     const union = Object.values((schema as STUnion).anyOf)
     let valid = false
-    for (const u of union) {
+    for (const s of union) {
       try {
-        elt = validate(elt, u as STSchema, parse)
+        elt = validate(elt, s as STSchema, opt)
         valid = true
         break
       } catch (err) {
@@ -82,6 +85,9 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
     }
     // @ts-ignore
     if (!valid) throw `Could not be parsed to any of [${union.map(u => u?.value ?? u[Kind]).join(', ')}]`
+  } else if (schema[Kind] === 'intersection') {
+    const intersection = Object.values((schema as STIntersection).allOf)
+    for (const s of intersection) validate(elt, s as STSchema, opt)
   } else if (schema[Kind] === 'any') {
   } else {
     throw `Unsupported schema type ${schema[Kind]}`
@@ -96,7 +102,7 @@ export const validate = (elt: any, schema: STSchema, parse = false): any => {
 export const validateResponse = (response: any, schema: STResponse, status: number) => {
   if (!(status in schema)) return
   const s = schema?.[status] || schema?.['default']
-  if(!s) return
+  if (!s) return
   if (response instanceof ReadableStream) {
     if (!s[Stream]) throw new InternalError(`Expected ${s[Kind]} response, but got ReadableStream`)
   } else if (isIterator(response)) {
@@ -116,11 +122,9 @@ const schemaValidation = (value: any, schema: STSchema) => {
     if (schema.exclusiveMin !== undefined)
       if ((value as number) <= schema.exclusiveMin) errors.push(`Is less or equal to ${schema.exclusiveMin}`)
     if (schema.exclusiveMax !== undefined)
-      if ((value as number) >= schema.exclusiveMax)
-        errors.push(`Is greater or equal to ${schema.exclusiveMax}`)
+      if ((value as number) >= schema.exclusiveMax) errors.push(`Is greater or equal to ${schema.exclusiveMax}`)
     if (schema.min !== undefined) if ((value as number) < schema.min) errors.push(`Is less than ${schema.min}`)
-    if (schema.max !== undefined)
-      if ((value as number) > schema.max) errors.push(`Is greater than ${schema.max}`)
+    if (schema.max !== undefined) if ((value as number) > schema.max) errors.push(`Is greater than ${schema.max}`)
   } else if (schema[Kind] === 'string') {
     if (schema.minLength !== undefined && (value as string).length < schema.minLength)
       errors.push(`Length is too small (${schema.minLength} char min)`)

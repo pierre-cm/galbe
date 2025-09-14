@@ -16,27 +16,10 @@ import type {
   STStream,
   STString,
   STUnion,
-  STUrlForm,
-  Static
+  Static,
 } from './schema'
 import type { Galbe } from './index'
 import { HttpStatus } from './util'
-
-export type STBody =
-  | STByteArray
-  | STString
-  | STBoolean
-  | STNumber
-  | STInteger
-  | STLiteral
-  | STObject
-  | STArray
-  | STUrlForm
-  | STMultipartForm
-  | STUnion
-  | STStream
-  | STAny
-  | undefined
 
 export type STResponseValue =
   | STByteArray
@@ -52,6 +35,19 @@ export type STResponseValue =
   | STStream
   | STAny
   | STNull
+export type STBody =
+  | STNull
+  | Partial<{
+      byteArray?: STByteArray | STStream
+      text?: STString | STLiteral | STBoolean | STNumber | STInteger | STUnion | STStream
+      json?: STJson | STObject | STBoolean | STInteger | STNumber | STString | STArray | STUnion
+      urlForm?: STObject | STStream | STUnion
+      multipart?: STMultipartForm | STStream | STUnion
+      default?: STString | STByteArray | STStream | STAny
+    }>
+export type STBodyType = keyof STBody
+export type STBodyValue = STBody[STBodyType]
+
 export type STResponse = Partial<Record<number | 'default', STResponseValue>>
 
 export type MaybeArray<T> = T | T[]
@@ -159,9 +155,9 @@ type OmitNotDefined<S extends RequestSchema> = {
   [K in keyof Exclude<S['params'], undefined> as Exclude<S['params'], undefined>[K] extends Required<
     Exclude<S['params'], undefined>
   >[K]
-  ? K
-  : //@ts-ignore
-  never]: Static<STObject<Exclude<S['params'], undefined>>>[K]
+    ? K
+    : //@ts-ignore
+      never]: Static<STObject<Exclude<S['params'], undefined>>>[K]
 }
 type StaticBody<T extends STSchema> = T extends STOptional<STSchema> ? Static<T> | null : Static<T>
 export type Context<
@@ -169,24 +165,35 @@ export type Context<
   Path extends string = string,
   S extends RequestSchema = RequestSchema
 > = {
-  headers: Static<STObject<Exclude<S['headers'], undefined>>>
-  params: {
-    [K in ExtractParams<Path>]: K extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[K] : string
-  }
-  query: Static<STObject<Exclude<S['query'], undefined>>>
-  body: M extends 'get' | 'options' | 'head' ? null : StaticBody<Exclude<S['body'], undefined>>
-  request: Request
-  remoteAddress: SocketAddress | null
-  route?: Route
-  state: Record<string, any>
-  set: {
-    headers: {
-      'set-cookie': string[]
-      [header: string]: string | string[]
-    }
-    status?: number
-  }
-}
+  [K in STBodyType]: K extends keyof Exclude<S['body'], undefined>
+    ? {
+        headers: Static<STObject<Exclude<S['headers'], undefined>>>
+        params: {
+          [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
+        }
+        query: Static<STObject<Exclude<S['query'], undefined>>>
+        contentType: M extends 'get' | 'options' | 'head' ? undefined : K
+        body: M extends 'get' | 'options' | 'head'
+          ? null
+          : Exclude<S['body'], undefined> extends STNull
+          ? null
+          : K extends STBodyType
+          ? StaticBody<Exclude<Exclude<S['body'], undefined>[K], undefined>>
+          : never
+        request: Request
+        remoteAddress: SocketAddress | null
+        route?: Route
+        state: Record<string, any>
+        set: {
+          headers: {
+            'set-cookie': string[]
+            [header: string]: string | string[]
+          }
+          status?: number
+        }
+      }
+    : never
+}[STBodyType]
 export type Next = () => void | Promise<any>
 export type Hook<M extends Method = Method, Path extends string = string, S extends RequestSchema = RequestSchema> = (
   ctx: Context<M, Path, S>,
@@ -251,13 +258,17 @@ export type Endpoint<M extends Method> = {
 export type StaticEndpointOptions = {
   resolve?: (path: string, target: string) => string | null | undefined | void
 }
-export type StaticEndpoint<P extends string = string, T extends string = string> = (path: P, target: T, options?: StaticEndpointOptions) => Route<"get", P, {}, {}, {}, STBody, STResponse, T>
+export type StaticEndpoint<P extends string = string, T extends string = string> = (
+  path: P,
+  target: T,
+  options?: StaticEndpointOptions
+) => Route<'get', P, {}, {}, {}, STBody, STResponse, T>
 
 export class RequestError {
   status: number
   payload?: any
   headers?: Record<string, string>
-  constructor(options: { status?: number; payload?: any, headers?: Record<string, string> }) {
+  constructor(options: { status?: number; payload?: any; headers?: Record<string, string> }) {
     this.status = options.status ?? 500
     this.payload = options.payload
     this.headers = options.headers
@@ -289,7 +300,7 @@ export type Route<
   context: Context<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
   hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[]
   handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-  static?: { path: SP, root: SR }
+  static?: { path: SP; root: SR }
 }
 
 export class NotFoundError extends RequestError {
@@ -349,6 +360,7 @@ export type GalbePlugin = {
 
 export type GalbeCLICommand = {
   name: string
+  tags: string[]
   description?: string
   route: Route
   arguments?: { name: string; type: string; description: string }[]

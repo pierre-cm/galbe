@@ -1,4 +1,4 @@
-import type { Method, Route, RouteNode } from '.'
+import type { Method, Route, RouteNode, STBodyType } from '.'
 import type { RouteFileMeta, RouteMeta } from './routes'
 
 const METHOD_COLOR: Record<string, string> = {
@@ -8,11 +8,11 @@ const METHOD_COLOR: Record<string, string> = {
   patch: '\x1b[33m',
   delete: '\x1b[31m',
   options: '',
-  head: ''
+  head: '',
 }
 const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g
 
-export const softMerge = <T> (base: T, override: T): T => {
+export const softMerge = <T>(base: T, override: T): T => {
   for (const key in override) {
     if (override[key] instanceof Object && !(override[key] instanceof Array)) {
       if (!base[key]) Object.assign(base as any, { [key]: {} })
@@ -22,7 +22,7 @@ export const softMerge = <T> (base: T, override: T): T => {
   return base
 }
 export const logRoute = (
-  r: { method: string; path: string, static?: { path: string, root: string } },
+  r: { method: string; path: string; static?: { path: string; root: string } },
   meta?: RouteMeta,
   format?: { maxPathLength?: number }
 ) => {
@@ -32,16 +32,18 @@ export const logRoute = (
   let routeLog = ''
 
   if (r?.static) {
-    routeLog = `[\x1b[0;33m${`STATIC\x1b[0m]`.padEnd(12, ' ')} ${path
-      .padEnd(format?.maxPathLength ?? path.length, ' ')} \x1b[0;33m⇒\x1b[0m  ${r.static.path}\x1b[0m`
+    routeLog = `[\x1b[0;33m${`STATIC\x1b[0m]`.padEnd(12, ' ')} ${path.padEnd(
+      format?.maxPathLength ?? path.length,
+      ' '
+    )} \x1b[0;33m⇒\x1b[0m  ${r.static.path}\x1b[0m`
     if (meta?.deprecated) routeLog = `\x1b[0;9m\x1b[38;5;244m${routeLog.replaceAll(ansiRegex, '')}\x1b[0m`
   } else {
     let color = METHOD_COLOR?.[method] || ''
     let [_, summary, _description] = meta?.head?.match(/^([^\n]*)\n\n(.*)/) || []
-    if(!summary) _description = meta?.head || ''
+    if (!summary) _description = meta?.head || ''
     routeLog = `[${color}${`${method.toUpperCase()}\x1b[0m]`.padEnd(12, ' ')} ${path
       .padEnd(format?.maxPathLength ?? path.length, ' ')
-      .replaceAll(/:([^\/]+)/g, '\x1b[0;33m:$1\x1b[0m')}${(summary?`  ${summary}`:'').replace(/\n/, '')}\x1b[0m`
+      .replaceAll(/:([^\/]+)/g, '\x1b[0;33m:$1\x1b[0m')}${(summary ? `  ${summary}` : '').replace(/\n/, '')}\x1b[0m`
     if (meta?.deprecated) routeLog = `\x1b[0;9m\x1b[38;5;244m${routeLog.replaceAll(ansiRegex, '')}\x1b[0m`
   }
 
@@ -133,5 +135,31 @@ export const HttpStatus = {
   504: 'Gateway Timeout',
   505: 'HTTP Version Not Supported',
   507: 'Insufficient Storage',
-  511: 'Network Authentication Required'
+  511: 'Network Authentication Required',
+}
+
+const BA_HEADER = 'application/octet-stream'
+const JSON_HEADER = 'application/json'
+const TXT_HEADER_RX = /^text\//
+const FORM_HEADER_RX = /^application\/x-www-form-urlencoded/
+const MP_HEADER_RX = /^multipart\/form-data/
+
+export const inferBodyType = (contentType?: string | null): STBodyType | undefined => {
+  if (!contentType) return 'default'
+  if (contentType === JSON_HEADER) return 'json'
+  if (TXT_HEADER_RX.test(contentType)) return 'text'
+  if (FORM_HEADER_RX.test(contentType)) return 'urlForm'
+  if (MP_HEADER_RX.test(contentType)) return 'multipart'
+  if (contentType === BA_HEADER) return 'byteArray'
+  return 'default'
+}
+
+export const inferContentType = (bodyType?: string | undefined): string => {
+  if (!bodyType) return 'default'
+  if (bodyType === 'json') return JSON_HEADER
+  if (bodyType === 'text') return 'text/plain'
+  if (bodyType === 'urlForm') return 'application/x-www-form-urlencoded'
+  if (bodyType === 'multipart') return 'multipart/form-data'
+  if (bodyType === 'byteArray') return BA_HEADER
+  return 'default'
 }

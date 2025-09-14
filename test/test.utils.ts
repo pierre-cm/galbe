@@ -27,7 +27,7 @@ export const schema_objectBase = {
   number: $T.number(),
   bool: $T.boolean(),
   any: $T.any(),
-  optional: $T.optional($T.any())
+  optional: $T.optional($T.any()),
 }
 export const schema_object = {
   ...schema_objectBase,
@@ -35,7 +35,7 @@ export const schema_object = {
   array: $T.array(),
   null: $T.null(),
   nullable: $T.nullable($T.string()),
-  nullish: $T.nullish($T.number())
+  nullish: $T.nullish($T.number()),
 }
 
 export const isAsyncIterator = (obj: any) => {
@@ -105,3 +105,5 @@ export const handleUrlFormStream = async (ctx: Context) => {
   }
   return { type: 'object', content: resp }
 }
+
+export const EMPTY_BA_STR = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'

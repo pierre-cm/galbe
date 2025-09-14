@@ -4,6 +4,7 @@ import { InternalError, RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
 import { Galbe } from './index'
 import { validateResponse } from './validator'
+import { inferBodyType } from './util'
 
 type MakeOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
@@ -19,7 +20,7 @@ const setupPluginCallbacks = (galbe: Galbe) => ({
   onFetch: galbe.plugins.filter(p => p.onFetch),
   onRoute: galbe.plugins.filter(p => p.onRoute),
   beforeHandle: galbe.plugins.filter(p => p.beforeHandle),
-  afterHandle: galbe.plugins.filter(p => p.afterHandle)
+  afterHandle: galbe.plugins.filter(p => p.afterHandle),
 })
 
 export default async (galbe: Galbe, port?: number, hostname?: string) => {
@@ -38,9 +39,12 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
       if (!METHODS.includes(req.method)) return new Response('', { status: 501 })
       const context = {
         request: req,
+        contentType: !EMPTY_BODY_METHODS.includes(req.method)
+          ? inferBodyType(req.headers.get('content-type'))
+          : undefined,
         remoteAddress: server.requestIP(req),
         set: { headers: { 'set-cookie': [] } },
-        state: {}
+        state: {},
       } as MakeOptional<Context, 'headers' | 'params' | 'query' | 'body'>
       for (const p of pluginsCb.onFetch) {
         //@ts-ignore
@@ -80,9 +84,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         }
         let inParams = requestPathParser(url.pathname, route.path)
 
-        context.body = !EMPTY_BODY_METHODS.includes(req.method)
-          ? await requestBodyParser(req.body, inHeaders, schema.body)
-          : null
+        context.body = await requestBodyParser(req.body, inHeaders, schema.body, context.contentType)
         context.headers = inHeaders
         context.query = inQuery
         context.params = inParams
@@ -94,7 +96,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
             if (schema?.headers)
               context.headers = {
                 ...context.headers,
-                ...parseEntry(context.headers, schema.headers, { name: 'headers', i: true })
+                ...parseEntry(context.headers, schema.headers, { name: 'headers', i: true }),
               }
           } catch (error) {
             if (error instanceof RequestError) errors.push(error)
@@ -142,13 +144,13 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
             let r = await hook(context as Context, next)
             if (r) return r
             if (!nextCalled && !handlerCalled) return await next()
-          }
+          },
         }))
         callChain.push({
           call: async () => {
             response = await handlerWrapper(context as Context)
             context.set.status = response instanceof Response ? response.status : context.set.status || 200
-          }
+          },
         })
         if (callChain.length > 1) {
           let r = await callChain[0].call()
@@ -176,7 +178,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
           console.log(`Internal Error`, error?.payload || '')
           return new Response('Internal Server Error', {
             status: error.status,
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'content-type': 'application/json' },
           })
         } else if (error instanceof RequestError) {
           let payload = error.payload
@@ -187,19 +189,19 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
               headers.set('content-type', 'application/json')
               try {
                 payload = JSON.stringify(error.payload)
-              } catch (err) { }
+              } catch (err) {}
             }
           }
           return new Response(payload, {
             status: error.status,
-            headers
+            headers,
           })
         } else console.log(error)
         return new Response('"Internal Server Error"', {
           status: 500,
           headers: {
-            'content-type': 'application/json'
-          }
+            'content-type': 'application/json',
+          },
         })
       }
     },
@@ -208,10 +210,10 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
       return new Response('"Internal Server Error"', {
         status: 500,
         headers: {
-          'content-type': 'application/json'
-        }
+          'content-type': 'application/json',
+        },
       })
-    }
+    },
   })
   return server
 }

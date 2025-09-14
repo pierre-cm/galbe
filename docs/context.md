@@ -49,7 +49,7 @@ galbe.get('/test', ctx => console.log(ctx.query))
 
 The body payload of the incoming request. The body type is determined based on the following rules:
 
-If no [Schema](schemas.md) is defined, Galbe will parse the body type according to the `Content-Type` header:
+If no [Schema](schemas.md) is defined, Galbe will parse the body type according to the `content-type` header:
 
 - `text/.*`: string
 - `application/json`: object

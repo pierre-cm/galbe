@@ -17,7 +17,8 @@ import type {
   STQuery,
   StaticEndpoint,
   Route,
-  StaticEndpointOptions
+  StaticEndpointOptions,
+  STBodyValue,
 } from './types'
 
 import { readdirSync, statSync } from 'fs'
@@ -78,14 +79,12 @@ const galbeMethod = <
 ): Route<M, Path, P, H, Q, B, R> => {
   schema = schema ?? {}
   hooks = hooks || []
+  //@ts-ignore
   const context: Context<M, Path, typeof schema> = {
     headers: {} as Static<STObject<Exclude<(typeof schema)['headers'], undefined>>>,
     params: {} as any,
     query: {} as Static<STObject<Exclude<(typeof schema)['query'], undefined>>>,
-    //@ts-ignore
-    body: ['get', 'options', 'head'].includes(method)
-      ? null
-      : ({} as Static<Exclude<(typeof schema)['body'], undefined>>),
+    body: ['get', 'options', 'head'].includes(method) ? null : ({} as unknown as STBodyValue),
     request: {} as Request,
     state: {},
     set: {} as {
@@ -94,7 +93,7 @@ const galbeMethod = <
         [header: string]: string | string[]
       }
       status?: number
-    }
+    },
   }
   return {
     method,
@@ -102,7 +101,7 @@ const galbeMethod = <
     schema,
     context,
     hooks,
-    handler
+    handler,
   }
 }
 
@@ -140,7 +139,7 @@ export class Galbe {
     this.config = config ?? {}
     this.router = new GalbeRouter({
       prefix: this.config?.basePath || '',
-      cacheEnabled: this.config?.router?.cacheEnabled
+      cacheEnabled: this.config?.router?.cacheEnabled,
     })
   }
   private add(route: any) {
@@ -189,7 +188,7 @@ export class Galbe {
     P extends Partial<STParams<Path>>,
     H extends STHeaders,
     Q extends STQuery,
-    B extends undefined,
+    B extends STBody,
     R extends STResponse
   >(
     path: Path,
@@ -317,7 +316,7 @@ export class Galbe {
 
     const walkStatic = (path: string, target: string) => {
       path = path?.[0] === '/' ? path : `/${path}`
-      path = path.endsWith('/') ? path.slice(0, -1) : path;
+      path = path.endsWith('/') ? path.slice(0, -1) : path
 
       let t = target
       if (Bun.env.BUN_ENV === 'production') {
@@ -330,7 +329,13 @@ export class Galbe {
         if (resolve) ut = resolve(path, ut)
         if (ut) {
           let handler = () => new Response(Bun.file(ut))
+          const isIndex = /index\.html$/.test(ut)
           this.add({ ...galbeMethod(this, 'get', path, {}, undefined, handler), static: { path: ut, root: rootPath } })
+          if (isIndex)
+            this.add({
+              ...galbeMethod(this, 'get', `${path}/index.html`, {}, undefined, handler),
+              static: { path: ut, root: rootPath },
+            })
         }
       } else {
         let root = readdirSync(t)
@@ -340,7 +345,7 @@ export class Galbe {
         }
       }
 
-      return { ...galbeMethod(this, 'get', path, {}, undefined, () => { }), static: { path: t, root: rootPath } }
+      return { ...galbeMethod(this, 'get', path, {}, undefined, () => {}), static: { path: t, root: rootPath } }
     }
 
     return walkStatic(path, target)

@@ -9,6 +9,8 @@ describe('requests', () => {
   beforeAll(async () => {
     const galbe = new Galbe()
 
+    galbe.static('/www', './test/resources/static', {})
+
     galbe.get('/test', () => {})
     galbe.post('/test', () => {})
     galbe.put('/test', () => {})
@@ -31,8 +33,8 @@ describe('requests', () => {
           float: $T.number(),
           integer: $T.integer(),
           'boolean-true': $T.boolean(),
-          'boolean-false': $T.boolean()
-        }
+          'boolean-false': $T.boolean(),
+        },
       },
       ctx => {
         return ctx.headers
@@ -49,8 +51,8 @@ describe('requests', () => {
           p1: $T.string(),
           p2: $T.number(),
           p3: $T.integer(),
-          p4: $T.boolean()
-        }
+          p4: $T.boolean(),
+        },
       },
       ctx => {
         return ctx.params
@@ -69,8 +71,8 @@ describe('requests', () => {
           p3: $T.boolean(),
           p4: $T.union([$T.number(), $T.boolean()]),
           p5: $T.optional($T.string()),
-          p6: $T.array($T.union([$T.string()]))
-        }
+          p6: $T.array($T.union([$T.string()])),
+        },
       },
       ctx => {
         return ctx.query
@@ -78,19 +80,23 @@ describe('requests', () => {
     )
 
     galbe.post('/none', handleBody)
-    galbe.post('/ba', { body: $T.byteArray() }, handleBody)
-    galbe.post('/bool', { body: $T.boolean() }, handleBody)
-    galbe.post('/num', { body: $T.number() }, handleBody)
-    galbe.post('/str', { body: $T.string() }, handleBody)
-    galbe.post('/arr', { body: $T.array() }, handleBody)
-    galbe.post('/obj', { body: $T.object($T.any()) }, handleBody)
+    galbe.post('/null', { body: $T.null() }, handleBody)
+    galbe.post('/ba', { body: { byteArray: $T.byteArray() } }, handleBody)
+    galbe.post('/bool', { body: { json: $T.boolean() } }, handleBody)
+    galbe.post('/num', { body: { json: $T.number() } }, handleBody)
+    galbe.post('/jsonStr', { body: { json: $T.string() } }, handleBody)
+    galbe.post('/str', { body: { text: $T.string() } }, handleBody)
+    galbe.post('/txtBool', { body: { text: $T.boolean() } }, handleBody)
+    galbe.post('/txtNum', { body: { text: $T.number() } }, handleBody)
+    galbe.post('/arr', { body: { json: $T.array() } }, handleBody)
+    galbe.post('/obj', { body: { json: $T.object($T.any()) } }, handleBody)
 
-    galbe.post('/form', { body: $T.urlForm() }, handleBody)
-    galbe.post('/mp', { body: $T.multipartForm() }, handleBody)
+    galbe.post('/form', { body: { urlForm: $T.object() } }, handleBody)
+    galbe.post('/mp', { body: { multipart: $T.multipartForm() } }, handleBody)
 
-    galbe.post('/stream/ba', { body: $T.stream($T.byteArray()) }, handleBody)
-    galbe.post('/stream/str', { body: $T.stream($T.string()) }, handleBody)
-    galbe.post('/stream/form', { body: $T.stream($T.urlForm()) }, async ctx => {
+    galbe.post('/stream/ba', { body: { byteArray: $T.stream($T.byteArray()) } }, handleBody)
+    galbe.post('/stream/str', { body: { text: $T.stream($T.string()) } }, handleBody)
+    galbe.post('/stream/form', { body: { urlForm: $T.stream($T.object()) } }, async ctx => {
       let resp: Record<string, any> = {}
       for await (const [k, v] of ctx.body) {
         if (k in resp) {
@@ -99,7 +105,7 @@ describe('requests', () => {
       }
       return { type: 'object', content: resp }
     })
-    galbe.post('/stream/mp', { body: $T.stream($T.multipartForm()) }, async ctx => {
+    galbe.post('/stream/mp', { body: { multipart: $T.stream($T.multipartForm()) } }, async ctx => {
       let resp: Record<string, any> = {}
       for await (const field of ctx.body) {
         let k = field?.headers.name
@@ -118,17 +124,21 @@ describe('requests', () => {
       bool: $T.boolean(),
       arrayStr: $T.array($T.string()),
       arrayNumber: $T.array($T.number()),
-      arrayBool: $T.array($T.boolean())
+      arrayBool: $T.array($T.boolean()),
     }
 
     galbe.post(
       '/mp/file',
-      { body: $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }) },
+      { body: { multipart: $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }) } },
       handleBody
     )
     galbe.post(
       '/mp/stream/file',
-      { body: $T.stream($T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })) },
+      {
+        body: {
+          multipart: $T.stream($T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })),
+        },
+      },
       async ctx => {
         if (isAsyncIterator(ctx.body)) {
           const chunks: any[] = []
@@ -143,14 +153,14 @@ describe('requests', () => {
         }
       }
     )
-    galbe.post('/ba/file', { body: $T.byteArray() }, async ctx => {
+    galbe.post('/ba/file', { body: { byteArray: $T.byteArray() } }, async ctx => {
       if (ctx?.body instanceof Uint8Array) {
         return { type: 'byteArray', content: await fileHash(ctx.body) }
       } else {
         return { type: null, content: 'error' }
       }
     })
-    galbe.post('/ba/stream/file', { body: $T.stream($T.byteArray()) }, async ctx => {
+    galbe.post('/ba/stream/file', { body: { byteArray: $T.stream($T.byteArray()) } }, async ctx => {
       if (isAsyncIterator(ctx.body)) {
         let bytes = new Uint8Array()
         for await (const b of ctx.body) {
@@ -163,6 +173,48 @@ describe('requests', () => {
     })
 
     await galbe.listen(port)
+  })
+
+  test('static directory', async () => {
+    const testCases = [
+      {
+        path: `http://localhost:${port}/www`,
+        file: 'test/resources/static/index.html',
+        type: 'text/html;charset=utf-8',
+      },
+      {
+        path: `http://localhost:${port}/www/index.html`,
+        file: 'test/resources/static/index.html',
+        type: 'text/html;charset=utf-8',
+      },
+      {
+        path: `http://localhost:${port}/www/sub`,
+        file: 'test/resources/static/sub/index.html',
+        type: 'text/html;charset=utf-8',
+      },
+      {
+        path: `http://localhost:${port}/www/sub/index.html`,
+        file: 'test/resources/static/sub/index.html',
+        type: 'text/html;charset=utf-8',
+      },
+      {
+        path: `http://localhost:${port}/www/sub/other`,
+        file: 'test/resources/static/sub/other.html',
+        type: 'text/html;charset=utf-8',
+      },
+      {
+        path: `http://localhost:${port}/www/chameleon.png`,
+        file: 'test/resources/static/chameleon.png',
+        type: 'image/png',
+      },
+    ]
+    for (const tc of testCases) {
+      let resp = await fetch(tc.path)
+      expect(resp.ok).toBeTrue()
+      const expected = await Bun.file(tc.file).text()
+      expect(await resp.text()).toBe(expected)
+      expect(resp.headers.get('content-type')).toBe(tc.type)
+    }
   })
 
   test('methods, empty calls', async () => {
@@ -183,7 +235,7 @@ describe('requests', () => {
     const headers = {
       String: 'hello mom',
       Number: '42',
-      Boolean: 'true'
+      Boolean: 'true',
     }
     const expected = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]))
 
@@ -197,7 +249,7 @@ describe('requests', () => {
     const expected = {
       param1: 'one',
       param2: '2',
-      param3: 'true'
+      param3: 'true',
     }
     let resp = await fetch(`http://localhost:${port}/params/one/separate/2/true`)
     let body = await resp.json()
@@ -209,7 +261,7 @@ describe('requests', () => {
     const expected = {
       param1: 'one',
       param2: '2',
-      param3: 'true'
+      param3: 'true',
     }
     let resp = await fetch(`http://localhost:${port}/query/params?param1=one&param2=2&param3=true`)
     let body = await resp.json()
@@ -220,7 +272,8 @@ describe('requests', () => {
   test('no body, no header', async () => {
     const cases: Case[] = [
       { body: null, type: undefined, schema: 'none', expected: { status: 200, resp: null } },
-      { body: null, type: undefined, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: '' } },
+      { body: null, type: undefined, schema: 'null', expected: { status: 200, resp: null } },
+      { body: null, type: undefined, schema: 'ba', expected: { status: 400 } },
       { body: null, type: undefined, schema: 'bool', expected: { status: 400 } },
       { body: null, type: undefined, schema: 'num', expected: { status: 400 } },
       { body: null, type: undefined, schema: 'str', expected: { status: 400 } },
@@ -228,18 +281,18 @@ describe('requests', () => {
       { body: null, type: undefined, schema: 'obj', expected: { status: 400 } },
       { body: null, type: undefined, schema: 'form', expected: { status: 400 } },
       { body: null, type: undefined, schema: 'mp', expected: { status: 400 } },
-      { body: null, type: undefined, schema: 'stream/ba', expected: { status: 200, type: 'ReadableStream', resp: '' } },
+      { body: null, type: undefined, schema: 'stream/ba', expected: { status: 400 } },
       { body: null, type: undefined, schema: 'stream/str', expected: { status: 400 } },
       { body: null, type: undefined, schema: 'stream/form', expected: { status: 400 } },
-      { body: null, type: undefined, schema: 'stream/mp', expected: { status: 400 } }
+      { body: null, type: undefined, schema: 'stream/mp', expected: { status: 400 } },
     ]
     for (let { body, type, schema, expected } of cases) {
       let resp = await fetch(`http://localhost:${port}/${schema}`, {
         method: 'POST',
         body,
         headers: {
-          ...(type ? { 'content-type': type } : {})
-        }
+          ...(type ? { 'content-type': type } : {}),
+        },
       })
 
       let respBody = (await resp.json()) as { type: string; content: any }
@@ -254,7 +307,7 @@ describe('requests', () => {
   test('no body, application/octet-stream', async () => {
     const contentType = 'application/octet-stream'
     const cases: Case[] = [
-      { body: null, type: contentType, schema: 'none', expected: { status: 200, resp: '' } },
+      { body: null, type: contentType, schema: 'none', expected: { status: 200, type: 'byteArray', resp: '' } },
       { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: '' } },
       { body: null, type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'num', expected: { status: 400 } },
@@ -267,11 +320,11 @@ describe('requests', () => {
         body: null,
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'ReadableStream', resp: '' }
+        expected: { status: 200, type: 'ReadableStream', resp: '' },
       },
       { body: null, type: contentType, schema: 'stream/str', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'stream/form', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'stream/mp', expected: { status: 400 } }
+      { body: null, type: contentType, schema: 'stream/mp', expected: { status: 400 } },
     ]
 
     for (let { body, type, schema, expected } of cases) {
@@ -279,8 +332,8 @@ describe('requests', () => {
         method: 'POST',
         body,
         headers: {
-          ...(type ? { 'content-type': type } : {})
-        }
+          ...(type ? { 'content-type': type } : {}),
+        },
       })
 
       let respBody = (await resp.json()) as { type: string; content: any }
@@ -295,24 +348,19 @@ describe('requests', () => {
   test('no body, application/json', async () => {
     const contentType = 'application/json'
     const cases: Case[] = [
-      { body: null, type: contentType, schema: 'none', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: '' } },
+      { body: null, type: contentType, schema: 'none', expected: { status: 200, resp: null } },
+      { body: null, type: contentType, schema: 'ba', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'num', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'str', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'arr', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'obj', expected: { status: 400 } },
+      { body: null, type: contentType, schema: 'obj', expected: { status: 200, resp: null } },
       { body: null, type: contentType, schema: 'form', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'mp', expected: { status: 400 } },
-      {
-        body: null,
-        type: contentType,
-        schema: 'stream/ba',
-        expected: { status: 200, type: 'ReadableStream', resp: '' }
-      },
+      { body: null, type: contentType, schema: 'stream/ba', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'stream/str', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'stream/form', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'stream/mp', expected: { status: 400 } }
+      { body: null, type: contentType, schema: 'stream/mp', expected: { status: 400 } },
     ]
 
     for (let { body, type, schema, expected } of cases) {
@@ -320,8 +368,8 @@ describe('requests', () => {
         method: 'POST',
         body,
         headers: {
-          ...(type ? { 'content-type': type } : {})
-        }
+          ...(type ? { 'content-type': type } : {}),
+        },
       })
 
       let respBody = (await resp.json()) as { type: string; content: any }
@@ -336,24 +384,24 @@ describe('requests', () => {
   test('no body, text/plain', async () => {
     const contentType = 'text/plain'
     const cases: Case[] = [
-      { body: null, type: contentType, schema: 'none', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: '' } },
+      { body: null, type: contentType, schema: 'none', expected: { status: 200, resp: '' } },
+      { body: null, type: contentType, schema: 'ba', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'num', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'str', expected: { status: 400 } },
+      { body: null, type: contentType, schema: 'str', expected: { status: 200, resp: '' } },
       { body: null, type: contentType, schema: 'arr', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'obj', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'form', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'mp', expected: { status: 400 } },
+      { body: null, type: contentType, schema: 'stream/ba', expected: { status: 400 } },
       {
         body: null,
         type: contentType,
-        schema: 'stream/ba',
-        expected: { status: 200, type: 'ReadableStream', resp: '' }
+        schema: 'stream/str',
+        expected: { status: 200, type: 'ReadableStream', resp: '' },
       },
-      { body: null, type: contentType, schema: 'stream/str', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'stream/form', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'stream/mp', expected: { status: 400 } }
+      { body: null, type: contentType, schema: 'stream/mp', expected: { status: 400 } },
     ]
 
     for (let { body, type, schema, expected } of cases) {
@@ -361,8 +409,8 @@ describe('requests', () => {
         method: 'POST',
         body,
         headers: {
-          ...(type ? { 'content-type': type } : {})
-        }
+          ...(type ? { 'content-type': type } : {}),
+        },
       })
 
       let respBody = (await resp.json()) as { type: string; content: any }
@@ -377,24 +425,19 @@ describe('requests', () => {
   test('no body, application/x-www-form-urlencoded', async () => {
     const contentType = 'application/x-www-form-urlencoded'
     const cases: Case[] = [
-      { body: null, type: contentType, schema: 'none', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: '' } },
+      { body: null, type: contentType, schema: 'none', expected: { status: 200, resp: {} } },
+      { body: null, type: contentType, schema: 'ba', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'num', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'str', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'arr', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'obj', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'form', expected: { status: 400 } },
+      { body: null, type: contentType, schema: 'form', expected: { status: 200, resp: {} } },
       { body: null, type: contentType, schema: 'mp', expected: { status: 400 } },
-      {
-        body: null,
-        type: contentType,
-        schema: 'stream/ba',
-        expected: { status: 200, type: 'ReadableStream', resp: '' }
-      },
+      { body: null, type: contentType, schema: 'stream/ba', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'stream/str', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'stream/form', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'stream/mp', expected: { status: 400 } }
+      { body: null, type: contentType, schema: 'stream/form', expected: { status: 200, resp: {} } },
+      { body: null, type: contentType, schema: 'stream/mp', expected: { status: 400 } },
     ]
 
     for (let { body, type, schema, expected } of cases) {
@@ -402,8 +445,8 @@ describe('requests', () => {
         method: 'POST',
         body,
         headers: {
-          ...(type ? { 'content-type': type } : {})
-        }
+          ...(type ? { 'content-type': type } : {}),
+        },
       })
 
       let respBody = (await resp.json()) as { type: string; content: any }
@@ -418,24 +461,24 @@ describe('requests', () => {
   test('no body, multipart/form-data', async () => {
     const contentType = 'multipart/form-data'
     const cases: Case[] = [
-      { body: null, type: contentType, schema: 'none', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: '' } },
+      { body: null, type: contentType, schema: 'none', expected: { status: 200, resp: {} } },
+      { body: null, type: contentType, schema: 'ba', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'num', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'str', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'arr', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'obj', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'form', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'mp', expected: { status: 400 } },
+      { body: null, type: contentType, schema: 'mp', expected: { status: 200, resp: {} } },
+      { body: null, type: contentType, schema: 'stream/ba', expected: { status: 400 } },
+      { body: null, type: contentType, schema: 'stream/str', expected: { status: 400 } },
+      { body: null, type: contentType, schema: 'stream/form', expected: { status: 400 } },
       {
         body: null,
         type: contentType,
-        schema: 'stream/ba',
-        expected: { status: 200, type: 'ReadableStream', resp: '' }
+        schema: 'stream/mp',
+        expected: { status: 200, resp: { undefined: { headers: {} } } },
       },
-      { body: null, type: contentType, schema: 'stream/str', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'stream/form', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'stream/mp', expected: { status: 400 } }
     ]
 
     for (let { body, type, schema, expected } of cases) {
@@ -443,8 +486,8 @@ describe('requests', () => {
         method: 'POST',
         body,
         headers: {
-          ...(type ? { 'content-type': type } : {})
-        }
+          ...(type ? { 'content-type': type } : {}),
+        },
       })
 
       let respBody = (await resp.json()) as { type: string; content: any }
@@ -458,39 +501,44 @@ describe('requests', () => {
 
   test('body, no header', async () => {
     const cases: Case[] = [
-      { body: 'test', schema: 'none', expected: { status: 200, type: 'byteArray', resp: 'test' } },
-      { body: 'test', schema: 'ba', expected: { status: 200, type: 'byteArray', resp: 'test' } },
-      { body: 'true', schema: 'bool', expected: { status: 200, type: 'boolean', resp: true } },
-      { body: 'false', schema: 'bool', expected: { status: 200, type: 'boolean', resp: false } },
+      {
+        body: 'test',
+        schema: 'none',
+        expected: { status: 200, type: 'AsyncIterator', resp: Object.fromEntries([116, 101, 115, 116].entries()) },
+      },
+      { body: 'test', schema: 'null', expected: { status: 400 } },
+      { body: 'test', schema: 'ba', expected: { status: 400 } },
+      { body: 'true', schema: 'bool', expected: { status: 400 } },
+      { body: 'false', schema: 'bool', expected: { status: 400 } },
       { body: 'test', schema: 'bool', expected: { status: 400 } },
-      { body: '0', schema: 'num', expected: { status: 200, type: 'number', resp: 0 } },
-      { body: '42', schema: 'num', expected: { status: 200, type: 'number', resp: 42 } },
-      { body: '-8000', schema: 'num', expected: { status: 200, type: 'number', resp: -8000 } },
-      { body: '3.14', schema: 'num', expected: { status: 200, type: 'number', resp: 3.14 } },
+      { body: '0', schema: 'num', expected: { status: 400 } },
+      { body: '42', schema: 'num', expected: { status: 400 } },
+      { body: '-8000', schema: 'num', expected: { status: 400 } },
+      { body: '3.14', schema: 'num', expected: { status: 400 } },
       { body: 'test', schema: 'num', expected: { status: 400 } },
-      { body: 'test', schema: 'str', expected: { status: 200, type: 'string', resp: 'test' } },
-      { body: '42', schema: 'str', expected: { status: 200, type: 'string', resp: '42' } },
-      { body: 'false', schema: 'str', expected: { status: 200, type: 'string', resp: 'false' } },
-      { body: '[]', schema: 'arr', expected: { status: 200, type: 'array', resp: [] } },
+      { body: 'test', schema: 'str', expected: { status: 400 } },
+      { body: '42', schema: 'str', expected: { status: 400 } },
+      { body: 'false', schema: 'str', expected: { status: 400 } },
+      { body: '[]', schema: 'arr', expected: { status: 400 } },
       {
         body: '["a", 42, true, null, {"foo": "bar"}]',
         schema: 'arr',
-        expected: { status: 200, type: 'array', resp: ['a', 42, true, null, { foo: 'bar' }] }
+        expected: { status: 400 },
       },
       { body: 'test', schema: 'arr', expected: { status: 400 } },
-      { body: '{}', schema: 'obj', expected: { status: 200, type: 'object', resp: {} } },
-      { body: '{"foo": "bar"}', schema: 'obj', expected: { status: 200, type: 'object', resp: { foo: 'bar' } } },
+      { body: '{}', schema: 'obj', expected: { status: 400 } },
+      { body: '{"foo": "bar"}', schema: 'obj', expected: { status: 400 } },
       { body: 'test', schema: 'obj', expected: { status: 400 } },
       { body: 'test', schema: 'form', expected: { status: 400 } },
       { body: 'test', schema: 'mp', expected: { status: 400 } },
       {
         body: 'test',
         schema: 'stream/ba',
-        expected: { status: 200, type: 'AsyncIterator', resp: Object.fromEntries([116, 101, 115, 116].entries()) }
+        expected: { status: 400 },
       },
-      { body: 'test', schema: 'stream/str', expected: { status: 200, type: 'AsyncIterator', resp: 'test' } },
+      { body: 'test', schema: 'stream/str', expected: { status: 400 } },
       { body: 'test', schema: 'stream/form', expected: { status: 400 } },
-      { body: 'test', schema: 'stream/mp', expected: { status: 400 } }
+      { body: 'test', schema: 'stream/mp', expected: { status: 400 } },
     ]
 
     for (let { body, type, schema, expected } of cases) {
@@ -498,13 +546,11 @@ describe('requests', () => {
         method: 'POST',
         body,
         headers: {
-          ...(type ? { 'content-type': type } : {})
-        }
+          ...(type ? { 'content-type': type } : {}),
+        },
       })
 
       let respBody = (await resp.json()) as { type: string; content: any }
-
-      console.log(respBody)
 
       expect(resp.status).toBe(expected.status)
       if (expected.type) expect(respBody.type).toEqual(expected.type)
@@ -519,31 +565,31 @@ describe('requests', () => {
     const cases: Case[] = [
       { body: 'test', type: contentType, schema: 'none', expected: { status: 200, type: 'byteArray', resp: 'test' } },
       { body: 'test', type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: 'test' } },
-      { body: 'true', type: contentType, schema: 'bool', expected: { status: 200, type: 'boolean', resp: true } },
-      { body: 'false', type: contentType, schema: 'bool', expected: { status: 200, type: 'boolean', resp: false } },
+      { body: 'true', type: contentType, schema: 'bool', expected: { status: 400 } },
+      { body: 'false', type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: 'test', type: contentType, schema: 'bool', expected: { status: 400 } },
-      { body: '0', type: contentType, schema: 'num', expected: { status: 200, type: 'number', resp: 0 } },
-      { body: '42', type: contentType, schema: 'num', expected: { status: 200, type: 'number', resp: 42 } },
-      { body: '-8000', type: contentType, schema: 'num', expected: { status: 200, type: 'number', resp: -8000 } },
-      { body: '3.14', type: contentType, schema: 'num', expected: { status: 200, type: 'number', resp: 3.14 } },
+      { body: '0', type: contentType, schema: 'num', expected: { status: 400 } },
+      { body: '42', type: contentType, schema: 'num', expected: { status: 400 } },
+      { body: '-8000', type: contentType, schema: 'num', expected: { status: 400 } },
+      { body: '3.14', type: contentType, schema: 'num', expected: { status: 400 } },
       { body: 'test', type: contentType, schema: 'num', expected: { status: 400 } },
-      { body: 'test', type: contentType, schema: 'str', expected: { status: 200, type: 'string', resp: 'test' } },
-      { body: '42', type: contentType, schema: 'str', expected: { status: 200, type: 'string', resp: '42' } },
-      { body: 'false', type: contentType, schema: 'str', expected: { status: 200, type: 'string', resp: 'false' } },
-      { body: '[]', type: contentType, schema: 'arr', expected: { status: 200, type: 'array', resp: [] } },
+      { body: 'test', type: contentType, schema: 'str', expected: { status: 400 } },
+      { body: '42', type: contentType, schema: 'str', expected: { status: 400 } },
+      { body: 'false', type: contentType, schema: 'str', expected: { status: 400 } },
+      { body: '[]', type: contentType, schema: 'arr', expected: { status: 400 } },
       {
         body: '["a", 42, true, null, {"foo": "bar"}]',
         type: contentType,
         schema: 'arr',
-        expected: { status: 200, type: 'array', resp: ['a', 42, true, null, { foo: 'bar' }] }
+        expected: { status: 400 },
       },
       { body: 'test', type: contentType, schema: 'arr', expected: { status: 400 } },
-      { body: '{}', type: contentType, schema: 'obj', expected: { status: 200, type: 'object', resp: {} } },
+      { body: '{}', type: contentType, schema: 'obj', expected: { status: 400 } },
       {
         body: '{"foo": "bar"}',
         type: contentType,
         schema: 'obj',
-        expected: { status: 200, type: 'object', resp: { foo: 'bar' } }
+        expected: { status: 400 },
       },
       { body: 'test', type: contentType, schema: 'obj', expected: { status: 400 } },
       { body: 'test', type: contentType, schema: 'form', expected: { status: 400 } },
@@ -552,16 +598,20 @@ describe('requests', () => {
         body: 'test',
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'AsyncIterator', resp: Object.fromEntries(new Uint8Array([116, 101, 115, 116]).entries()) }
+        expected: {
+          status: 200,
+          type: 'AsyncIterator',
+          resp: Object.fromEntries(new Uint8Array([116, 101, 115, 116]).entries()),
+        },
       },
       {
         body: 'test',
         type: contentType,
         schema: 'stream/str',
-        expected: { status: 200, type: 'AsyncIterator', resp: 'test' }
+        expected: { status: 400 },
       },
       { body: 'test', type: contentType, schema: 'stream/form', expected: { status: 400 } },
-      { body: 'test', type: contentType, schema: 'stream/mp', expected: { status: 400 } }
+      { body: 'test', type: contentType, schema: 'stream/mp', expected: { status: 400 } },
     ]
 
     for (let { body, type, schema, expected } of cases) {
@@ -569,8 +619,8 @@ describe('requests', () => {
         method: 'POST',
         body,
         headers: {
-          ...(type ? { 'content-type': type } : {})
-        }
+          ...(type ? { 'content-type': type } : {}),
+        },
       })
 
       let respBody = (await resp.json()) as { type: string; content: any }
@@ -589,10 +639,10 @@ describe('requests', () => {
         body: '{"foo":"bar"}',
         type: contentType,
         schema: 'none',
-        expected: { status: 200, type: 'object', resp: { foo: 'bar' } }
+        expected: { status: 200, type: 'object', resp: { foo: 'bar' } },
       },
       { body: 'test', type: contentType, schema: 'none', expected: { status: 400 } },
-      { body: 'test', type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: 'test' } },
+      { body: 'test', type: contentType, schema: 'ba', expected: { status: 400 } },
       { body: 'true', type: contentType, schema: 'bool', expected: { status: 200, type: 'boolean', resp: true } },
       { body: 'false', type: contentType, schema: 'bool', expected: { status: 200, type: 'boolean', resp: false } },
       { body: 'test', type: contentType, schema: 'bool', expected: { status: 400 } },
@@ -602,16 +652,25 @@ describe('requests', () => {
       { body: '-8000', type: contentType, schema: 'num', expected: { status: 200, type: 'number', resp: -8000 } },
       { body: '3.14', type: contentType, schema: 'num', expected: { status: 200, type: 'number', resp: 3.14 } },
       { body: 'test', type: contentType, schema: 'num', expected: { status: 400 } },
-      { body: '"test"', type: contentType, schema: 'str', expected: { status: 200, type: 'string', resp: 'test' } },
-      { body: '"42"', type: contentType, schema: 'str', expected: { status: 200, type: 'string', resp: '42' } },
-      { body: '"false"', type: contentType, schema: 'str', expected: { status: 200, type: 'string', resp: 'false' } },
+      { body: '"test"', type: contentType, schema: 'str', expected: { status: 400 } },
+      { body: '"42"', type: contentType, schema: 'str', expected: { status: 400 } },
+      { body: '"false"', type: contentType, schema: 'str', expected: { status: 400 } },
       { body: 'test', type: contentType, schema: 'str', expected: { status: 400 } },
+      { body: '"test"', type: contentType, schema: 'jsonStr', expected: { status: 200, type: 'string', resp: 'test' } },
+      { body: '"42"', type: contentType, schema: 'jsonStr', expected: { status: 200, type: 'string', resp: '42' } },
+      {
+        body: '"false"',
+        type: contentType,
+        schema: 'jsonStr',
+        expected: { status: 200, type: 'string', resp: 'false' },
+      },
+      { body: 'test', type: contentType, schema: 'jsonStr', expected: { status: 400 } },
       { body: '[]', type: contentType, schema: 'arr', expected: { status: 200, type: 'array', resp: [] } },
       {
         body: '["a", 42, true, null, {"foo": "bar"}]',
         type: contentType,
         schema: 'arr',
-        expected: { status: 200, type: 'array', resp: ['a', 42, true, null, { foo: 'bar' }] }
+        expected: { status: 200, type: 'array', resp: ['a', 42, true, null, { foo: 'bar' }] },
       },
       { body: 'test', type: contentType, schema: 'arr', expected: { status: 400 } },
       { body: '{}', type: contentType, schema: 'obj', expected: { status: 200, type: 'object', resp: {} } },
@@ -619,7 +678,7 @@ describe('requests', () => {
         body: '{"foo": "bar"}',
         type: contentType,
         schema: 'obj',
-        expected: { status: 200, type: 'object', resp: { foo: 'bar' } }
+        expected: { status: 200, type: 'object', resp: { foo: 'bar' } },
       },
       { body: 'test', type: contentType, schema: 'obj', expected: { status: 400 } },
       { body: 'test', type: contentType, schema: 'form', expected: { status: 400 } },
@@ -628,16 +687,16 @@ describe('requests', () => {
         body: 'test',
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'AsyncIterator', resp: Object.fromEntries(new Uint8Array([116, 101, 115, 116]).entries()) }
+        expected: { status: 400 },
       },
       {
         body: 'test',
         type: contentType,
         schema: 'stream/str',
-        expected: { status: 200, type: 'AsyncIterator', resp: 'test' }
+        expected: { status: 400 },
       },
       { body: 'test', type: contentType, schema: 'stream/form', expected: { status: 400 } },
-      { body: 'test', type: contentType, schema: 'stream/mp', expected: { status: 400 } }
+      { body: 'test', type: contentType, schema: 'stream/mp', expected: { status: 400 } },
     ]
 
     for (let { body, type, schema, expected } of cases) {
@@ -645,8 +704,8 @@ describe('requests', () => {
         method: 'POST',
         body,
         headers: {
-          ...(type ? { 'content-type': type } : {})
-        }
+          ...(type ? { 'content-type': type } : {}),
+        },
       })
 
       let respBody = (await resp.json()) as { type: string; content: any }
@@ -662,34 +721,43 @@ describe('requests', () => {
     const contentType = 'text/plain'
     const cases: Case[] = [
       { body: 'test', type: contentType, schema: 'none', expected: { status: 200, type: 'string', resp: 'test' } },
-      { body: 'test', type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: 'test' } },
-      { body: 'true', type: contentType, schema: 'bool', expected: { status: 200, type: 'boolean', resp: true } },
-      { body: 'false', type: contentType, schema: 'bool', expected: { status: 200, type: 'boolean', resp: false } },
+      { body: 'test', type: contentType, schema: 'ba', expected: { status: 400 } },
+      { body: 'true', type: contentType, schema: 'bool', expected: { status: 400 } },
+      { body: 'false', type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: 'test', type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: '0', type: contentType, schema: 'bool', expected: { status: 400 } },
-      { body: '0', type: contentType, schema: 'num', expected: { status: 200, type: 'number', resp: 0 } },
-      { body: '42', type: contentType, schema: 'num', expected: { status: 200, type: 'number', resp: 42 } },
-      { body: '-8000', type: contentType, schema: 'num', expected: { status: 200, type: 'number', resp: -8000 } },
-      { body: '3.14', type: contentType, schema: 'num', expected: { status: 200, type: 'number', resp: 3.14 } },
-      { body: 'test', type: contentType, schema: 'num', expected: { status: 400 } },
+      { body: 'true', type: contentType, schema: 'txtBool', expected: { status: 200, type: 'boolean', resp: true } },
+      { body: 'false', type: contentType, schema: 'txtBool', expected: { status: 200, type: 'boolean', resp: false } },
+      { body: 'test', type: contentType, schema: 'txtBool', expected: { status: 400 } },
+      { body: '0', type: contentType, schema: 'txtBool', expected: { status: 400 } },
+      { body: '0', type: contentType, schema: 'num', expected: { status: 400 } },
+      { body: '42', type: contentType, schema: 'num', expected: { status: 400 } },
+      { body: '-8000', type: contentType, schema: 'num', expected: { status: 400 } },
+      { body: '3.14', type: contentType, schema: 'num', expected: { status: 400 } },
+      { body: 'test', type: contentType, schema: 'num', expected: { status: 400 } }, //
+      { body: '0', type: contentType, schema: 'txtNum', expected: { status: 200, type: 'number', resp: 0 } },
+      { body: '42', type: contentType, schema: 'txtNum', expected: { status: 200, type: 'number', resp: 42 } },
+      { body: '-8000', type: contentType, schema: 'txtNum', expected: { status: 200, type: 'number', resp: -8000 } },
+      { body: '3.14', type: contentType, schema: 'txtNum', expected: { status: 200, type: 'number', resp: 3.14 } },
+      { body: 'test', type: contentType, schema: 'txtNum', expected: { status: 400 } },
       { body: 'test', type: contentType, schema: 'str', expected: { status: 200, type: 'string', resp: 'test' } },
       { body: '"test"', type: contentType, schema: 'str', expected: { status: 200, type: 'string', resp: '"test"' } },
       { body: '42', type: contentType, schema: 'str', expected: { status: 200, type: 'string', resp: '42' } },
       { body: 'false', type: contentType, schema: 'str', expected: { status: 200, type: 'string', resp: 'false' } },
-      { body: '[]', type: contentType, schema: 'arr', expected: { status: 200, type: 'array', resp: [] } },
+      { body: '[]', type: contentType, schema: 'arr', expected: { status: 400 } },
       {
         body: '["a", 42, true, null, {"foo": "bar"}]',
         type: contentType,
         schema: 'arr',
-        expected: { status: 200, type: 'array', resp: ['a', 42, true, null, { foo: 'bar' }] }
+        expected: { status: 400 },
       },
       { body: 'test', type: contentType, schema: 'arr', expected: { status: 400 } },
-      { body: '{}', type: contentType, schema: 'obj', expected: { status: 200, type: 'object', resp: {} } },
+      { body: '{}', type: contentType, schema: 'obj', expected: { status: 400 } },
       {
         body: '{"foo": "bar"}',
         type: contentType,
         schema: 'obj',
-        expected: { status: 200, type: 'object', resp: { foo: 'bar' } }
+        expected: { status: 400 },
       },
       { body: 'test', type: contentType, schema: 'obj', expected: { status: 400 } },
       { body: 'test', type: contentType, schema: 'form', expected: { status: 400 } },
@@ -698,16 +766,18 @@ describe('requests', () => {
         body: 'test',
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'AsyncIterator', resp: Object.fromEntries(new Uint8Array([116, 101, 115, 116]).entries()) }
+        expected: {
+          status: 400,
+        },
       },
       {
         body: 'test',
         type: contentType,
         schema: 'stream/str',
-        expected: { status: 200, type: 'AsyncIterator', resp: 'test' }
+        expected: { status: 200, type: 'AsyncIterator', resp: 'test' },
       },
       { body: 'test', type: contentType, schema: 'stream/form', expected: { status: 400 } },
-      { body: 'test', type: contentType, schema: 'stream/mp', expected: { status: 400 } }
+      { body: 'test', type: contentType, schema: 'stream/mp', expected: { status: 400 } },
     ]
 
     for (let { body, type, schema, expected } of cases) {
@@ -715,8 +785,8 @@ describe('requests', () => {
         method: 'POST',
         body,
         headers: {
-          ...(type ? { 'content-type': type } : {})
-        }
+          ...(type ? { 'content-type': type } : {}),
+        },
       })
 
       let respBody = (await resp.json()) as { type: string; content: any }
@@ -734,7 +804,7 @@ describe('requests', () => {
     const objBody = { string: 'text', number: '42', boolean: 'true', 'encoded=': '=' }
     const cases: Case[] = [
       { body: strBody, type: contentType, schema: 'none', expected: { status: 200, type: 'object', resp: objBody } },
-      { body: strBody, type: contentType, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: strBody } },
+      { body: strBody, type: contentType, schema: 'ba', expected: { status: 400 } },
       { body: strBody, type: contentType, schema: 'bool', expected: { status: 400 } },
       { body: strBody, type: contentType, schema: 'num', expected: { status: 400 } },
       { body: strBody, type: contentType, schema: 'str', expected: { status: 400 } },
@@ -746,21 +816,23 @@ describe('requests', () => {
         body: strBody,
         type: contentType,
         schema: 'stream/ba',
-        expected: { status: 200, type: 'AsyncIterator', resp: Object.fromEntries(Uint8Array.from(strBody, c => c.charCodeAt(0)).entries()) }
+        expected: {
+          status: 400,
+        },
       },
       {
         body: strBody,
         type: contentType,
         schema: 'stream/str',
-        expected: { status: 200, type: 'AsyncIterator', resp: strBody }
+        expected: { status: 400 },
       },
       {
         body: strBody,
         type: contentType,
         schema: 'stream/form',
-        expected: { status: 200, type: 'object', resp: objBody }
+        expected: { status: 200, type: 'object', resp: objBody },
       },
-      { body: strBody, type: contentType, schema: 'stream/mp', expected: { status: 400 } }
+      { body: strBody, type: contentType, schema: 'stream/mp', expected: { status: 400 } },
     ]
 
     for (let { body, type, schema, expected } of cases) {
@@ -768,8 +840,8 @@ describe('requests', () => {
         method: 'POST',
         body,
         headers: {
-          ...(type ? { 'content-type': type } : {})
-        }
+          ...(type ? { 'content-type': type } : {}),
+        },
       })
 
       let respBody = (await resp.json()) as { type: string; content: any }
@@ -787,33 +859,27 @@ describe('requests', () => {
       string: {
         content: 'text',
         headers: {
-          name: 'string'
-        }
+          name: 'string',
+        },
       },
       number: {
         content: '42',
         headers: {
-          name: 'number'
-        }
+          name: 'number',
+        },
       },
       boolean: {
         content: 'true',
         headers: {
-          name: 'boolean'
-        }
-      }
+          name: 'boolean',
+        },
+      },
     }
-    const objRespStrRgx = new RegExp(
-      '^---WebkitFormBoundary[0-9a-f]{32}\r\nContent-Disposition: form-data; name="string"\r\n\r\ntext\r\n' +
-        '---WebkitFormBoundary[0-9a-f]{32}\r\nContent-Disposition: form-data; name="number"\r\n\r\n42\r\n' +
-        '---WebkitFormBoundary[0-9a-f]{32}\r\nContent-Disposition: form-data; name="boolean"\r\n\r\ntrue\r\n' +
-        '---WebkitFormBoundary[0-9a-f]{32}--\r\n$'
-    )
     const form = formdata(objBody)
 
     const cases: Case[] = [
       { body: form, schema: 'none', expected: { status: 200, type: 'object', resp: objResp } },
-      { body: form, schema: 'ba', expected: { status: 200, type: 'byteArray', resp: objRespStrRgx } },
+      { body: form, schema: 'ba', expected: { status: 400 } },
       { body: form, schema: 'bool', expected: { status: 400 } },
       { body: form, schema: 'num', expected: { status: 400 } },
       { body: form, schema: 'str', expected: { status: 400 } },
@@ -824,10 +890,10 @@ describe('requests', () => {
       {
         body: form,
         schema: 'stream/str',
-        expected: { status: 200, type: 'AsyncIterator', resp: objRespStrRgx }
+        expected: { status: 400 },
       },
       { body: form, schema: 'stream/form', expected: { status: 400 } },
-      { body: form, schema: 'stream/mp', expected: { status: 200, type: 'object', resp: objResp } }
+      { body: form, schema: 'stream/mp', expected: { status: 200, type: 'object', resp: objResp } },
     ]
 
     for (let { body, type, schema, expected } of cases) {
@@ -835,8 +901,8 @@ describe('requests', () => {
         method: 'POST',
         body,
         headers: {
-          ...(type ? { 'content-type': type } : {})
-        }
+          ...(type ? { 'content-type': type } : {}),
+        },
       })
 
       let respBody = (await resp.json()) as { type: string; content: any }
