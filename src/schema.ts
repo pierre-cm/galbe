@@ -320,7 +320,7 @@ export function _Union<T extends NonEmptyArray<STSchema>>(schemas: [...T], optio
   const s = {
     ...options,
     [Kind]: 'union',
-    anyOf: schemas.map(s => ({ ...s, ...options })) as T,
+    anyOf: schemas as T,
     optional: () => ({ ...s, [Optional]: true }),
   }
   return s as unknown as STUnion<T>
@@ -349,7 +349,7 @@ export function _Intersection<T extends NonEmptyArray<STObject | STUnion | STInt
   const s = {
     ...options,
     [Kind]: 'intersection',
-    allOf: schemas.map(s => ({ ...s, ...options })) as T,
+    allOf: schemas as T,
     props: schemas.reduce(
       (b, c) => ({
         ...b,
@@ -551,16 +551,19 @@ export const schemaToTypeStr = (schema: STSchema): string => {
   } else if (kind === 'object') {
     let props = (schema as STObject).props
     type = `{${Object.entries(props)
-      .map(([k, v]) => `${typeof k === 'string' ? `'${k}'` : k}:${schemaToTypeStr(v)}`)
+      .map(([k, v]) => `${typeof k === 'string' ? `'${k}'` : k}${v?.[Optional] ? '?' : ''}:${schemaToTypeStr(v)}`)
       .join(';')}}`
   } else if (kind === 'json') {
     type = `Json<${schemaToTypeStr({ ...schema, [Kind]: schema.type })}>`
   } else if (kind === 'union') {
     let anyOf = (schema as STUnion).anyOf
     type = anyOf.map(s => schemaToTypeStr(s)).join('|')
+  } else if (kind === 'intersection') {
+    let allOf = (schema as STIntersection).allOf
+    type = allOf.map(s => schemaToTypeStr(s)).join('&')
   }
 
-  if (schema[Optional]) type = `${type}|undefined`
+  // if (schema[Optional]) type = `${type}|undefined`
 
   return type
 }

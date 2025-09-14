@@ -4,7 +4,7 @@ import { program, Option } from 'commander'
 import { resolve } from 'path'
 
 const DEFAULT_HEADERS = {
-  'user-agent': 'Galbe//*%(()=>version)()%*//cli'
+  'user-agent': 'Galbe//*%(()=>version)()%*//cli',
 }
 const ansi = (p, c, str) => (p ? `\x1b[${c}m${str}\x1b[0m` : str)
 
@@ -73,9 +73,9 @@ const fetchApi = async (method, path, props) => {
     headers: {
       ...DEFAULT_HEADERS,
       ...(bodyFile ? { 'content-type': 'application/octet-stream' } : {}),
-      ...(headers || {})
+      ...(headers || {}),
     },
-    ...(body ? { body } : {})
+    ...(body ? { body } : {}),
   })
   let endTime = Bun.nanoseconds() - startTime
   if (format.has('s')) fmtRes(res.status, format.has('p'))
@@ -99,21 +99,23 @@ const formatDefault = def =>
     ? `[${def.map(d => formatDefault(d)).join(',')}]`
     : def ?? 'undefined';
 
-result = commands.map(c=>{
-  let args = c.arguments.map(a=>`.argument("${a.name}", "${JSON.stringify(a.description).slice(1,-1) || a.name+' argument' || ''}")`)
-  let optionsBase = [
-    {name: '%format', short:'%f', type: '[string]', description: 'response format [\'s\',\'h\',\'b\',\'t\',\'p\']', default:["s","b","p"]},
-    {name: '%header', short:'%h', type: '<string...>', description: 'request header formated as headerName=headerValue', default:[]},
-    {name: '%query', short:'%q', type: '<string...>', description: 'query param formated as paramName=paramValue', default:[]},
-    {name: '%body', short:'%b', type: '<string>', description: 'request body', default:''},
-    {name: '%bodyFile', short:'%bf', type: '<path>', description: 'request body file', default:''}
-  ]
-  let options = [...optionsBase,...(c.options||[])].map(o=>`.addOption(new Option("-${o.short}, --${o.name} ${o.type}", "${JSON.stringify(o.description).slice(1,-1)}").default(${formatDefault(o.default)}))`)
-  let action = `.action(async (${c.arguments.map(a=>`${a.name},`).join('')} props) => {
-    ${c.action ? ';('+c.action.toString()+')(props)' : ''}
-    return await fetchApi("${c.route.method.toUpperCase()}",\`${c.route.pathT}\`, props)
-  })`
-  return `program.command("${c.name}").description("${JSON.stringify(c.description).slice(1,-1)}")${args.join('')}${options.join('')}${action}`
+result = Object.entries(tags).map(([tag, commands])=>{
+  return (tag?`const _${tag} = program.command('${tag}');\n`:'')+commands.map(c=>{
+    let args = c.arguments.map(a=>`.argument("${a.name}", "${JSON.stringify(a.description).slice(1,-1) || a.name+' argument' || ''}")`)
+    let optionsBase = [
+      {name: '%format', short:'%f', type: '[string]', description: 'response format [\'s\',\'h\',\'b\',\'t\',\'p\']', default:["s","b","p"]},
+      {name: '%header', short:'%h', type: '<string...>', description: 'request header formated as headerName=headerValue', default:[]},
+      {name: '%query', short:'%q', type: '<string...>', description: 'query param formated as paramName=paramValue', default:[]},
+      {name: '%body', short:'%b', type: '<string>', description: 'request body', default:''},
+      {name: '%bodyFile', short:'%bf', type: '<path>', description: 'request body file', default:''}
+    ]
+    let options = [...optionsBase,...(c.options||[])].map(o=>`.addOption(new Option("-${o.short}, --${o.name} ${o.type}", "${JSON.stringify(o.description).slice(1,-1)}").default(${formatDefault(o.default)}))`)
+    let action = `.action(async (${c.arguments.map(a=>`${a.name},`).join('')} props) => {
+      ${c.action ? ';('+c.action.toString()+')(props)' : ''}
+      return await fetchApi("${c.route.method.toUpperCase()}",\`${c.route.pathT}\`, props)
+    })`
+    return `${tag?`_${tag}`:'program'}.command("${c.name}").description("${JSON.stringify(c.description).slice(1,-1)}")${args.join('')}${options.join('')}${action}`
+  }).join(';\n')
 })
 %*/
 

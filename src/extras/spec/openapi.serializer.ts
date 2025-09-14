@@ -1,7 +1,16 @@
-import type { STArray, STJson, STLiteral, STObject, STProps, STSchema, STUnion } from '../../../src/schema'
+import type {
+  STArray,
+  STIntersection,
+  STJson,
+  STLiteral,
+  STObject,
+  STProps,
+  STSchema,
+  STUnion,
+} from '../../../src/schema'
 
 import { Galbe } from '../../../src'
-import { walkRoutes, HttpStatus } from '../../../src/util'
+import { walkRoutes, HttpStatus, inferContentType } from '../../../src/util'
 import { Kind, Optional } from '../../../src/schema'
 
 import { OpenAPIV3 } from 'openapi-types'
@@ -12,10 +21,10 @@ const schemaToMedia = ({ type, format, isJson }: SchemaType) =>
   isJson || (type && ['object', 'number', 'boolean', 'array'].includes(type))
     ? 'application/json'
     : format === 'byte'
-      ? 'application/octet-stream'
-      : type === 'string'
-        ? 'text/plain'
-        : '*/*'
+    ? 'application/octet-stream'
+    : type === 'string'
+    ? 'text/plain'
+    : '*/*'
 
 export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<OpenAPIV3.Document> => {
   let paths: any = {}
@@ -24,7 +33,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     schemas: {},
     parameters: {},
     requestBodies: {},
-    responses: {}
+    responses: {},
   }
 
   const schemaToOpenapi = (
@@ -54,7 +63,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
 
     if (kind === 'null') {
       s = {
-        anyOf: ['null']
+        anyOf: ['null'],
       }
     } else if (kind === 'boolean') s = { type: 'boolean' }
     else if (kind === 'byteArray') s = { type: 'string', format: 'byte' }
@@ -64,7 +73,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
         ...(exclusiveMinimum ? { exclusiveMinimum } : {}),
         ...(exclusiveMaximum ? { exclusiveMaximum } : {}),
         ...(minimum ? { minimum } : {}),
-        ...(maximum ? { maximum } : {})
+        ...(maximum ? { maximum } : {}),
       }
     else if (kind === 'integer')
       s = {
@@ -72,14 +81,14 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
         ...(exclusiveMinimum ? { exclusiveMinimum } : {}),
         ...(exclusiveMaximum ? { exclusiveMaximum } : {}),
         ...(minimum ? { minimum } : {}),
-        ...(maximum ? { maximum } : {})
+        ...(maximum ? { maximum } : {}),
       }
     else if (kind === 'string')
       s = {
         type: 'string',
         ...(pattern ? { pattern } : {}),
         ...(minLength ? { minLength } : {}),
-        ...(maxLength ? { maxLength } : {})
+        ...(maxLength ? { maxLength } : {}),
       }
     else if (kind === 'any') s = { type: 'string' }
     else if (kind === 'literal') {
@@ -91,7 +100,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
         items: schemaToOpenapi((schema as STArray).items).schema,
         ...(minItems ? { minItems } : {}),
         ...(maxItems ? { maxItems } : {}),
-        ...(uniqueItems ? { uniqueItems } : {})
+        ...(uniqueItems ? { uniqueItems } : {}),
       }
     } else if (kind === 'object') {
       let props = (schema as STObject).props || {}
@@ -101,7 +110,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       s = {
         type: 'object',
         properties: Object.fromEntries(Object.entries(props).map(([k, v]) => [k, schemaToOpenapi(v).schema])),
-        ...(required.length ? { required } : {})
+        ...(required.length ? { required } : {}),
       }
     } else if (kind === 'json') {
       let props = ((schema as STJson).props || {}) as STProps
@@ -115,13 +124,13 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
         type: type,
         ...(type === 'object'
           ? {
-            properties: Object.fromEntries(Object.entries(props).map(([k, v]) => [k, schemaToOpenapi(v).schema])),
-            ...(required.length ? { required } : {})
-          }
-          : {})
+              properties: Object.fromEntries(Object.entries(props).map(([k, v]) => [k, schemaToOpenapi(v).schema])),
+              ...(required.length ? { required } : {}),
+            }
+          : {}),
       }
     } else if (kind === 'union') {
-      let anyOf = (schema as STUnion).anyOf
+      let anyOf: STSchema[] = (schema as STUnion).anyOf
       let nullable = anyOf.some(s => s[Kind] === 'null')
       anyOf = anyOf.filter(s => s[Kind] !== 'null')
 
@@ -131,12 +140,23 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
         s = schemaToOpenapi(anyOf[0]).schema
       } else if (anyOf.length > 1) {
         s = {
-          anyOf: anyOf.map(s => schemaToOpenapi(s).schema)
+          anyOf: anyOf.map(e => schemaToOpenapi(e).schema),
         }
       }
 
       //@ts-ignore
       if (nullable) s.nullable = nullable
+    } else if (kind === 'intersection') {
+      let allOf: STSchema[] = (schema as STIntersection).allOf
+      if (allOf.length === 0) {
+        s = {}
+      } else if (allOf.length === 1) {
+        s = schemaToOpenapi(allOf[0]).schema
+      } else if (allOf.length > 1) {
+        s = {
+          allOf: allOf.map(s => schemaToOpenapi(s).schema),
+        }
+      }
     }
 
     s = { title: schema.title, description: schema.description, ...s }
@@ -168,7 +188,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       description: param?.description,
       required: kind === 'path' ? true : !param[Optional] || undefined,
       deprecated: param.deprecated,
-      schema
+      schema,
     }
     if (components.parameters && param.id) components.parameters[param.id] = p
     return p
@@ -178,18 +198,17 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     (routes, c) => ({ ...routes, ...c.routes }),
     {} as Record<string, Record<string, Record<string, any>>>
   )
-  let metaStatic = Object.fromEntries(Object.entries(metaRoutes || {}).filter((([_, d]) => d?.static)))
+  let metaStatic = Object.fromEntries(Object.entries(metaRoutes || {}).filter(([_, d]) => d?.static))
 
   walkRoutes(g.router.routes, r => {
     let meta = metaRoutes?.[r.path]?.[r.method]
-    if (r.static?.root)
-      meta = metaStatic[r.static?.root]?.static
+    if (r.static?.root) meta = metaStatic[r.static?.root]?.static
     if (meta?.hide) return
     let path = r.path.replaceAll(/:([^\/]+)/g, '{$1}')
     if (!(path in paths)) paths[path] = {}
     let tags = [
       ...(meta?.tags?.split(' ')?.map((t: string) => t.trim()) || []),
-      ...(typeof meta?.tag === 'string' ? [meta?.tag] : meta?.tag || [])
+      ...(typeof meta?.tag === 'string' ? [meta?.tag] : meta?.tag || []),
     ]
     let security: Record<string, any> = []
 
@@ -201,52 +220,62 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       : []
     let headerParam = r.schema?.headers
       ? Object.entries(r.schema?.headers as Record<string, STSchema>)
-        .map(([k, v]) => {
-          let p = parseParam(k, v, 'header')
-          if (k.match(/authorization/i)) {
-            // TODO: handle other auth methods
-            if (v.pattern && v?.pattern?.toString() === '/^Bearer /') {
-              security.push({ bearerAuth: [] })
-              components.securitySchemes = { bearerAuth: { type: 'http', scheme: 'bearer' } }
-              return null
+          .map(([k, v]) => {
+            let p = parseParam(k, v, 'header')
+            if (k.match(/authorization/i)) {
+              // TODO: handle other auth methods
+              if (v.pattern && v?.pattern?.toString() === '/^Bearer /') {
+                security.push({ bearerAuth: [] })
+                components.securitySchemes = { bearerAuth: { type: 'http', scheme: 'bearer' } }
+                return null
+              }
             }
-          }
-          return p
-        })
-        .filter(p => p)
+            return p
+          })
+          .filter(p => p)
       : []
     // TODO cookieParam
     let parameters = [...pathParam, ...queryParam, ...headerParam]
 
     let requestBody
     if (r.schema.body) {
-      let { schema, isJson } = schemaToOpenapi(r.schema.body)
-      let { type, format } = resolveRef(schema)
-      let media = schemaToMedia({ type, format, isJson } as SchemaType)
+      let description: string | undefined
+      let conflictDescription = false
+      let required = false
+      let content = Object.fromEntries(
+        Object.entries(r.schema.body).map(([bodyType, schema]) => {
+          const s = schema.description
+          const isDefined = typeof s === 'string' && s !== ''
+          if (s?.[Optional] === false) required = true
+          if (isDefined) {
+            if (description === undefined) {
+              description = s
+            } else if (description !== s) {
+              conflictDescription = true
+            }
+          }
+          description = conflictDescription ? undefined : description ?? undefined
+          return [inferContentType(bodyType), { schema: schemaToOpenapi(schema).schema }]
+        })
+      )
       requestBody = {
-        description: r.schema.body.description,
-        required: !r.schema.body[Optional],
-        content: {
-          [media]: { schema }
-        }
-      }
-      if (r.schema.body.id && components.requestBodies) {
-        components.requestBodies[r.schema.body.id] = requestBody
-        requestBody = { $ref: `#/components/requestBodies/${r.schema.body.id}` }
+        description,
+        required,
+        content,
       }
     }
     let responses
     if (r.schema.response && Object.keys(r.schema.response).length) {
       responses = Object.fromEntries(
         Object.entries(r.schema.response).map(([status, v]) => {
-          if(!v) return []
+          if (!v) return []
           let s = status as keyof typeof HttpStatus | 'default'
           let { schema, isJson } = schemaToOpenapi(v)
           let { type, format } = resolveRef(schema)
           let media = schemaToMedia({ type, format, isJson } as SchemaType)
           let response: OpenAPIV3.ResponseObject = {
             description: v.description || HttpStatus[s as keyof typeof HttpStatus] || 'Response',
-            content: { [media]: { schema: schema } }
+            content: { [media]: { schema: schema } },
           }
           if (components.responses && r.schema.response?.[s]?.id) {
             components.responses[r.schema.response?.[s]?.id as string] = response
@@ -258,12 +287,10 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       )
     } else {
       responses = {
-        default: { description: HttpStatus[200] }
+        default: { description: HttpStatus[200] },
       }
     }
     let summary = meta?.head.match(/^([^\n]+)/)?.[1]
-    console.log('#', r.method, r.path)
-    console.log(r.schema.body)
     paths[path][r.method] = {
       tags: tags.length ? tags : undefined,
       summary: summary,
@@ -272,7 +299,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       requestBody,
       responses,
       ...(security.length ? { security } : {}),
-      deprecated: meta?.deprecated ? true : undefined
+      deprecated: meta?.deprecated ? true : undefined,
     }
   })
 
@@ -285,9 +312,9 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     openapi: version,
     info: {
       title: 'Galbe app',
-      version: '0.1.0'
+      version: '0.1.0',
     },
     paths,
-    components: Object.keys(components)?.length ? components : undefined
+    components: Object.keys(components)?.length ? components : undefined,
   }
 }

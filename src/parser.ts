@@ -175,7 +175,7 @@ export const requestBodyParser = async (
         if (isStream) return $streamToMultipartForm(body, boundary, schema as STStream<STMultipartForm>)
         return streamToMultipartForm(body, boundary, schema as STMultipartForm)
       } else if (contentType === 'default') {
-        throw new RequestError({ status: 400, payload: { body: `Not a valid Content-Type` } })
+        throw new RequestError({ status: 400, payload: { body: `Not a valid content-type` } })
       }
     }
   } catch (error) {
@@ -719,7 +719,7 @@ export const responseParser = (response: any, ctx: Context, schema?: STResponse)
         controller.close()
       },
     })
-    details.headers.set('Content-Type', 'text/event-stream')
+    details.headers.set('content-type', 'text/event-stream')
     return new Response(rs, details)
   } else {
     try {

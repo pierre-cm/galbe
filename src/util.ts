@@ -153,3 +153,13 @@ export const inferBodyType = (contentType?: string | null): STBodyType | undefin
   if (contentType === BA_HEADER) return 'byteArray'
   return 'default'
 }
+
+export const inferContentType = (bodyType?: string | undefined): string => {
+  if (!bodyType) return 'default'
+  if (bodyType === 'json') return JSON_HEADER
+  if (bodyType === 'text') return 'text/plain'
+  if (bodyType === 'urlForm') return 'application/x-www-form-urlencoded'
+  if (bodyType === 'multipart') return 'multipart/form-data'
+  if (bodyType === 'byteArray') return BA_HEADER
+  return 'default'
+}

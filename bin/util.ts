@@ -15,14 +15,14 @@ export const fmtVal = (v: any) => {
   if (typeof v === 'number') return `\x1b[36m${v}\x1b[0m`
   return v
 }
-export const fmtList = (l: any) => `[${l.map((v:any) => fmtVal(v)).join(', ')}]`
+export const fmtList = (l: any) => `[${l.map((v: any) => fmtVal(v)).join(', ')}]`
 export const fmtInterval = (a: any, b: any) => `[${fmtVal(a)}-${fmtVal(b)}]`
 
 export const silentExec = async (fn: () => any) => {
   let consoleMock = Object.fromEntries(
     Object.entries(console)
       .filter(([_, v]) => typeof v === 'function')
-      .map(([k, _]) => [k, () => { }])
+      .map(([k, _]) => [k, () => {}])
   )
   const _console = console
   const _processStdoutWrite = process.stdout.write
@@ -30,9 +30,9 @@ export const silentExec = async (fn: () => any) => {
   //@ts-ignore
   global.console = consoleMock
   //@ts-ignore
-  process.stdout.write = function () { }
+  process.stdout.write = function () {}
   //@ts-ignore
-  process.stderr.write = function () { }
+  process.stderr.write = function () {}
   const r = await fn()
   global.console = _console
   process.stdout.write = _processStdoutWrite
@@ -50,7 +50,7 @@ export const watchDir = async (
   let watcher = watch(path, {
     persistent: false,
     ignored: options?.ignore,
-    ignoreInitial: true
+    ignoreInitial: true,
   })
   watcher.on('all', async (eventType, filename) => {
     if (filename.match(WATCH_IGNORE)) return
@@ -90,9 +90,29 @@ export const instanciateRoutes = async (g: Galbe) => {
       console.log(`\x1b\[0;31m    Error:\x1b[0m`)
       console.log(errors?.[fp])
     }
-    console.log("")
+    console.log('')
   }
   console.log('\x1b[1;30m\x1b[32mdone\x1b[0m\n')
+}
+
+export function abbreviateVar(input: string): string {
+  if (!input) return ''
+  const normalized = input
+    .replace(/[_\-\s]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+
+  const tokens = normalized
+    .trim()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+
+  if (tokens.length === 0) return ''
+
+  return tokens
+    .map(t => t[0])
+    .join('')
+    .toLowerCase()
 }
 
 export const killPort = async (port: number) => {
@@ -172,5 +192,5 @@ export const HttpStatus = {
   504: 'Gateway Timeout',
   505: 'HTTP Version Not Supported',
   507: 'Insufficient Storage',
-  511: 'Network Authentication Required'
+  511: 'Network Authentication Required',
 }

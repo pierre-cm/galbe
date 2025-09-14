@@ -360,6 +360,7 @@ export type GalbePlugin = {
 
 export type GalbeCLICommand = {
   name: string
+  tags: string[]
   description?: string
   route: Route
   arguments?: { name: string; type: string; description: string }[]

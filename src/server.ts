@@ -178,7 +178,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
           console.log(`Internal Error`, error?.payload || '')
           return new Response('Internal Server Error', {
             status: error.status,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'content-type': 'application/json' },
           })
         } else if (error instanceof RequestError) {
           let payload = error.payload

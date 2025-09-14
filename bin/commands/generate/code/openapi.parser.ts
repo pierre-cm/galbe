@@ -123,8 +123,8 @@ const parseOapiSchema = (
   let resp = ''
   let hasOptions = Object.values(options).some(v => !!v)
   let optArg = hasOptions ? serialize(options) : ''
-  let anyOf = os.oneOf || os.anyOf || os.allOf
-  let allOf = os.oneOf || os.anyOf || os.allOf
+  let anyOf = os.oneOf || os.anyOf
+  let allOf = os.allOf
   let required = os.required
   let nullable = os.nullable
 
