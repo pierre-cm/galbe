@@ -280,9 +280,9 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
     if (_p.$ref) continue
     let p = _p as OpenAPIV3.ParameterObject
     let o = (s: string) => {
-      const [isOptional, so] = [...(s.match(/^\$T.optional\((.*)\)$/) || [])]
+      const [_, so] = [...(s.match(/^\$T.optional\((.*)\)$/) || [])]
       s = so ?? s
-      return p.in !== 'path' && !p.required && !isOptional ? `$T.optional(${s})` : s
+      return p.in !== 'path' && !p.required ? `$T.optional(${s})` : s
     }
     sp[p.in][p.name] = o(
       unref(parseOapiSchema(p.schema, { description: p.description }), m => {
