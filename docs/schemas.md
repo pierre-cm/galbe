@@ -225,7 +225,7 @@ Defines an `application/x-www-form-urlencoded` request body.
 
 ```ts
 const body = { 
-  urlForm: {$T.object({
+  urlForm: $T.object({
     name: $T.string(),
     age: $T.integer({ min: 0 })
   })
@@ -324,4 +324,4 @@ const response = {
 This ensures all responses adhere to the defined schema.
 
 > [!NOTE]
-> The response validation is enabled by default, meaning that every enpoint response that has a schema defined will be validated at runtime. To disable runtime validation, you can set the `responseValidator?.enabled` option to `false` in the [configuration](getting-started.md#configuration).
+> The response validation is enabled by default, meaning that every enpoint response that has a schema defined will be validated at runtime. To disable runtime validation, you can set the `responseValidator.enabled` option to `false` in the [configuration](getting-started.md#configuration).
