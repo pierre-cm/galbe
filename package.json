@@ -1,12 +1,12 @@
 {
   "name": "galbe",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "description": "Fast, lightweight and highly customizable JavaScript web framework based on Bun",
   "author": "Pierre Caillaud M (https://github.com/pierre-cm)",
   "type": "module",
   "bin": "./bin/cli.ts",
   "main": "./src/index.ts",
-  "files":[
+  "files": [
     "bin/",
     "scripts/",
     "src/"
