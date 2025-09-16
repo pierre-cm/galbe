@@ -1,6 +1,5 @@
 import { Command, Option } from 'commander'
 import { resolve, relative, extname } from 'path'
-import { dump as ymlDump, load as ymlLoad } from 'js-yaml'
 import { CWD, fmtList, instanciateRoutes, silentExec } from '../../util'
 import { Galbe } from '../../../src'
 import { OpenAPISerializer } from '../../../src/extras'
@@ -47,7 +46,7 @@ export default (cmd: Command) => {
       if (base) {
         let ext = extname(base)
         let rd = (str: string) =>
-          ext === '.json' ? JSON.parse(str) : ['.yml', '.yaml'].includes(ext) ? ymlLoad(str) : null
+          ext === '.json' ? JSON.parse(str) : ['.yml', '.yaml'].includes(ext) ? Bun.YAML.parse(str) : null
         baseSpec = rd(await Bun.file(relative(CWD, base)).text())
       }
 
@@ -84,11 +83,14 @@ export default (cmd: Command) => {
             description: pckg?.description,
             contact: parseAuthor(pckg.author),
             //license: TODO
-            version: pckg?.version || '0.1.0'
-          }
+            version: pckg?.version || '0.1.0',
+          },
         }
         openapiSpec = softMerge(openapiSpec, baseSpec) as OpenAPIV3.Document
-        Bun.write(resolve(CWD, out), tFormat === 'json' ? JSON.stringify(openapiSpec, null, 2) : ymlDump(openapiSpec))
+        Bun.write(
+          resolve(CWD, out),
+          tFormat === 'json' ? JSON.stringify(openapiSpec, null, 2) : Bun.YAML.stringify(openapiSpec, null, 2)
+        )
       }
 
       Bun.write(Bun.stdout, ' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')

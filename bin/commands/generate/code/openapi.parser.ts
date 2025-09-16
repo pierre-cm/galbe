@@ -1,7 +1,6 @@
 import { semver } from 'bun'
 import { transformSync } from '@swc/core'
 import { resolve, relative, dirname } from 'path'
-import { load as ymlLoad } from 'js-yaml'
 import { OpenAPIV3 } from 'openapi-types'
 import { inferBodyType } from '../../../../src/util'
 
@@ -539,7 +538,8 @@ export const generateFromOapi = async (
   out: string,
   { version, ext, target }: { version: string; ext: 'json' | 'yaml'; target: 'js' | 'ts' }
 ) => {
-  let def: OpenAPIV3.Document = ext === 'json' ? await Bun.file(input).json() : ymlLoad(await Bun.file(input).text())
+  let def: OpenAPIV3.Document =
+    ext === 'json' ? await Bun.file(input).json() : Bun.YAML.parse(await Bun.file(input).text())
 
   let v = def?.openapi
   if (!v || !semver.satisfies(v, version)) throw new Error('Invalid openapi version')
