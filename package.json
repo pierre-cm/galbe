@@ -6,6 +6,11 @@
   "type": "module",
   "bin": "./bin/cli.ts",
   "main": "./src/index.ts",
+  "files":[
+    "bin/",
+    "scripts/",
+    "src/"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
