@@ -194,3 +194,12 @@ export const HttpStatus = {
   507: 'Insufficient Storage',
   511: 'Network Authentication Required',
 }
+
+export const toPascalCase = (input: string) =>
+  input
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('')

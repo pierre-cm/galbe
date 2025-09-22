@@ -124,8 +124,6 @@ const parseOapiSchema = (
   let optArg = hasOptions ? serialize(options) : ''
   let anyOf = os.oneOf || os.anyOf
   let allOf = os.allOf
-  let required = os.required
-  let nullable = os.nullable
 
   if (os.discriminator) {
     const propName = os.discriminator.propertyName
@@ -175,7 +173,11 @@ const parseOapiSchema = (
     resp = `$T.integer(${hasOptions ? serialize(options) : ''})`
   } else if (os.type === 'string') {
     if (os.format === 'binary') resp = `$T.byteArray(${hasOptions ? serialize(options) : ''})`
-    else {
+    else if (os.enum?.length === 1) {
+      resp = `$T.literal("${os.enum[0]}")`
+    } else if (os.enum?.length) {
+      resp = `$T.union([${os.enum.map(v => `$T.literal("${v}")`).join(', ')}])`
+    } else {
       let minLength = os.minLength
       let maxLength = os.maxLength
       let pattern = os.pattern
@@ -191,7 +193,16 @@ const parseOapiSchema = (
     resp = `$T.array(${parseOapiSchema(os?.items)}, ${optArg})`
   } else if (os.type === 'object') {
     let props = Object.entries(os?.properties || {})
-      .map(([k, v]) => `"${k}":${parseOapiSchema(v)}`)
+      .map(([k, v]) => {
+        v = v as OpenAPIV3.SchemaObject
+        const w = (s: string) => {
+          if (!v.required && v.nullable) return `$T.nullish(${s})`
+          else if (!v.required) return `$T.optional(${s})`
+          else if (v.nullable) return `$T.nullable(${s})`
+          return s
+        }
+        return `"${k}":${w(parseOapiSchema(v))}`
+      })
       .join(',')
     if (extra?.media === 'multipart/form-data') {
       resp = `$T.multipartForm({${props}}${optArg ? `, ${optArg}` : ''})`
@@ -201,10 +212,6 @@ const parseOapiSchema = (
       resp = `$T.object({${props}}${optArg ? `, ${optArg}` : ''})`
     }
   } else throw new Error(`Unknown schema type ${JSON.stringify(os)}`)
-
-  if (!required && nullable) resp = `$T.nullish(${resp})`
-  else if (!required) resp = `$T.optional(${resp})`
-  else if (nullable) resp = `$T.nullable(${resp})`
 
   return resp
 }
@@ -451,7 +458,7 @@ const writeFiles = async (
           imports[depOrig].push(depName)
         }
       }
-      decl.push(`export const ${s.key} = ${s.schema}\nexport type T${s.key} = Static<typeof ${s.key}>\n`)
+      decl.push(`export const ${s.key} = ${s.schema}\nexport type ${s.key} = Static<typeof ${s.key}>\n`)
     })
     if (decl.length === 0) return ''
     return `import type { Static } from 'galbe/schema'\nimport { $T } from 'galbe'\n${Object.entries(imports)

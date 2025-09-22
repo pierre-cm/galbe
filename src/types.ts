@@ -269,7 +269,7 @@ export class RequestError {
   payload?: any
   headers?: Record<string, string>
   constructor(options: { status?: number; payload?: any; headers?: Record<string, string> }) {
-    this.status = options.status ?? 500
+    this.status = options.status ?? 400
     this.payload = options.payload
     this.headers = options.headers
   }
