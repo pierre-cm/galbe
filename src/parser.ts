@@ -12,6 +12,7 @@ import type {
   STNull,
   STPropsValue,
   STUnion,
+  STIntersection,
 } from './schema'
 
 import { readableStreamToArrayBuffer } from 'bun'
@@ -112,12 +113,19 @@ export const requestBodyParser = async (
         }
         return await streamToString(body, schema as STBodyValue)
       } else if (contentType === 'json') {
-        if (!['object', 'json', 'boolean', 'number', 'integer', 'string', 'array', 'union'].includes(kind))
+        if (
+          !['object', 'json', 'boolean', 'number', 'integer', 'string', 'array', 'union', 'intersection'].includes(kind)
+        )
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (kind === 'union') {
           let str = body === null ? 'null' : await streamToString(body)
           let json = JSON.parse(str)
           return unionize(json, schema)
+        }
+        if (kind === 'intersection') {
+          let str = body === null ? 'null' : await streamToString(body)
+          let json = JSON.parse(str)
+          return intersectionize(json, schema)
         }
         const str = body === null ? 'null' : await streamToString(body)
         let json
@@ -752,4 +760,14 @@ const unionize = (b: any, schema: STUnion) => {
   if (res !== undefined) return res
   else if (error) throw new RequestError({ status: 400, payload: { body: error } })
   else throw new RequestError({ status: 400, payload: { body: `No matching body schema found` } })
+}
+
+const intersectionize = (b: any, schema: STIntersection) => {
+  let res
+  try {
+    for (let s of schema.allOf) res = validate(b, s, { parse: true })
+    return res
+  } catch (e) {
+    throw new RequestError({ status: 400, payload: { body: `No matching body schema found` } })
+  }
 }

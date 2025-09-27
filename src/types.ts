@@ -5,6 +5,7 @@ import type {
   STBoolean,
   STByteArray,
   STInteger,
+  STIntersection,
   STJson,
   STLiteral,
   STMultipartForm,
@@ -40,7 +41,7 @@ export type STBody =
   | Partial<{
       byteArray?: STByteArray | STStream
       text?: STString | STLiteral | STBoolean | STNumber | STInteger | STUnion | STStream
-      json?: STJson | STObject | STBoolean | STInteger | STNumber | STString | STArray | STUnion
+      json?: STJson | STObject | STBoolean | STInteger | STNumber | STString | STArray | STUnion | STIntersection
       urlForm?: STObject | STStream | STUnion
       multipart?: STMultipartForm | STStream | STUnion
       default?: STString | STByteArray | STStream | STAny

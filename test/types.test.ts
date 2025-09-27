@@ -442,6 +442,17 @@ g.post('/body/json/union', { body: { json: $T.union([$T.boolean(), $T.string()])
   ctx.set.status = typeof body === 'string' || typeof body === 'boolean' ? 200 : 500
 })
 
+g.post(
+  '/body/json/intersection',
+  { body: { json: $T.intersection([$T.object({ foo: $T.string() }), $T.object({ bar: $T.number() })]) } },
+  ctx => {
+    const { body, contentType } = ctx
+    type _ep_body = Expect<Extends<typeof body, { foo: string } & { bar: number }>>
+    type _ep_contentType = Expect<Extends<typeof contentType, 'json'>>
+    ctx.set.status = typeof body.foo === 'string' || typeof body.bar === 'number' ? 200 : 500
+  }
+)
+
 g.post('/body/json/obj', { body: { json: $T.object({ foo: $T.string() }) } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Extends<typeof body, { foo: string }>>
@@ -767,6 +778,25 @@ describe('types', () => {
       { method: 'post', path: '/body/json/union', type: 'application/json', body: '', expected: 400 },
       { method: 'post', path: '/body/json/union', type: 'application/json', body: null, expected: 400 },
 
+      {
+        method: 'post',
+        path: '/body/json/intersection',
+        type: 'application/json',
+        body: '{"foo":"foo","bar":42}',
+        expected: 200,
+      },
+      {
+        method: 'post',
+        path: '/body/json/intersection',
+        type: 'application/json',
+        body: '{"foo":"foo"}',
+        expected: 400,
+      },
+      { method: 'post', path: '/body/json/intersection', type: 'application/json', body: '{"bar":42}', expected: 400 },
+      { method: 'post', path: '/body/json/intersection', type: 'application/json', body: '{}', expected: 400 },
+      { method: 'post', path: '/body/json/intersection', type: 'application/json', body: '', expected: 400 },
+      { method: 'post', path: '/body/json/intersection', type: 'application/json', body: null, expected: 400 },
+
       { method: 'post', path: '/body/json/obj', type: 'application/json', body: '{"foo":"bar"}', expected: 200 },
       { method: 'post', path: '/body/json/obj', type: 'application/json', body: '{"foo":42}', expected: 400 },
       { method: 'post', path: '/body/json/obj', type: 'application/json', body: '{}', expected: 400 },
@@ -903,6 +933,7 @@ describe('types', () => {
         body,
         headers: { ...(type ? { 'content-type': type } : {}) },
       })
+      if (resp.status !== expected) console.log(await resp.json())
       expect(resp.status).toBe(expected)
     }
   })
