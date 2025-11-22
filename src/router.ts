@@ -3,33 +3,43 @@ import { MethodNotAllowedError, NotFoundError } from './types'
 
 const ROUTE_REGEX = /^(\/(\*|:?\d+|:?\w+|:?[\w\d.][\w-.]+[\w\d]))*\/?$/
 
-const walk = (path: string[], node: RouteNode, alts: RouteNode[] = []): RouteNode => {
-  if (path.length < 1) throw new NotFoundError()
-  if (path.length === 1 && node.routes && !!Object.keys(node.routes).length) return node
+const walk = (path: string[], node: RouteNode, index: number = 0): RouteNode => {
+  if (index === path.length - 1) {
+    if (node.routes && !!Object.keys(node.routes).length) return node
+    throw new NotFoundError()
+  }
 
-  if (node.children?.['*']) alts.push(node.children['*'])
-  if (node.param) alts.push(node.param)
+  const nextSegment = path[index + 1]
 
-  if (node.children && path[1] in node.children) {
-    path.shift()
-    return walk(path, node.children[path[0]], alts)
-  }
-  if (node.param) {
-    path.shift()
-    alts.pop()
-    return walk(path, node.param, alts)
-  }
-  if (alts.length > 1) {
-    return walk(path, alts.pop() as RouteNode, alts)
-  }
-  if (alts.length === 1) {
-    let lastAlt = alts.pop() as RouteNode
+  // 1. Exact Match
+  if (node.children && nextSegment in node.children) {
     try {
-      return walk(path, lastAlt, alts)
+      return walk(path, node.children[nextSegment], index + 1)
+    } catch (error) {
+      if (!(error instanceof NotFoundError)) throw error
+    }
+  }
+
+  // 2. Param Match
+  if (node.param) {
+    try {
+      return walk(path, node.param, index + 1)
+    } catch (error) {
+      if (!(error instanceof NotFoundError)) throw error
+    }
+  }
+
+  // 3. Wildcard Match
+  if (node.children && '*' in node.children) {
+    try {
+      return walk(path, node.children['*'], index + 1)
     } catch (error) {
       if (error instanceof NotFoundError) {
-        if (lastAlt?.routes) return lastAlt
-      } else throw error
+        if (node.children['*'].routes && !!Object.keys(node.children['*'].routes).length) {
+          return node.children['*']
+        }
+      }
+      if (!(error instanceof NotFoundError)) throw error
     }
   }
 
