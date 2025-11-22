@@ -2,7 +2,7 @@
 
 Any error occurring during a request lifecycle is intercepted by the error handler.
 
-You can customize the default error-handling behavior by defining a custom error handler using Galbe's instance `onError` method.
+You can customize the default error-handling behavior by defining a custom error handler using the `onError` method of the Galbe instance.
 
 ```js
 const galbe = new Galbe()

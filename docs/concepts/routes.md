@@ -105,8 +105,8 @@ The Automatic Route Analyzer scans all Route Files in your project and sets up r
 To be analyzed correctly, a Route File must export a default function that accepts a Galbe instance as its only argument. Define your routes within this function. Example in JavaScript:
 
 ```ts
-export default g => {
-  g.get('/foo/:bar', ctx => ctx.params.bar)
+export default galbe => {
+  galbe.get('/foo/:bar', ctx => ctx.params.bar)
 }
 ```
 
@@ -117,14 +117,14 @@ The Automatic Route Analyzer can also extract metadata from multiline comments. 
  * Header metadata description
  * @annotation Example of a header annotation
  */
-export default g => {
+export default galbe => {
   /**
    * Route-specific metadata
    * @deprecated
    * @operationId fooBar
    * @tags tag1 tag2
    */
-  g.get('/foo/:bar', ctx => ctx.params.bar)
+  galbe.get('/foo/:bar', ctx => ctx.params.bar)
 }
 ```
 

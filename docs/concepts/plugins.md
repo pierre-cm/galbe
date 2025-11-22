@@ -143,4 +143,4 @@ To submit your plugin to the [official plugin list](https://galbe.dev/plugins), 
 ```
 
 > [!IMPORTANT]
-> Provide all relevant details in the Pull Request description. It will be reviewed by project maintainers as soon as possible. Check the [Galbe Contributing Guide](https://github.com/pierre-cm/galbe/blob/main/docs/CONTRIBUTING.md) before submitting.
+> Provide all relevant details in the Pull Request description. It will be reviewed by project maintainers as soon as possible. Check the [Galbe Contributing Guide](../community/CONTRIBUTING.md) before submitting.

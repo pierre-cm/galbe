@@ -1,6 +1,6 @@
 # CLI
 
-A Command Line Interface is shipped with Galbe package. You can use it to perform useful tasks around your application.
+A Command Line Interface is shipped with the Galbe package. You can use it to perform useful tasks around your application.
 
 After [Installing Galbe](getting-started.md#automatic-installation), the CLI will be available locally to your project.
 
@@ -30,7 +30,7 @@ Start a dev server running your Galbe application.
 
 #### Options
 
-| Short | Long            | Descritpion                 | Default |
+| Short | Long            | Description                 | Default |
 | ----- | --------------- | --------------------------- | ------- |
 | -p    | --port          | port number [1-65535]       | 3000    |
 | -w    | --watch         | watch file changes dir      | false   |
@@ -183,8 +183,8 @@ Arguments:
 
 Options:
   -%f, --%format [string]     response format ['s','h','b','t','p'] (default: ["s","b","p"])
-  -%h, --%header <string...>  request header formated as headerName=headerValue (default: [])
-  -%q, --%query <string...>   query param formated as paramName=paramValue (default: [])
+  -%h, --%header <string...>  request header formatted as headerName=headerValue (default: [])
+  -%q, --%query <string...>   query param formatted as paramName=paramValue (default: [])
   -%b, --%body <string>       request body (default: "")
   -%bf, --%bodyFile <path>    request body file (default: "")
   -a, --age <number>
@@ -198,7 +198,7 @@ Hello Pierre! You're 29 y.o.
 ```
 
 > [!IMPORTANT]
-> A `GCLI_SERVER_URL` environment variable must be defined. It should indicate the url of the Galbe server you want to target.
+> A `GCLI_SERVER_URL` environment variable must be defined. It should indicate the URL of the Galbe server you want to target.
 > In that specific case `http://localhost:3000`.
 
 ### spec

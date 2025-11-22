@@ -54,7 +54,7 @@ Enables or disables TLS support. Default: `false`.
 Enables or disables _request_ schema validation (see [Request Schema Definition](schemas.md#request-schema-definition)). Default: `true`.
 
 ### responseValidator.enabled
-Enables or disables _response_ schema validation (see [Response Schema Definition](schemas.md#request-schema-definition#response)). Default: `true`.
+Enables or disables _response_ schema validation (see [Response Schema Definition](schemas.md#response)). Default: `true`.
 
 ## Config Type Safety
 

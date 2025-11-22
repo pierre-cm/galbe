@@ -2,7 +2,7 @@
 
 An instance of the context object is created when a new request is initiated and is carried throughout the entire request lifecycle. See the [Lifecycle](https://galbe.dev/documentation/lifecycle) section for more details.
 
-Its purpose is to carry all relevant information about the request and facilitate data sharing between different stages of the request lifecycle.
+Its purpose is to carry all relevant information about the request and facilitate data sharing across the request lifecycle.
 
 ## Definition
 

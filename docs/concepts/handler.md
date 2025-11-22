@@ -29,12 +29,12 @@ The `context` object contains the request information as well as a `set` object 
 
 ### Response
 
-To send a response, your handler can return an object. The response sent will depend on the type of the object returned. There are four types of responses that can be returned by a handler method. More about that in the next section.
+To send a response, your handler can return an object. The response sent will depend on the type of the object returned. There are four types of responses that can be returned by a handler method. More details are provided in the next section.
 
 ## Response Types
 
 > [!NOTE]
-> This section only covers response body payloads. To return specific response headers and/or status, you should define them with the `context.set` object before the return statement. More about it in the [Context](context.md) section.
+> This section only covers response body payloads. To return specific response headers and/or status, you should define them with the `context.set` object before the return statement. More details can be found in the [Context](context.md) section.
 
 ### String
 
@@ -111,7 +111,7 @@ Throwing a `RequestError` at any point in the handler execution will result in a
 #### Example
 
 ```ts
-g.get("/test", () => {
+galbe.get("/test", () => {
   throw new RequestError({ status: 418, payload: '🫖' })
 })
 ```

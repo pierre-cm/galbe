@@ -248,7 +248,7 @@ const body = {
 #### stream
 
 Certain request body types can be streamed using `STStream` wrapper, improving performance by validating data incrementally.
-This can be usefull to imporve performances in case you have heavy body payloads by leveraging early validation and fail fast behaviors.
+This can be useful to improve performance in case you have heavy body payloads by leveraging early validation and fail fast behaviors.
 
 **Example**
 
@@ -276,7 +276,7 @@ galbe.post(
 
 In that case, even if the `username` doesn't pass the validation, the full request body, including the `heavyImageFile` is processed before sending the response. This induces unnecessary time and resource consumption because the `heavyImageFile` is processed despite never been used.
 
-A better approach would consist in leveraging `STStream` wrapper to implement early validation and fail fast behavior. By defining the request body as a stream. Instead of receiving a plain js object as `ctx.body`, you will receive an [AsyncGenerator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncGenerator).
+A better approach would consist in leveraging `STStream` wrapper to implement early validation and fail fast behavior. By defining the request body as a stream, instead of receiving a plain js object as `ctx.body`, you will receive an [AsyncGenerator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncGenerator).
 
 ```ts
 galbe.post(
@@ -324,4 +324,4 @@ const response = {
 This ensures all responses adhere to the defined schema.
 
 > [!NOTE]
-> The response validation is enabled by default, meaning that every enpoint response that has a schema defined will be validated at runtime. To disable runtime validation, you can set the `responseValidator.enabled` option to `false` in the [configuration](getting-started.md#configuration).
+> The response validation is enabled by default, meaning that every endpoint response that has a schema defined will be validated at runtime. To disable runtime validation, you can set the `responseValidator.enabled` option to `false` in the [configuration](getting-started.md#configuration).

@@ -4,7 +4,7 @@ First off, thank you for considering contributing to our project! We appreciate 
 
 ## Create an Issue
 
-If you encounter a bug, want to propose a new feature, or something that could be improved, please create an issue. Here's how:
+If you encounter a bug, want to propose a new feature, or have an idea for improvement, please create an issue. Here's how:
 
 1. **Check Existing Issues**: Before creating a new issue, please search the [existing issues](https://github.com/pierre-cm/galbe/issues) to see if someone else has already reported the same problem or suggested the same feature.
 
@@ -80,7 +80,7 @@ Once your pull request is submitted, it will be reviewed by the project maintain
 
 Please follow these coding standards to ensure consistency across the project:
 
-- **Code Style**: Follow the [style guide]().
+- **Code Style**: Follow the project's existing code style.
 - **Commit Messages**: Use clear and descriptive commit messages.
 - **Documentation**: Update documentation where applicable. This includes comments in the code and other documentation files under the `docs` directory.
 
