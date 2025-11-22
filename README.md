@@ -12,7 +12,20 @@ Galbe is a fast, lightweight and highly customizable JavaScript web framework ba
 > [!IMPORTANT]  
 > Galbe is currently under active development and not guaranteed to be stable. Future releases may potentially introduce breaking changes.
 
+## Features
+
+- **Fast**: Built on top of Bun, Galbe is designed for speed.
+- **Lightweight**: Minimal core with a plugin system to add only what you need.
+- **Type-safe**: Built with TypeScript for a great developer experience, with runtime validation using Galbe Schemas.
+- **Plugins**: Extensible architecture to easily add functionality.
+
+## Philosophy
+
+Galbe aims to provide a developer-friendly experience without compromising on performance. It embraces the "use the platform" mentality, leveraging modern web standards and the capabilities of the Bun runtime.
+
 ## Getting started
+
+Create a new Galbe app:
 
 ```bash
 bun create galbe app
@@ -27,6 +40,10 @@ install it globally using `bun install -g galbe`.
 
 The detailed documentation is available at [galbe.dev](https://galbe.dev).
 
+## Community
+
+- [GitHub Discussions](https://github.com/pierre-cm/galbe/discussions)
+
 ## Contributing
 
-Please refer to the [Contributing Guide](https://github.com/pierre-cm/galbe/blob/main/docs/CONTRIBUTING.md) to start contributing to Galbe.
+Please refer to the [Contributing Guide](https://github.com/pierre-cm/galbe/blob/main/docs/community/CONTRIBUTING.md) to start contributing to Galbe.
