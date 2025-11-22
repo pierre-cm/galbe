@@ -21,6 +21,7 @@ import type {
 } from './schema'
 import type { Galbe } from './index'
 import { HttpStatus } from './util'
+import type { CookieOptions } from './cookies'
 
 export type STResponseValue =
   | STByteArray
@@ -39,13 +40,13 @@ export type STResponseValue =
 export type STBody =
   | STNull
   | Partial<{
-      byteArray?: STByteArray | STStream
-      text?: STString | STLiteral | STBoolean | STNumber | STInteger | STUnion | STStream
-      json?: STJson | STObject | STBoolean | STInteger | STNumber | STString | STArray | STUnion | STIntersection
-      urlForm?: STObject | STStream | STUnion
-      multipart?: STMultipartForm | STStream | STUnion
-      default?: STString | STByteArray | STStream | STAny
-    }>
+    byteArray?: STByteArray | STStream
+    text?: STString | STLiteral | STBoolean | STNumber | STInteger | STUnion | STStream
+    json?: STJson | STObject | STBoolean | STInteger | STNumber | STString | STArray | STUnion | STIntersection<any>
+    urlForm?: STObject | STStream | STUnion
+    multipart?: STMultipartForm | STStream | STUnion
+    default?: STString | STByteArray | STStream | STAny
+  }>
 export type STBodyType = keyof STBody
 export type STBodyValue = STBody[STBodyType]
 
@@ -156,9 +157,9 @@ type OmitNotDefined<S extends RequestSchema> = {
   [K in keyof Exclude<S['params'], undefined> as Exclude<S['params'], undefined>[K] extends Required<
     Exclude<S['params'], undefined>
   >[K]
-    ? K
-    : //@ts-ignore
-      never]: Static<STObject<Exclude<S['params'], undefined>>>[K]
+  ? K
+  : //@ts-ignore
+  never]: Static<STObject<Exclude<S['params'], undefined>>>[K]
 }
 type StaticBody<T extends STSchema> = T extends STOptional<STSchema> ? Static<T> | null : Static<T>
 export type Context<
@@ -167,33 +168,35 @@ export type Context<
   S extends RequestSchema = RequestSchema
 > = {
   [K in STBodyType]: K extends keyof Exclude<S['body'], undefined>
-    ? {
-        headers: Static<STObject<Exclude<S['headers'], undefined>>>
-        params: {
-          [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
-        }
-        query: Static<STObject<Exclude<S['query'], undefined>>>
-        contentType: M extends 'get' | 'options' | 'head' ? undefined : K
-        body: M extends 'get' | 'options' | 'head'
-          ? null
-          : Exclude<S['body'], undefined> extends STNull
-          ? null
-          : K extends STBodyType
-          ? StaticBody<Exclude<Exclude<S['body'], undefined>[K], undefined>>
-          : never
-        request: Request
-        remoteAddress: SocketAddress | null
-        route?: Route
-        state: Record<string, any>
-        set: {
-          headers: {
-            'set-cookie': string[]
-            [header: string]: string | string[]
-          }
-          status?: number
-        }
-      }
+  ? {
+    headers: Static<STObject<Exclude<S['headers'], undefined>>>
+    params: {
+      [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
+    }
+    query: Static<STObject<Exclude<S['query'], undefined>>>
+    contentType: M extends 'get' | 'options' | 'head' ? undefined : K
+    body: M extends 'get' | 'options' | 'head'
+    ? null
+    : Exclude<S['body'], undefined> extends STNull
+    ? null
+    : K extends STBodyType
+    ? StaticBody<Exclude<Exclude<S['body'], undefined>[K], undefined>>
     : never
+    request: Request
+    remoteAddress: SocketAddress | null
+    route?: Route
+    state: Record<string, any>
+    set: {
+      headers: {
+        'set-cookie': string[]
+        [header: string]: string | string[]
+      }
+      status?: number
+      cookie: (name: string, value: string, opt?: CookieOptions) => void
+    }
+    cookies: Record<string, string>
+  }
+  : never
 }[STBodyType]
 export type Next = () => void | Promise<any>
 export type Hook<M extends Method = Method, Path extends string = string, S extends RequestSchema = RequestSchema> = (

@@ -5,6 +5,7 @@ import { parseEntry, requestBodyParser, requestPathParser, responseParser } from
 import { Galbe } from './index'
 import { validateResponse } from './validator'
 import { inferBodyType } from './util'
+import { readCookies, stringifyCookie } from './cookies'
 
 type MakeOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
@@ -37,14 +38,19 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
 
     async fetch(req) {
       if (!METHODS.includes(req.method)) return new Response('', { status: 501 })
+      const cookies: string[] = []
       const context = {
         request: req,
         contentType: !EMPTY_BODY_METHODS.includes(req.method)
           ? inferBodyType(req.headers.get('content-type'))
           : undefined,
         remoteAddress: server.requestIP(req),
-        set: { headers: { 'set-cookie': [] } },
+        set: {
+          headers: { 'set-cookie': [] },
+          cookie: (name, value, opt = { path: '/' }) => cookies.push(stringifyCookie(name, value, opt)),
+        },
         state: {},
+        cookies: readCookies(req.headers.get('cookie')),
       } as MakeOptional<Context, 'headers' | 'params' | 'query' | 'body'>
       for (const p of pluginsCb.onFetch) {
         //@ts-ignore
@@ -157,7 +163,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
           if (r) response = r
         } else response = await handlerWrapper(context as Context)
 
-        const parsedResponse = responseParser(response, context as Context, schema.response)
+        const parsedResponse = responseParser(response, context as Context, cookies, schema.response)
 
         if (galbe.config?.responseValidator?.enabled !== false && schema.response)
           validateResponse(response, schema.response, parsedResponse.status || 200)
@@ -172,7 +178,8 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
       } catch (error) {
         context.set.status = error instanceof RequestError ? error.status : 500
         let customError
-        for (let eh of galbe.errorCb) customError = responseParser(eh(error, context as Context), context as Context)
+        for (let eh of galbe.errorCb)
+          customError = responseParser(eh(error, context as Context), context as Context, cookies)
         if (customError) return customError
         if (error instanceof InternalError) {
           console.log(`Internal Error`, error?.payload || '')
@@ -182,7 +189,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
           })
         } else if (error instanceof RequestError) {
           let payload = error.payload
-          let headers = new Headers(error?.headers || {})
+          let headers = new Headers({ ...context.set.headers, ...error?.headers })
           if (!headers.has('content-type')) {
             if (typeof error.payload === 'string') headers.set('content-type', 'text/plain')
             else {

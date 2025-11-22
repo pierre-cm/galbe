@@ -681,10 +681,13 @@ export const parseEntry = <T extends STProps>(
   return parsedParams as Static<STObject<T>>
 }
 
-export const responseParser = (response: any, ctx: Context, schema?: STResponse) => {
+export const responseParser = (response: any, ctx: Context, cookies: string[], schema?: STResponse) => {
   const details = {
     status: ctx.set.status || 200,
     headers: new Headers(),
+  }
+  for (const cookie of cookies) {
+    details.headers.append('set-cookie', cookie)
   }
   for (const [key, value] of Object.entries(ctx.set.headers)) {
     if (Array.isArray(value)) {
@@ -762,7 +765,7 @@ const unionize = (b: any, schema: STUnion) => {
   else throw new RequestError({ status: 400, payload: { body: `No matching body schema found` } })
 }
 
-const intersectionize = (b: any, schema: STIntersection) => {
+const intersectionize = (b: any, schema: STIntersection<any>) => {
   let res
   try {
     for (let s of schema.allOf) res = validate(b, s, { parse: true })

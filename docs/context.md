@@ -45,6 +45,19 @@ galbe.get('/test', ctx => console.log(ctx.query))
 { one: "1", two: "2" }
 ```
 
+### cookies
+
+A JavaScript object representing the cookies of the current request.
+
+- **key** (string): Cookie name
+- **value** (string): Cookie value
+
+```js
+galbe.get('/cookies', ctx => console.log(ctx.cookies))
+// Cookie: foo=bar; baz=qux
+{ foo: "bar", baz: "qux" }
+```
+
 ### body
 
 The body payload of the incoming request. The body type is determined based on the following rules:
@@ -65,10 +78,12 @@ The `set` property contains modifiable attributes intended to provide informatio
 
 - **status**: Sets the response status.
 - **headers**: Sets the response headers.
+- **cookie**: Sets a cookie in the response.
 
 ```js
 galbe.get('/example', ctx => {
   ctx.set.status = 418;
+  ctx.set.cookie('foo', 'bar', { path: '/', httpOnly: true });
   return "I don't do coffee";
 })
 ```

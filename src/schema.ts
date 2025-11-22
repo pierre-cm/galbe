@@ -334,15 +334,15 @@ type IntersectionStatic<T extends readonly STSchema[], P extends unknown[]> = T 
       : never
     : never
   : unknown
-export interface STIntersection<T extends NonEmptyArray<STObject | STUnion | STIntersection> = NonEmptyArray<STObject>>
-  extends STSchema {
+// type Intersecs = NonEmptyArray<STObject | STUnion | STIntersection>
+export interface STIntersection<T extends NonEmptyArray<STObject | STUnion | STIntersection<any>>> extends STSchema {
   [Kind]: 'intersection'
   static: IntersectionStatic<T, this['params']>
   props: T[number]['props']
   allOf: T
 }
 
-export function _Intersection<T extends NonEmptyArray<STObject | STUnion | STIntersection>>(
+export function _Intersection<T extends NonEmptyArray<STObject | STUnion | STIntersection<any>>>(
   schemas: [...T],
   options: Options
 ): STIntersection<T> {
@@ -367,7 +367,7 @@ export function _Intersection<T extends NonEmptyArray<STObject | STUnion | STInt
 }
 
 // Stream
-type STStreamable = STByteArray | STString | STMultipartForm | STObject | STUnion | STIntersection
+type STStreamable = STByteArray | STString | STMultipartForm | STObject | STUnion | STIntersection<any>
 export function _Stream<T extends STStreamable>(schema: T): STStream<T> {
   return {
     ...schema,
@@ -451,7 +451,7 @@ export class SchemaType {
     return _Union(schemas, options)
   }
   /** Creates an Intersection Schema Type */
-  public intersection<T extends NonEmptyArray<STObject | STUnion | STIntersection>>(
+  public intersection<T extends NonEmptyArray<STObject | STUnion | STIntersection<any>>>(
     schemas: [...T],
     options: Options = {}
   ): STIntersection<T> {
@@ -482,7 +482,7 @@ export class SchemaType {
     >
     params: unknown[]
   }
-  public stream<T extends STIntersection>(
+  public stream<T extends STIntersection<any>>(
     schema: T
   ): Omit<STStream<T>, 'static'> & {
     static: AsyncGenerator<
@@ -559,8 +559,8 @@ export const schemaToTypeStr = (schema: STSchema): string => {
     let anyOf = (schema as STUnion).anyOf
     type = anyOf.map(s => schemaToTypeStr(s)).join('|')
   } else if (kind === 'intersection') {
-    let allOf = (schema as STIntersection).allOf
-    type = allOf.map(s => schemaToTypeStr(s)).join('&')
+    let allOf = (schema as STIntersection<any>).allOf
+    type = allOf.map((s: STSchema) => schemaToTypeStr(s)).join('&')
   }
 
   // if (schema[Optional]) type = `${type}|undefined`

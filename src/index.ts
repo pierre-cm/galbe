@@ -86,6 +86,7 @@ const galbeMethod = <
     query: {} as Static<STObject<Exclude<(typeof schema)['query'], undefined>>>,
     body: ['get', 'options', 'head'].includes(method) ? null : ({} as unknown as STBodyValue),
     request: {} as Request,
+    cookies: {} as Record<string, string>,
     state: {},
     set: {} as {
       headers: {
@@ -93,6 +94,7 @@ const galbeMethod = <
         [header: string]: string | string[]
       }
       status?: number
+      cookie: (cookie: string | Record<string, string>) => void
     },
   }
   return {
