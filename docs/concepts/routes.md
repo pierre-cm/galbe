@@ -72,7 +72,7 @@ galbe.get(
 
 ## Defining Static Routes
 
-Static routes serve files from the filesystem.
+Static routes serve files from the filesystem. If the target is a directory, it will recursively serve all files within it.
 
 ```ts
 galbe.static(path: string, target: string, options?: StaticEndpointOptions)

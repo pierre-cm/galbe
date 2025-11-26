@@ -10,10 +10,11 @@ Galbe provides a powerful plugin system that allows developers to extend and cus
 type GalbePlugin = {
   name: string
   init?: (config: any, galbe: Galbe) => MaybePromise<void>
-  onFetch?: (context: Context) => MaybePromise<Response | void>
-  onRoute?: (context: Context) => MaybePromise<Response | void>
+  onFetch?: (context: Pick<Context, 'request' | 'set' | 'state'>) => MaybePromise<Response | void>
+  onRoute?: (context: Pick<Context, 'request' | 'set' | 'state' | 'route'>) => MaybePromise<Response | void>
   beforeHandle?: (context: Context) => MaybePromise<Response | void>
   afterHandle?: (response: Response, context: Context) => MaybePromise<Response | void>
+  cli?: (commands: GalbeCLICommand[]) => MaybePromise<GalbeCLICommand[] | void>
 }
 ```
 
@@ -26,12 +27,12 @@ This method is called immediately after the server starts. It receives two argum
 - `galbe`: The Galbe server instance, from which you can retrieve routes using `galbe.router.routes`.
 
 ### onFetch
-This method is executed at the beginning of an incoming request. It receives a `context` object representing the [Request Context](context.md).
+This method is executed at the beginning of an incoming request. It receives a restricted `context` object containing `request`, `set`, and `state`.
 
 It is **preemptable**, meaning that if a response is returned, it will be sent to the client immediately, bypassing further processing.
 
 ### onRoute
-Executed after the router identifies a matching route for the request. It takes a `context` argument and is **preemptable**, meaning it can return an early response.
+Executed after the router identifies a matching route for the request. It takes a restricted `context` argument (same as `onFetch` plus `route`) and is **preemptable**, meaning it can return an early response.
 
 ### beforeHandle
 Runs after request validation but before route hooks and the handler are called. Like the previous lifecycle methods, it is **preemptable**.
@@ -42,6 +43,9 @@ Called after the route handler is executed but before sending the response. It r
 - `context`: The request [Context](context.md).
 
 It is also **preemptable**, meaning any returned response will override the original handler response.
+
+### cli
+This method allows plugins to register custom CLI commands. It receives an array of existing commands and can return a modified array or `void`.
 
 ## Plugin Registration
 

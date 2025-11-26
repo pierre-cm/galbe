@@ -35,6 +35,9 @@ The hostname of the server. Default: `localhost`.
 ### port
 The port number the server will listen on. Default: `3000`.
 
+### reusePort
+Enables or disables the `SO_REUSEPORT` socket option. Default: `false`.
+
 ### basePath
 A base path added as a prefix to all routes.
 
@@ -55,6 +58,12 @@ Enables or disables _request_ schema validation (see [Request Schema Definition]
 
 ### responseValidator.enabled
 Enables or disables _response_ schema validation (see [Response Schema Definition](schemas.md#response)). Default: `true`.
+
+### router.cacheEnabled
+Enables or disables route caching (see [Router Caching](router.md#caching)). Default: `false`.
+
+### server
+Allows passing custom options to the underlying [Bun.serve](https://bun.sh/docs/api/http#bun-serve) method.
 
 ## Config Type Safety
 

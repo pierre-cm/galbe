@@ -33,7 +33,7 @@ const strSchema = $T.string(options)
 Schema Type matching `number` values.
 
 ```ts
-const numSchema = $T.number(options)
+const numSchema = $T.number({ min: 0, max: 10, exclusiveMin: 0, exclusiveMax: 10 })
 ```
 
 #### integer
@@ -41,7 +41,7 @@ const numSchema = $T.number(options)
 Schema Type matching integer `number` values.
 
 ```ts
-const intSchema = $T.integer(options)
+const intSchema = $T.integer({ min: 0, max: 10, exclusiveMin: 0, exclusiveMax: 10 })
 ```
 
 #### null
@@ -65,7 +65,7 @@ const anySchema = $T.any()
 Schema Type matching `array` values.
 
 ```ts
-const arraySchema = $T.array($T.any(), options)
+const arraySchema = $T.array($T.any(), { minItems: 1, maxItems: 5, unique: true })
 ```
 
 #### optional
@@ -98,6 +98,14 @@ Creates a union of Schema Types.
 
 ```ts
 const unionSchema = $T.union([$T.string(), $T.number()])
+```
+
+#### intersection
+
+Creates an intersection of Schema Types.
+
+```ts
+const intersectionSchema = $T.intersection([$T.object({ a: $T.string() }), $T.object({ b: $T.number() })])
 ```
 
 ## Request Schema Definition

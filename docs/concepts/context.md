@@ -52,6 +52,9 @@ A JavaScript object representing the cookies of the current request.
 - **key** (string): Cookie name
 - **value** (string): Cookie value
 
+> [!NOTE]
+> Cookies are parsed from the `Cookie` header.
+
 ```js
 galbe.get('/cookies', ctx => console.log(ctx.cookies))
 // Cookie: foo=bar; baz=qux
