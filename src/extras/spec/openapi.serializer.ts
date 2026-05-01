@@ -52,8 +52,10 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     let maximum = schema?.max
     let exclusiveMinimum = schema?.exclusiveMin
     let exclusiveMaximum = schema?.exclusiveMax
-    let minItems = schema?.minItems
-    let maxItems = schema?.maxItems
+    // ArrayOptions exposes minLength/maxLength (matching the schema-builder API);
+    // OpenAPI calls them minItems/maxItems.
+    let minItems = schema?.[Kind] === 'array' ? schema?.minLength : undefined
+    let maxItems = schema?.[Kind] === 'array' ? schema?.maxLength : undefined
     let uniqueItems = schema?.unique
 
     if (components.schemas && (schema.id as string) in components.schemas) {
@@ -62,9 +64,9 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     }
 
     if (kind === 'null') {
-      s = {
-        anyOf: ['null'],
-      }
+      // OpenAPI 3.0 has no first-class null type; the canonical workaround
+      // is `nullable: true` with `enum: [null]` to mean "must be null".
+      s = { nullable: true, enum: [null] }
     } else if (kind === 'boolean') s = { type: 'boolean' }
     else if (kind === 'byteArray') s = { type: 'string', format: 'binary' }
     else if (kind === 'number')
@@ -260,7 +262,8 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
                 const scheme: OpenAPIV3.HttpSecurityScheme = { type: 'http', scheme: 'bearer' }
                 if (typeof v.format === 'string') scheme.bearerFormat = v.format
                 if (typeof v.description === 'string') scheme.description = v.description
-                components.securitySchemes = { bearerAuth: scheme }
+                if (!components.securitySchemes) components.securitySchemes = {}
+                components.securitySchemes.bearerAuth = scheme
                 return null
               }
             }

@@ -43,7 +43,7 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
     if (Array.isArray(elt)) throw `Expected an object, not an array`
     const err: ValidationError = {}
     Object.entries(schema.props as STProps).forEach(([k, s]) => {
-      if (!(k in elt)) {
+      if (elt === null || !(k in elt)) {
         if (!s?.[Optional]) err[k] = 'Required'
         return
       }
@@ -100,8 +100,7 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
 }
 
 export const validateResponse = (response: any, schema: STResponse, status: number) => {
-  if (!(status in schema)) return
-  const s = schema?.[status] || schema?.['default']
+  const s = schema?.[status] ?? schema?.['default']
   if (!s) return
   if (response instanceof ReadableStream) {
     if (!s[Stream]) throw new InternalError(`Expected ${s[Kind]} response, but got ReadableStream`)
@@ -133,10 +132,10 @@ const schemaValidation = (value: any, schema: STSchema) => {
     if (schema.pattern !== undefined && !(value as string).match(schema.pattern))
       errors.push(`Does not match pattern ${schema.pattern}`)
   } else if (schema[Kind] === 'array') {
-    if (schema.minItems !== undefined && (value as any[]).length < schema.minItems)
-      errors.push(`Must contain at least ${schema.minItems} item${schema.minItems > 1 ? 's' : ''}`)
-    if (schema.maxItems !== undefined && (value as any[]).length > schema.maxItems)
-      errors.push(`Must contain at most (${schema.maxItems} item${schema.maxItems > 1 ? 's' : ''}`)
+    if (schema.minLength !== undefined && (value as any[]).length < schema.minLength)
+      errors.push(`Must contain at least ${schema.minLength} item${schema.minLength > 1 ? 's' : ''}`)
+    if (schema.maxLength !== undefined && (value as any[]).length > schema.maxLength)
+      errors.push(`Must contain at most ${schema.maxLength} item${schema.maxLength > 1 ? 's' : ''}`)
     if (schema.unique === true && new Set(value as any[]).size !== (value as any[]).length)
       errors.push(`Has duplicate values`)
   }

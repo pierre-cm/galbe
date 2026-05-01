@@ -52,15 +52,15 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         state: {},
         cookies: readCookies(req.headers.get('cookie')),
       } as MakeOptional<Context, 'headers' | 'params' | 'query' | 'body'>
-      for (const p of pluginsCb.onFetch) {
-        //@ts-ignore
-        const r = await p.onFetch(context)
-        if (r) return r
-      }
       const url = new URL(req.url)
       let route: Route
       let response: any = ''
       try {
+        for (const p of pluginsCb.onFetch) {
+          //@ts-ignore
+          const r = await p.onFetch(context)
+          if (r) return r
+        }
         // find route
         try {
           route = router.find(req.method.toLowerCase() as Method, url.pathname)
@@ -158,10 +158,10 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
             context.set.status = response instanceof Response ? response.status : context.set.status || 200
           },
         })
-        if (callChain.length > 1) {
-          let r = await callChain[0].call()
-          if (r) response = r
-        } else response = await handlerWrapper(context as Context)
+        const r = await callChain[0].call()
+        if (r) response = r
+        if (context.set.status === undefined)
+          context.set.status = response instanceof Response ? response.status : 200
 
         const parsedResponse = responseParser(response, context as Context, cookies, schema.response)
 

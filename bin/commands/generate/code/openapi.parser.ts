@@ -207,10 +207,12 @@ const parseOapiSchema = (
       resp = `$T.string(${hasOptions ? serialize(options) : ''})`
     }
   } else if (os.type === 'array') {
-    let minItems = os.minItems
-    let maxItems = os.maxItems
+    // Galbe's ArrayOptions uses minLength/maxLength/unique (mirroring the
+    // builder API), not OpenAPI's minItems/maxItems/uniqueItems names.
+    let minLength = os.minItems
+    let maxLength = os.maxItems
     let unique = os.uniqueItems
-    options = { ...options, minItems, maxItems, unique }
+    options = { ...options, minLength, maxLength, unique }
     hasOptions = Object.values(options).some(v => v !== undefined)
     optArg = hasOptions ? serialize(options) : ''
     resp = `$T.array(${parseOapiSchema(os?.items)}${optArg ? `, ${optArg}` : ''})`

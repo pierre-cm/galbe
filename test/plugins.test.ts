@@ -236,4 +236,55 @@ describe('plugins', async () => {
     expect(resp.status).toBe(200)
     expect(await resp.json()).toEqual({ foo: 'bar' })
   })
+
+  test('afterHandle sees context.set.status set by handler when there are no hooks', async () => {
+    // Previously, the no-hooks code path skipped the auto-status assignment
+    // so afterHandle plugins observed `context.set.status === undefined` even
+    // when the handler returned a Response with a specific status.
+    galbe.get('/plugin/status', () => new Response('teapot', { status: 418 }))
+
+    let observedStatus: number | undefined
+    const plugin: GalbePlugin = {
+      name: 'dev.galbe.test.init',
+      afterHandle: mock((_resp: Response, ctx: Context) => {
+        observedStatus = ctx.set.status
+      })
+    }
+
+    await galbe.use(plugin)
+    await galbe.listen(port)
+
+    const resp = await fetch(`http://localhost:${port}/plugin/status`)
+    expect(plugin.afterHandle).toHaveBeenCalledTimes(1)
+    expect(observedStatus).toBe(418)
+    expect(resp.status).toBe(418)
+  })
+
+  test('plugin onFetch errors flow through onError instead of bypassing user error handling', async () => {
+    // Previously a throw inside onFetch ran outside the request try/catch and
+    // hit Bun's top-level error handler, returning a generic 500 with no
+    // chance for `onError` to intervene.
+    const plugin: GalbePlugin = {
+      name: 'dev.galbe.test.init',
+      onFetch: mock(() => {
+        throw new Error('boom')
+      })
+    }
+    let onErrorCalled = 0
+    galbe.onError(() => {
+      onErrorCalled++
+      return new Response('handled', { status: 503 })
+    })
+
+    await galbe.use(plugin)
+    await galbe.listen(port)
+
+    const resp = await fetch(`http://localhost:${port}/plugin`)
+    expect(plugin.onFetch).toHaveBeenCalledTimes(1)
+    expect(resp.status).toBe(503)
+    expect(await resp.text()).toBe('handled')
+    expect(onErrorCalled).toBe(1)
+
+    galbe.errorCb = []
+  })
 })

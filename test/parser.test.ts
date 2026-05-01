@@ -1356,3 +1356,52 @@ describe('parser', () => {
     )
   })
 })
+
+describe('parser unit', () => {
+  test('inferBodyType strips parameters from JSON content-type', async () => {
+    const { inferBodyType } = await import('../src/util')
+    expect(inferBodyType('application/json')).toBe('json')
+    expect(inferBodyType('application/json; charset=utf-8')).toBe('json')
+    expect(inferBodyType('application/json;charset=utf-8')).toBe('json')
+  })
+
+  test('inferBodyType strips parameters from octet-stream content-type', async () => {
+    const { inferBodyType } = await import('../src/util')
+    expect(inferBodyType('application/octet-stream')).toBe('byteArray')
+    expect(inferBodyType('application/octet-stream; charset=binary')).toBe('byteArray')
+  })
+
+  test('requestPathParser URI-decodes path params', async () => {
+    const { requestPathParser } = await import('../src/parser')
+    const params = requestPathParser('/users/hello%20world', '/users/:name')
+    expect(params.name).toBe('hello world')
+  })
+
+  test('requestPathParser leaves malformed escapes alone', async () => {
+    const { requestPathParser } = await import('../src/parser')
+    // %ZZ is invalid percent-encoding; decodeURIComponent throws — we keep raw.
+    const params = requestPathParser('/users/%ZZ', '/users/:name')
+    expect(params.name).toBe('%ZZ')
+  })
+
+  test('paramParser accepts decimal-zero strings as integers', async () => {
+    const { parseEntry } = await import('../src/parser')
+    // "1.0" is the integer 1; the parser used to reject it via a strict
+    // String(parsed) === String(value) check.
+    const out = parseEntry({ p: '1.0' }, { p: $T.integer() })
+    expect(out.p).toBe(1)
+  })
+
+  test('paramParser accepts exponent notation as numbers', async () => {
+    const { parseEntry } = await import('../src/parser')
+    const out = parseEntry({ p: '1e2' }, { p: $T.number() })
+    expect(out.p).toBe(100)
+  })
+
+  test('paramParser still rejects non-numeric strings', async () => {
+    const { parseEntry } = await import('../src/parser')
+    expect(() => parseEntry({ p: 'abc' }, { p: $T.integer() })).toThrow()
+    expect(() => parseEntry({ p: '1.5' }, { p: $T.integer() })).toThrow()
+    expect(() => parseEntry({ p: '' }, { p: $T.number() })).toThrow()
+  })
+})

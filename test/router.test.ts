@@ -256,6 +256,33 @@ describe('router', () => {
     expect(route2.path).toBe('/:p/c')
   })
 
+  test('wildcard route matches parent path with no remaining segment', async () => {
+    // /a/* should match /a itself, not just /a/<something>.
+    const galbe = new Galbe()
+    const router = galbe.router
+
+    const handler = () => 'wild'
+    galbe.get('/a/*', handler)
+
+    const r = router.find('get', '/a')
+    expect(r.path).toBe('/a/*')
+    expect(r.handler).toBe(handler)
+  })
+
+  test('static-route cache is hit on subsequent finds', async () => {
+    // The cache key on add must align with the key used on find: lowercase
+    // method, full path including basePath. Otherwise the pre-cache is dead.
+    const galbe = new Galbe({ basePath: '/v1', router: { cacheEnabled: true } })
+    const router = galbe.router
+
+    galbe.get('/health', () => 'ok')
+
+    expect((router as any).cachedRoutes.has('[get]/v1/health')).toBe(true)
+
+    const r = router.find('get', '/v1/health')
+    expect(r.path).toBe('/v1/health')
+  })
+
   test('backtracking failure case', async () => {
     const galbe = new Galbe()
     const router = galbe.router

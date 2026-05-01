@@ -27,6 +27,14 @@ type _num = Expect<Extends<Static<typeof num>, number>>
 type _int = Expect<Extends<Static<typeof int>, number>>
 type _str = Expect<Extends<Static<typeof str>, string>>
 type _literal = Expect<Extends<Static<typeof literal>, 'foo'>>
+
+// String schema must accept StringOptions (pattern/format/minLength/maxLength),
+// not NumberOptions. Regression for the `STString extends NumberOptions` typo.
+const str_with_pattern = $T.string({ pattern: /^foo/, format: 'email', minLength: 1, maxLength: 10 })
+type _str_pattern = Expect<Extends<typeof str_with_pattern.pattern, RegExp | undefined>>
+type _str_format = Expect<Extends<typeof str_with_pattern.format, string | undefined>>
+type _str_minLen = Expect<Extends<typeof str_with_pattern.minLength, number | undefined>>
+type _str_maxLen = Expect<Extends<typeof str_with_pattern.maxLength, number | undefined>>
 type _ba = Expect<Extends<Static<typeof ba>, Uint8Array<ArrayBufferLike>>>
 type _obj = Expect<Extends<Static<typeof obj>, Record<string | number, any>>>
 

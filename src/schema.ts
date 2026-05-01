@@ -139,7 +139,7 @@ export function _Bool(options: Options = {}): STBoolean {
   } as unknown as STBoolean
 }
 // String
-export interface STString extends STSchema, NumberOptions {
+export interface STString extends STSchema, StringOptions {
   [Kind]: 'string'
   static: string
 }
@@ -454,7 +454,7 @@ export class SchemaType {
     return _MultipartForm(properties, options)
   }
   /** Creates an Array Schema Type */
-  public array<T extends STSchema>(schema?: T, options: Options = {}): STArray<T> {
+  public array<T extends STSchema>(schema?: T, options: ArrayOptions = {}): STArray<T> {
     return _Array(schema, options)
   }
   /** Creates an Union Schema Type */

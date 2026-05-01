@@ -6,6 +6,10 @@ const ROUTE_REGEX = /^(\/(\*|:?\d+|:?\w+|:?[\w\d.][\w-.]+[\w\d]))*\/?$/
 const walk = (path: string[], node: RouteNode, index: number = 0): RouteNode => {
   if (index === path.length - 1) {
     if (node.routes && !!Object.keys(node.routes).length) return node
+    // /a/* should match /a — fall back to a wildcard child if the node has no
+    // routes of its own.
+    const wc = node.children?.['*']
+    if (wc?.routes && !!Object.keys(wc.routes).length) return wc
     throw new NotFoundError()
   }
 
@@ -63,8 +67,8 @@ export class GalbeRouter {
     route.path = route?.path?.[0] === '/' ? route.path : `/${route.path}`
     if (!route.path.match(ROUTE_REGEX)) throw new SyntaxError(`${route.path} is not a valid route path.`)
     const isStatic = !route.path.match(/(:[\w\d-]+|\*)/)
-    if (isStatic) this.cachedRoutes.set(`[${route.method.toUpperCase()}]${route.path}`, route)
     route.path = `${this.prefix || ''}${route.path}`
+    if (isStatic) this.cachedRoutes.set(`[${route.method}]${route.path}`, route)
     let path = route.path.replace(/^\/+|\/+$/g, '').split('/')
     if (path[0] === '') path.shift()
     let r = this.routes

@@ -138,28 +138,28 @@ export const HttpStatus = {
   511: 'Network Authentication Required',
 }
 
-const BA_HEADER = 'application/octet-stream'
-const JSON_HEADER = 'application/json'
+const BA_HEADER_RX = /^application\/octet-stream\b/
+const JSON_HEADER_RX = /^application\/json\b/
 const TXT_HEADER_RX = /^text\//
-const FORM_HEADER_RX = /^application\/x-www-form-urlencoded/
-const MP_HEADER_RX = /^multipart\/form-data/
+const FORM_HEADER_RX = /^application\/x-www-form-urlencoded\b/
+const MP_HEADER_RX = /^multipart\/form-data\b/
 
 export const inferBodyType = (contentType?: string | null): STBodyType | undefined => {
   if (!contentType) return 'default'
-  if (contentType === JSON_HEADER) return 'json'
+  if (JSON_HEADER_RX.test(contentType)) return 'json'
   if (TXT_HEADER_RX.test(contentType)) return 'text'
   if (FORM_HEADER_RX.test(contentType)) return 'urlForm'
   if (MP_HEADER_RX.test(contentType)) return 'multipart'
-  if (contentType === BA_HEADER) return 'byteArray'
+  if (BA_HEADER_RX.test(contentType)) return 'byteArray'
   return 'default'
 }
 
 export const inferContentType = (bodyType?: string | undefined): string => {
   if (!bodyType) return 'default'
-  if (bodyType === 'json') return JSON_HEADER
+  if (bodyType === 'json') return 'application/json'
   if (bodyType === 'text') return 'text/plain'
   if (bodyType === 'urlForm') return 'application/x-www-form-urlencoded'
   if (bodyType === 'multipart') return 'multipart/form-data'
-  if (bodyType === 'byteArray') return BA_HEADER
+  if (bodyType === 'byteArray') return 'application/octet-stream'
   return 'default'
 }

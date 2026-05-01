@@ -70,7 +70,7 @@ export const requestBodyParser = async (
         return await streamToUrlForm(body)
       } else if (contentType === 'multipart') {
         if (body === null) return {}
-        const boundary = headers?.['content-type'].match(/boundary\="?([^"]*)"?;?.*$/)?.[1] || ''
+        const boundary = headers?.['content-type']?.match(/boundary\="?([^"]*)"?;?.*$/)?.[1] || ''
         return await streamToMultipartForm(body, boundary)
       } else return body === null ? null : rsToAsyncIterator(body)
     } else {
@@ -175,7 +175,7 @@ export const requestBodyParser = async (
                 },
               })
             : {}
-        const boundary = headers?.['content-type'].match(/boundary\="?([^"]*)"?;?.*$/)?.[1] || ''
+        const boundary = headers?.['content-type']?.match(/boundary\="?([^"]*)"?;?.*$/)?.[1] || ''
         if (kind === 'union') {
           let mp = await streamToMultipartForm(body, boundary)
           return unionize(mp, schema)
@@ -567,15 +567,15 @@ const paramParser = (
       if (value === 'false') return false
       else throw `Not a valid boolean. Should be 'true' or 'false'`
     } else if (type[Kind] === 'integer') {
-      if (value === null || value === undefined) throw `Not a valid integer`
-      const parsedValue = parseInt(value, 10)
-      if (isNaN(parsedValue) || String(parsedValue) !== String(value)) throw `Not a valid integer`
+      if (value === null || value === undefined || value === '') throw `Not a valid integer`
+      const parsedValue = Number(value)
+      if (!Number.isFinite(parsedValue) || !Number.isInteger(parsedValue)) throw `Not a valid integer`
       validate(parsedValue, type)
       return parsedValue
     } else if (type[Kind] === 'number') {
-      if (value === null || value === undefined) throw `Not a valid number`
+      if (value === null || value === undefined || value === '') throw `Not a valid number`
       const parsedValue = Number(value)
-      if (isNaN(parsedValue) || String(parsedValue) !== String(value)) throw `Not a valid number`
+      if (!Number.isFinite(parsedValue)) throw `Not a valid number`
       validate(parsedValue, type)
       return parsedValue
     } else if (type[Kind] === 'string') {
@@ -639,7 +639,12 @@ export const requestPathParser = (input: string, path: string) => {
         }
         name += c
       }
-      params[name] = pInput[idx]
+      const raw = pInput[idx]
+      try {
+        params[name] = raw === undefined ? raw : decodeURIComponent(raw)
+      } catch {
+        params[name] = raw
+      }
     }
   }
   return params
@@ -747,9 +752,9 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
 const unionize = (b: any, schema: STUnion) => {
   let res
   let error
-  const discirminants = schema.anyOf.reduce(
+  const discriminants = schema.anyOf.reduce(
     (acc, obj) =>
-      acc.filter(k => obj?.props && k in obj.props && obj.props[k]?.[Kind] === 'literal' && !obj.props[k]?.Optional),
+      acc.filter(k => obj?.props && k in obj.props && obj.props[k]?.[Kind] === 'literal' && !obj.props[k]?.[Optional]),
     Object.keys(schema.anyOf[0]?.props || {})
   )
   for (let s of schema.anyOf) {
@@ -757,7 +762,7 @@ const unionize = (b: any, schema: STUnion) => {
       res = validate(b, s, { parse: true })
       if (res !== undefined) break
     } catch (err: any) {
-      if (discirminants.every(d => !err?.[d]?.startsWith('Not a valid value'))) error = err
+      if (discriminants.every(d => !err?.[d]?.startsWith('Not a valid value'))) error = err
     }
   }
   if (res !== undefined) return res
