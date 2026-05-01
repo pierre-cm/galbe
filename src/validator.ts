@@ -86,7 +86,7 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
     // @ts-ignore
     if (!valid) throw `Could not be parsed to any of [${union.map(u => u?.value ?? u[Kind]).join(', ')}]`
   } else if (schema[Kind] === 'intersection') {
-    const intersection = Object.values((schema as STIntersection).allOf)
+    const intersection = Object.values((schema as STIntersection<any>).allOf)
     for (const s of intersection) validate(elt, s as STSchema, opt)
   } else if (schema[Kind] === 'any') {
   } else {

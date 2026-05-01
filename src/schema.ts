@@ -7,7 +7,17 @@ export interface Options {
   title?: string
   description?: string
   default?: any
+  example?: any
+  /**
+   * On a response schema: a map of named examples (OpenAPI content-level
+   * `examples`). On any other schema: a single example value.
+   */
   examples?: any
+  /**
+   * Response-only: declares response headers. Each value is a Galbe schema
+   * describing the header's value type.
+   */
+  headers?: Record<string, any>
 }
 export interface ByteArrayOptions extends Options {
   minLength?: number
@@ -17,6 +27,7 @@ export interface StringOptions extends Options {
   minLength?: number
   maxLength?: number
   pattern?: RegExp
+  format?: string
 }
 export interface NumberOptions extends Options {
   min?: number
@@ -465,8 +476,8 @@ export class SchemaType {
       T['props'] extends undefined
         ? { [k: string]: Static<STPropsValue> }
         : T['props'] extends STProps
-        ? { [K in keyof T['props']]: [K, Static<T['props'][K]>] }[keyof T['props']]
-        : never
+          ? { [K in keyof T['props']]: [K, Static<T['props'][K]>] }[keyof T['props']]
+          : never
     >
     params: unknown[]
   }
@@ -489,10 +500,10 @@ export class SchemaType {
       T['props'] extends undefined
         ? never
         : T['props'] extends STProps
-        ? Entries<{
-            [K in keyof Static<T>]: Static<T>[K]
-          }>
-        : never
+          ? Entries<{
+              [K in keyof Static<T>]: Static<T>[K]
+            }>
+          : never
     >
     params: unknown[]
   }

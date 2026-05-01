@@ -1,0 +1,912 @@
+openapi: 3.0.3
+
+info:
+  title: Opeco Module Registry API
+  version: 1.0.0-draft
+  description: |
+    Publish, browse, and download Opeco modules.
+
+    The Opeco module registry is a custom REST + JSON service that hosts
+    versioned Opeco modules (TypeScript / Svelte packages targeting the Opeco
+    desktop app). Every module is published as a `.tar.gz` artifact containing
+    `dist/index.mjs`, `dist/opeco.manifest.json`, a subset of `package.json`,
+    `icon.*`, and `README.md`. Each version is immutable; mistakes are
+    yanked, not deleted (admin-only hard delete is available as a
+    break-glass operation).
+
+    Authoritative module identifiers are `@scope/name` strings (npm-style).
+    Throughout this spec the scope and name appear as bare path segments —
+    `/v1/modules/{scope}/{name}` resolves to the public name `@scope/name`.
+
+    See `docs/design/module-registry.md` for the full design rationale,
+    phasing, and infrastructure plan.
+  contact:
+    name: Opeco
+    url: https://opeco.io
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:3001
+    description: Local dev (`bun dev`, AUTH_MODE=none)
+  - url: https://store.opeco.io
+    description: Production
+
+tags:
+  - name: System
+    description: Health and metadata endpoints.
+  - name: Modules
+    description: Public read endpoints for module catalogue browsing.
+  - name: Search
+    description: Catalogue search.
+  - name: Artifacts
+    description: Download endpoints for published artifacts and READMEs.
+  - name: Publish
+    description: Authenticated publishing flow.
+  - name: Owners
+    description: Co-owner management for a module.
+  - name: Advisories
+    description: Security advisories feed.
+  - name: Admin
+    description: Admin-only, audit-logged operations.
+
+security:
+  - {} # most endpoints are public (no auth)
+  - bearerAuth: [] # write endpoints require a JWT
+
+paths:
+
+  # ── System ─────────────────────────────────────────────────────────
+
+  /health:
+    get:
+      tags: [ System ]
+      summary: Liveness/readiness probe.
+      description: |
+        Returns `200` with a small JSON payload describing the running
+        configuration. Intended for Kubernetes liveness/readiness probes
+        and Docker healthchecks. Always unauthenticated.
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: Service is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+                storage: sqlite
+                authMode: none
+                env: development
+
+  # ── Search ─────────────────────────────────────────────────────────
+
+  /v1/search:
+    get:
+      tags: [ Search, Modules ]
+      summary: Search the module catalogue.
+      description: |
+        Full-text search over module name, description, author, and tags.
+        Backed by SQLite FTS5 in the default adapter and Postgres
+        `tsvector` in the production adapter. Results are paginated and
+        ordered by descending relevance.
+
+        `tag` filters down to a single tag (use one of the curated category
+        labels here once they are introduced). Yanked versions are not
+        surfaced — but a module whose only versions have all been yanked
+        will still appear with its latest yanked version's metadata for
+        UI honesty.
+      operationId: searchModules
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/SearchTag"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated search result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistrySearchResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # ── Public module reads ────────────────────────────────────────────
+
+  /v1/modules/{scope}/{name}:
+    get:
+      tags: [ Modules ]
+      summary: Get module metadata and full version list.
+      description: |
+        Returns the canonical `RegistryModuleDetail` for `@{scope}/{name}`,
+        including the list of every published version (yanked included),
+        and the metadata of the *latest non-yanked* version. If every
+        version has been yanked, the metadata of the highest-precedence
+        yanked version is returned and the response carries
+        `X-All-Versions-Yanked: true`.
+      operationId: getModule
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Scope"
+        - $ref: "#/components/parameters/Name"
+      responses:
+        "200":
+          description: Module exists.
+          headers:
+            X-All-Versions-Yanked:
+              schema: { type: boolean }
+              description: Present and `true` when no live version remains.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistryModuleDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/modules/{scope}/{name}/{version}:
+    parameters:
+      - $ref: "#/components/parameters/Scope"
+      - $ref: "#/components/parameters/Name"
+      - $ref: "#/components/parameters/Version"
+    get:
+      tags: [ Modules ]
+      summary: Get a single version's manifest and integrity metadata.
+      description: |
+        Returns the parsed manifest, integrity (sha256) hash, byte size of
+        the artifact, the `yanked` flag, and the publish timestamp. This is
+        the endpoint a client consults before downloading an artifact and
+        is the basis for lockfile pinning (see Phase 5 in the design plan).
+      operationId: getModuleVersion
+      security: []
+      responses:
+        "200":
+          description: Version exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModuleVersionDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [ Admin ]
+      summary: Hard-delete a version (break-glass).
+      description: |
+        Admin-only. Audit-logged. Deletes the metadata row *and* the blob.
+        Yank-not-delete is the default policy for compromise response;
+        this endpoint exists for legal/abuse cases (DMCA, illegal content,
+        leaked secrets) where the artifact must actually disappear.
+
+        Clients pinning a sha256 in their lockfile will fail closed on the
+        next install of this version, which is the intended behaviour.
+      operationId: hardDeleteVersion
+      security:
+        - bearerAuth: [ admin ]
+      parameters:
+        - in: header
+          name: X-Reason
+          required: true
+          schema: { type: string, minLength: 1 }
+          description: Required free-form justification — written to the audit log.
+      responses:
+        "204":
+          description: Version deleted.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/modules/{scope}/{name}/{version}/artifact:
+    get:
+      tags: [ Artifacts ]
+      summary: Download the artifact tarball.
+      description: |
+        Streams the `.tar.gz` artifact for the given version. The body is
+        immutable for the (scope, name, version) triple — once published,
+        the bytes never change. The response carries:
+
+        - `Content-Type: application/gzip`
+        - `ETag: "<sha256>"` (strong validator; equal to the integrity hash)
+        - `Content-Length` and `Content-Disposition: attachment; filename=...`
+        - `Cache-Control: public, max-age=31536000, immutable`
+        - `X-Yanked: true` when the version has been yanked (still served so
+          installed clients can revalidate; new installs should refuse)
+
+        Supports `If-None-Match` for `304 Not Modified` round-trips.
+      operationId: getModuleArtifact
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Scope"
+        - $ref: "#/components/parameters/Name"
+        - $ref: "#/components/parameters/Version"
+        - in: header
+          name: If-None-Match
+          schema: { type: string }
+          description: ETag (sha256) the client already has.
+      responses:
+        "200":
+          description: Artifact bytes.
+          headers:
+            ETag: { schema: { type: string }, required: true }
+            Content-Length: { schema: { type: integer } }
+            Content-Disposition: { schema: { type: string } }
+            Cache-Control: { schema: { type: string } }
+            X-Yanked: { schema: { type: boolean } }
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: Not modified; client's ETag matches.
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/modules/{scope}/{name}/readme:
+    get:
+      tags: [ Modules ]
+      summary: Fetch the rendered README of the latest non-yanked version.
+      description: |
+        Returns the rendered README (HTML) of the module's latest non-yanked
+        version. Use the `version` query parameter to pin to a specific
+        version. The renderer sanitises HTML and rewrites relative links to
+        the module's repository when one is set.
+      operationId: getModuleReadme
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Scope"
+        - $ref: "#/components/parameters/Name"
+        - in: query
+          name: version
+          schema:
+            $ref: "#/components/schemas/Semver"
+          description: Specific version. Defaults to latest non-yanked.
+      responses:
+        "200":
+          description: |
+            Rendered README. `text/markdown` is also available via
+            content-negotiation (`Accept: text/markdown`).
+          content:
+            text/html:
+              schema: { type: string }
+            text/markdown:
+              schema: { type: string }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Publish ────────────────────────────────────────────────────────
+
+  /v1/publish:
+    post:
+      tags: [ Publish ]
+      summary: Publish a new version of a module.
+      description: |
+        Uploads a single `.tar.gz` artifact and registers a new (scope,
+        name, version) tuple in one shot. The server:
+
+        1. Streams the upload to a temporary location while computing sha256.
+        2. Extracts and validates `dist/opeco.manifest.json` against the
+           manifest schema.
+        3. Asserts the manifest's `name` matches `@{scope}/{name}`, the
+           `version` is a valid semver, and the (scope, name, version)
+           triple does not already exist (immutability).
+        4. Asserts the authenticated subject is an owner of the module
+           (or the module is unclaimed and this is a first publish, which
+           grants ownership to the publisher).
+        5. Moves the artifact into content-addressed blob storage, indexes
+           the latest non-yanked version for search, and returns the
+           created version's metadata.
+
+        The OAuth2 access token must include the `publish` scope. First
+        publishes additionally require the `claim` scope.
+      operationId: publishModule
+      security:
+        - bearerAuth: [ publish ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [ artifact ]
+              properties:
+                artifact:
+                  type: string
+                  format: binary
+                  description: The `.tar.gz` artifact bytes.
+                expectedIntegrity:
+                  type: string
+                  pattern: "^[0-9a-f]{64}$"
+                  description: |
+                    Optional client-computed sha256. If provided and the
+                    server's computed hash differs, the request fails with
+                    `409 integrity_mismatch`.
+      responses:
+        "201":
+          description: Version published.
+          headers:
+            Location:
+              schema: { type: string }
+              description: Canonical URL of the created version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModuleVersionDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Version already exists, or integrity mismatch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                versionExists:
+                  value:
+                    error: version_exists
+                    message: "@acme/widget@1.2.3 has already been published"
+                integrityMismatch:
+                  value:
+                    error: integrity_mismatch
+                    message: "expected sha256 deadbeef..., computed cafebabe..."
+        "413":
+          description: Artifact exceeds the configured size limit.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: Manifest validation failed.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Error"
+                  - type: object
+                    properties:
+                      details:
+                        type: array
+                        items:
+                          type: object
+                          required: [ path, message ]
+                          properties:
+                            path: { type: string }
+                            message: { type: string }
+
+  # ── Yank ───────────────────────────────────────────────────────────
+
+  /v1/modules/{scope}/{name}/{version}/yank:
+    post:
+      tags: [ Publish ]
+      summary: Yank or un-yank a published version.
+      description: |
+        Flips the `yanked` flag on a single version. Owners only. Yanking
+        hides the version from search and `getModule`'s "latest" selection,
+        but the artifact remains downloadable so installed clients can
+        continue to function. Pass `{ "yanked": false }` to un-yank a
+        previously yanked version.
+      operationId: yankModuleVersion
+      security:
+        - bearerAuth: [ publish ]
+      parameters:
+        - $ref: "#/components/parameters/Scope"
+        - $ref: "#/components/parameters/Name"
+        - $ref: "#/components/parameters/Version"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ yanked ]
+              properties:
+                yanked:
+                  type: boolean
+                reason:
+                  type: string
+                  description: Free-form reason; surfaced in advisories if relevant.
+      responses:
+        "200":
+          description: Yank state updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModuleVersionDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Owners ─────────────────────────────────────────────────────────
+
+  /v1/modules/{scope}/{name}/owners:
+    get:
+      tags: [ Owners ]
+      summary: List owners of a module.
+      description: |
+        Returns the set of identities (Kratos identity IDs + their public
+        usernames) that have ownership over the module. Public — owners are
+        not secret, and surfacing them helps users understand who they are
+        installing from.
+      operationId: listOwners
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Scope"
+        - $ref: "#/components/parameters/Name"
+      responses:
+        "200":
+          description: Owner set.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ owners ]
+                properties:
+                  owners:
+                    type: array
+                    items: { $ref: "#/components/schemas/Owner" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [ Owners ]
+      summary: Add or remove a co-owner.
+      description: |
+        Owners-only. Adding requires the target identity to already exist
+        in the auth platform. Removing yourself is allowed only when at
+        least one other owner remains; removing the last owner is rejected
+        with `409 last_owner` and must go through admin transfer.
+      operationId: manageOwners
+      security:
+        - bearerAuth: [ publish ]
+      parameters:
+        - $ref: "#/components/parameters/Scope"
+        - $ref: "#/components/parameters/Name"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ action, username ]
+              properties:
+                action:
+                  type: string
+                  enum: [ add, remove ]
+                username:
+                  type: string
+                  description: Public username of the identity to add or remove.
+      responses:
+        "200":
+          description: Updated owner set.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ owners ]
+                properties:
+                  owners:
+                    type: array
+                    items: { $ref: "#/components/schemas/Owner" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Refused — e.g., last owner cannot remove themselves.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  # ── Advisories ─────────────────────────────────────────────────────
+
+  /v1/advisories:
+    get:
+      tags: [ Advisories ]
+      summary: List security advisories.
+      description: |
+        Returns advisories newest-first. Use `since` (RFC 3339 timestamp)
+        for incremental polling — clients should persist the latest
+        `publishedAt` they have seen and pass it on the next request.
+      operationId: listAdvisories
+      security: []
+      parameters:
+        - in: query
+          name: since
+          schema:
+            type: string
+            format: date-time
+          description: Only return advisories published strictly after this time.
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated advisories.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdvisoryList"
+    post:
+      tags: [ Advisories, Admin ]
+      summary: Publish a new advisory.
+      description: |
+        Admin-only. Audit-logged. The advisory is broadcast on the next
+        client poll and surfaced in the desktop app's dashboard.
+      operationId: createAdvisory
+      security:
+        - bearerAuth: [ admin ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdvisoryInput" }
+      responses:
+        "201":
+          description: Advisory created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Advisory" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        OAuth2 JWT access token issued by Ory Hydra. Validated against the
+        Hydra JWKS URL configured at the registry (no per-request network
+        round-trip). Required scopes are documented per-operation. In
+        development, `AUTH_MODE=none` short-circuits all authentication
+        checks and treats every request as a synthetic admin — never use
+        in production.
+
+  parameters:
+
+    Scope:
+      in: path
+      name: scope
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9][a-z0-9-]{0,38}$"
+      description: Bare scope (no `@` prefix). E.g., `acme` for `@acme/widget`.
+
+    Name:
+      in: path
+      name: name
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9][a-z0-9._-]{0,63}$"
+      description: Bare module name.
+
+    Version:
+      in: path
+      name: version
+      required: true
+      schema:
+        $ref: "#/components/schemas/Semver"
+      description: Exact published version.
+
+    SearchQuery:
+      in: query
+      name: q
+      schema:
+        type: string
+      description: Search terms; tokenised on whitespace.
+
+    SearchTag:
+      in: query
+      name: tag
+      schema:
+        type: string
+      description: Filter to a single tag/category.
+
+    Page:
+      in: query
+      name: page
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: 1-indexed page number.
+
+    PageSize:
+      in: query
+      name: pageSize
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+
+    BadRequest:
+      description: Malformed request.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+    Forbidden:
+      description: Authenticated but lacking the required scope or ownership.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+    NotFound:
+      description: Module, version, or other resource not found.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: not_found
+            message: "no such module: @acme/widget"
+
+  schemas:
+
+    # ── primitives ─────────────────────────────────────────────────
+
+    Semver:
+      type: string
+      pattern: "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d\
+        *[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*\
+        ))*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$"
+      description: A strict-semver version string.
+
+    Sha256Hex:
+      type: string
+      pattern: "^[0-9a-f]{64}$"
+      description: Lowercase hex-encoded sha256.
+
+    ModuleId:
+      type: string
+      pattern: "^@[a-z0-9][a-z0-9-]{0,38}/[a-z0-9][a-z0-9._-]{0,63}$"
+      description: Full module identifier `@scope/name`.
+
+    Size:
+      type: object
+      required: [ width, height ]
+      properties:
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+
+    # ── system ─────────────────────────────────────────────────────
+
+    HealthResponse:
+      type: object
+      required: [ status, storage, authMode, env ]
+      properties:
+        status:
+          type: string
+          enum: [ ok ]
+        storage:
+          type: string
+          enum: [ sqlite, postgres ]
+        authMode:
+          type: string
+          enum: [ none, jwt ]
+        env:
+          type: string
+          enum: [ development, test, production ]
+
+    # ── error ──────────────────────────────────────────────────────
+
+    Error:
+      type: object
+      required: [ error ]
+      properties:
+        error:
+          type: string
+          description: |
+            Stable snake_case code for programmatic handling. Known values
+            include `not_found`, `version_exists`, `integrity_mismatch`,
+            `manifest_invalid`, `unauthorized`, `forbidden`.
+          example: not_found
+        message:
+          type: string
+          description: Human-readable explanation.
+        details:
+          description: Optional code-specific structured detail.
+
+    # ── module catalogue ───────────────────────────────────────────
+
+    RegistryModuleSummary:
+      type: object
+      required:
+        [
+          id,
+          name,
+          version,
+          description,
+          author,
+          downloads,
+          rating,
+          ratingCount,
+          tags,
+          icon,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/ModuleId" }
+        name: { $ref: "#/components/schemas/ModuleId" }
+        version: { $ref: "#/components/schemas/Semver" }
+        description: { type: string }
+        author: { type: string }
+        downloads: { type: integer, minimum: 0 }
+        rating:
+          type: number
+          minimum: 0
+          maximum: 5
+        ratingCount: { type: integer, minimum: 0 }
+        tags:
+          type: array
+          items: { type: string }
+        icon:
+          type: string
+          description: Path inside the artifact (e.g. `icon.svg`).
+        repository:
+          type: string
+          format: uri
+
+    RegistryModuleDetail:
+      allOf:
+        - $ref: "#/components/schemas/RegistryModuleSummary"
+        - type: object
+          required: [ versions ]
+          properties:
+            versions:
+              type: array
+              items: { $ref: "#/components/schemas/Semver" }
+              description: All published versions, ascending semver order. Yanked ones
+                included.
+            defaultSize: { $ref: "#/components/schemas/Size" }
+
+    RegistrySearchResult:
+      type: object
+      required: [ modules, total ]
+      properties:
+        modules:
+          type: array
+          items: { $ref: "#/components/schemas/RegistryModuleSummary" }
+        total: { type: integer, minimum: 0 }
+
+    # ── version detail ─────────────────────────────────────────────
+
+    ModuleManifest:
+      type: object
+      description: |
+        Subset of `package.json` plus the `opeco` block; mirrors what is
+        shipped inside the artifact as `dist/opeco.manifest.json`.
+      required: [ name, version, description, author, icon, opeco ]
+      properties:
+        name: { $ref: "#/components/schemas/ModuleId" }
+        version: { $ref: "#/components/schemas/Semver" }
+        description: { type: string }
+        author: { type: string }
+        icon: { type: string }
+        repository:
+          oneOf:
+            - type: string
+            - type: object
+              properties:
+                type: { type: string }
+                url: { type: string }
+        opeco:
+          type: object
+          required: [ permissions ]
+          properties:
+            permissions:
+              type: array
+              items: { type: string }
+            tags:
+              type: array
+              items: { type: string }
+            defaultSize: { $ref: "#/components/schemas/Size" }
+
+    ModuleVersionDetail:
+      type: object
+      required: [ scope, name, version, manifest, integrity, size, publishedAt, yanked ]
+      properties:
+        scope: { type: string }
+        name: { type: string }
+        version: { $ref: "#/components/schemas/Semver" }
+        manifest: { $ref: "#/components/schemas/ModuleManifest" }
+        integrity: { $ref: "#/components/schemas/Sha256Hex" }
+        size:
+          type: integer
+          minimum: 0
+          description: Artifact byte length.
+        publishedAt:
+          type: string
+          format: date-time
+        yanked: { type: boolean }
+        yankReason:
+          type: string
+          description: Present when `yanked` is true and a reason was given.
+        artifactUrl:
+          type: string
+          format: uri
+          description: |
+            Convenience absolute URL to the artifact endpoint. Clients should
+            still validate against `integrity`.
+
+    # ── owners ─────────────────────────────────────────────────────
+
+    Owner:
+      type: object
+      required: [ id, username ]
+      properties:
+        id:
+          type: string
+          description: Stable Kratos identity ID.
+        username: { type: string }
+        addedAt:
+          type: string
+          format: date-time
+
+    # ── advisories ─────────────────────────────────────────────────
+
+    AdvisorySeverity:
+      type: string
+      enum: [ low, moderate, high, critical ]
+
+    AdvisoryInput:
+      type: object
+      required: [ moduleScope, moduleName, severity, summary, affectedVersions ]
+      properties:
+        moduleScope: { type: string }
+        moduleName: { type: string }
+        affectedVersions:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/Semver" }
+          description: Exact versions affected. Use multiple for ranges.
+        severity: { $ref: "#/components/schemas/AdvisorySeverity" }
+        summary: { type: string, maxLength: 200 }
+        description: { type: string }
+        url:
+          type: string
+          format: uri
+          description: External reference (CVE, blog post, GHSA).
+
+    Advisory:
+      allOf:
+        - $ref: "#/components/schemas/AdvisoryInput"
+        - type: object
+          required: [ id, publishedAt ]
+          properties:
+            id: { type: string }
+            publishedAt:
+              type: string
+              format: date-time
+            withdrawnAt:
+              type: string
+              format: date-time
+              description: Set when the advisory has been retracted.
+
+    AdvisoryList:
+      type: object
+      required: [ advisories, total ]
+      properties:
+        advisories:
+          type: array
+          items: { $ref: "#/components/schemas/Advisory" }
+        total: { type: integer, minimum: 0 }

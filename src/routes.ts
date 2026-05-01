@@ -119,14 +119,18 @@ export class GalbeProxy {
 }
 
 const parseComment = (comment: string): Record<string, string | string[]> => {
-  const head =
-    comment
-      .match(/^([^@]*)/)?.[1]
-      .replace(/^ *\* */gm, '')
-      .trim() || ''
+  // Find the first JSDoc-tag line (a line whose first non-whitespace/star
+  // character is `@`). Anything before it is the head; from it onwards is tags.
+  // We can't naively split on `@` because descriptions legitimately contain
+  // `@` (e.g. `@scope/name` package identifiers).
+  const tagLineRe = /^\s*\*?\s*@[a-zA-Z_][0-9a-zA-Z_]*(?:\s|$)/m
+  const m = comment.match(tagLineRe)
+  const headRaw = m && m.index !== undefined ? comment.slice(0, m.index) : comment
+  const head = headRaw.replace(/^ *\* */gm, '').trim() || ''
+  const tagsSrc = m && m.index !== undefined ? comment.slice(m.index) : ''
   const refs = {
     ...(head ? { head } : {}),
-    ...[...comment.matchAll(new RegExp(`^\\s*\\*\\s*@([a-zA-Z_][0-9a-zA-Z_]*)(?:$|\\s+([^\\n]*)\\s*$)`, 'gm'))].reduce(
+    ...[...tagsSrc.matchAll(new RegExp(`^\\s*\\*\\s*@([a-zA-Z_][0-9a-zA-Z_]*)(?:$|\\s+([^\\n]*)\\s*$)`, 'gm'))].reduce(
       (acc, n) => {
         return {
           ...acc,

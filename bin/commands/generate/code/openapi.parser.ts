@@ -10,6 +10,15 @@ type SchemaEntry = {
   schema: string
   dependsOn: Set<string>
   usedBy: Set<string>
+  /** Response-only: the original component-level description, kept distinct
+   * from the inner schema's own description. */
+  responseDescription?: string
+  /** Response-only: content-level single example. */
+  responseExample?: any
+  /** Response-only: content-level multi-key examples. */
+  responseExamples?: Record<string, any>
+  /** Response-only: explicit media-type list. */
+  responseMedia?: string[]
 }
 type EndpointEntry = {
   version?: string
@@ -46,14 +55,15 @@ const refToPath = (ref: string, basePath?: string) => {
 const orderDeps = (deps: Record<string, SchemaEntry>) => {
   let stack = Object.keys(deps)
   let l = new Set<string>()
-  const ascend = (d: { dependsOn: Set<string> }) => {
-    for (let p of d.dependsOn.keys()) {
+  const ascend = (d: { dependsOn: Set<string> }, visiting: Set<string>) => {
+    for (let p of d.dependsOn) {
+      if (visiting.has(p) || l.has(p)) continue
       if (p in deps) {
-        ascend(deps[p])
-        if (p in deps && !l.has(p)) {
-          l.add(p)
-          stack.splice(stack.indexOf(p), 1)
-        }
+        visiting.add(p)
+        ascend(deps[p], visiting)
+        l.add(p)
+        let idx = stack.indexOf(p)
+        if (idx >= 0) stack.splice(idx, 1)
       }
     }
   }
@@ -61,7 +71,7 @@ const orderDeps = (deps: Record<string, SchemaEntry>) => {
     let k = stack.pop()
     if (!k) continue
     let d = deps[k]
-    ascend(d)
+    ascend(d, new Set([k]))
     if (!l.has(k)) {
       l.add(k)
     }
@@ -70,9 +80,12 @@ const orderDeps = (deps: Record<string, SchemaEntry>) => {
 }
 const serialize = (obj: any) => {
   return JSON.stringify(obj, (k, value) => {
-    if (k === 'pattern' && value) return `/${value}/`
+    if (k === 'pattern' && value) return `__PATTERN__${value}__ENDPATTERN__`
     return value
-  }).replace(/"\/(.*)\/([gimsuy]*)"/g, '/$1/$2')
+  }).replace(/"__PATTERN__([\s\S]*?)__ENDPATTERN__"/g, (_, body) => {
+    const decoded = JSON.parse(`"${body}"`) as string
+    return `/${decoded.replace(/\//g, '\\/')}/`
+  })
 }
 
 const writeCodeFile = async (path: string, content: string, target: 'js' | 'ts') => {
@@ -110,17 +123,22 @@ const parseOapiSchema = (
     minLength?: number
     maxLength?: number
     pattern?: string
+    format?: string
     minItems?: number
     maxItems?: number
     unique?: boolean
+    default?: any
+    examples?: any
   } = {
     ...details,
     title: os.title,
     description: details.description || os.description,
+    default: os.default,
+    ...(os.example !== undefined ? { examples: os.example } : {}),
   }
 
   let resp = ''
-  let hasOptions = Object.values(options).some(v => !!v)
+  let hasOptions = Object.values(options).some(v => v !== undefined)
   let optArg = hasOptions ? serialize(options) : ''
   let anyOf = os.oneOf || os.anyOf
   let allOf = os.allOf
@@ -139,8 +157,9 @@ const parseOapiSchema = (
   } else if (anyOf?.length) {
     if (anyOf.length === 1) resp = parseOapiSchema(anyOf[0] as OpenAPIV3.SchemaObject, details, extra)
     else {
+      const unionOpts = { ...options, ...(os.oneOf ? { _oneOf: true } : {}) }
       resp = `$T.union([${anyOf.map(s => parseOapiSchema(s as OpenAPIV3.SchemaObject)).join(',')}], ${serialize(
-        options
+        unionOpts
       )})`
     }
   } else if (allOf?.length) {
@@ -151,7 +170,7 @@ const parseOapiSchema = (
       )})`
     }
   } else if (!os?.type) {
-    return `$T.any(${details && Object.keys(details).length ? JSON.stringify(details) : ''})`
+    return `$T.any(${hasOptions ? optArg : ''})`
   } else if (os.type === 'boolean') resp = `$T.boolean(${hasOptions ? serialize(options) : ''})`
   else if (os.type === 'number') {
     let { max, min, exclusiveMax, exclusiveMin } = {
@@ -161,7 +180,7 @@ const parseOapiSchema = (
       exclusiveMin: os.minimum !== undefined && os.exclusiveMinimum ? os.minimum : undefined,
     }
     options = { ...options, min, max, exclusiveMax, exclusiveMin }
-    hasOptions = Object.values(options).some(v => !!v)
+    hasOptions = Object.values(options).some(v => v !== undefined)
     resp = `$T.number(${hasOptions ? serialize(options) : ''})`
   } else if (os.type === 'integer') {
     let max = os.maximum !== undefined && !os.exclusiveMaximum ? os.maximum : undefined
@@ -169,20 +188,22 @@ const parseOapiSchema = (
     let exclusiveMax = os.maximum !== undefined && os.exclusiveMaximum ? os.maximum : undefined
     let exclusiveMin = os.minimum !== undefined && os.exclusiveMinimum ? os.minimum : undefined
     options = { ...options, min, max, exclusiveMax, exclusiveMin }
-    hasOptions = Object.values(options).some(v => !!v)
+    hasOptions = Object.values(options).some(v => v !== undefined)
     resp = `$T.integer(${hasOptions ? serialize(options) : ''})`
   } else if (os.type === 'string') {
     if (os.format === 'binary') resp = `$T.byteArray(${hasOptions ? serialize(options) : ''})`
     else if (os.enum?.length === 1) {
       resp = `$T.literal("${os.enum[0]}")`
     } else if (os.enum?.length) {
-      resp = `$T.union([${os.enum.map(v => `$T.literal("${v}")`).join(', ')}])`
+      const literals = os.enum.map(v => `$T.literal("${v}")`).join(', ')
+      resp = `$T.union([${literals}]${optArg ? `, ${optArg}` : ''})`
     } else {
       let minLength = os.minLength
       let maxLength = os.maxLength
       let pattern = os.pattern
-      options = { ...options, minLength, maxLength, pattern }
-      hasOptions = Object.values(options).some(v => !!v)
+      let format = os.format
+      options = { ...options, minLength, maxLength, pattern, format }
+      hasOptions = Object.values(options).some(v => v !== undefined)
       resp = `$T.string(${hasOptions ? serialize(options) : ''})`
     }
   } else if (os.type === 'array') {
@@ -190,14 +211,18 @@ const parseOapiSchema = (
     let maxItems = os.maxItems
     let unique = os.uniqueItems
     options = { ...options, minItems, maxItems, unique }
-    resp = `$T.array(${parseOapiSchema(os?.items)}, ${optArg})`
+    hasOptions = Object.values(options).some(v => v !== undefined)
+    optArg = hasOptions ? serialize(options) : ''
+    resp = `$T.array(${parseOapiSchema(os?.items)}${optArg ? `, ${optArg}` : ''})`
   } else if (os.type === 'object') {
+    let required = new Set(os.required || [])
     let props = Object.entries(os?.properties || {})
       .map(([k, v]) => {
         v = v as OpenAPIV3.SchemaObject
+        const isRequired = required.has(k)
         const w = (s: string) => {
-          if (!v.required && v.nullable) return `$T.nullish(${s})`
-          else if (!v.required) return `$T.optional(${s})`
+          if (!isRequired && v.nullable) return `$T.nullish(${s})`
+          else if (!isRequired) return `$T.optional(${s})`
           else if (v.nullable) return `$T.nullable(${s})`
           return s
         }
@@ -222,13 +247,26 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
   const initSchema = (k: string, s: any, kind: 'schemas' | 'requestBodies' | 'responses') => {
     let schema = ''
     let dependsOn = new Set<string>()
+    let responseExample: any = undefined
+    let responseExamples: Record<string, any> | undefined = undefined
+    let responseMedia: string[] | undefined = undefined
     if (kind === 'schemas') schema = parseOapiSchema(s, { id: k })
     else if (kind === 'requestBodies' || kind === 'responses') {
       let schemas = [] as string[]
       if (!!s.content) {
+        const contentMap = (s as OpenAPIV3.RequestBodyObject)?.content || { null: {} }
+        if (kind === 'responses') responseMedia = Object.keys(contentMap)
         schemas = [
           ...new Set(
-            Object.entries((s as OpenAPIV3.RequestBodyObject)?.content || { null: {} }).map(([media, v]) => {
+            Object.entries(contentMap).map(([media, v]) => {
+              if (kind === 'responses') {
+                if ((v as any).example !== undefined && responseExample === undefined) {
+                  responseExample = (v as any).example
+                }
+                if ((v as any).examples && Object.keys((v as any).examples).length) {
+                  responseExamples = { ...(responseExamples || {}), ...(v as any).examples }
+                }
+              }
               return parseOapiSchema(v.schema, { id: k }, { media })
             })
           ),
@@ -249,6 +287,12 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
       schema,
       dependsOn,
       usedBy: new Set(),
+      ...(kind === 'responses' && typeof s?.description === 'string' && s.description
+        ? { responseDescription: s.description }
+        : {}),
+      ...(kind === 'responses' && responseExample !== undefined ? { responseExample } : {}),
+      ...(kind === 'responses' && responseExamples ? { responseExamples } : {}),
+      ...(kind === 'responses' && responseMedia && responseMedia.length ? { responseMedia } : {}),
     }
   }
   for (let [k, v] of Object.entries(def.components?.schemas || {})) initSchema(k, v, 'schemas')
@@ -256,13 +300,30 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
   for (let [k, v] of Object.entries(def.components?.responses || {})) initSchema(k, v, 'responses')
 
   Object.entries(index).forEach(([k, v]) => {
-    for (let d of v.dependsOn) index[d].usedBy.add(k)
+    for (let d of v.dependsOn) index[d]?.usedBy.add(k)
   })
 
   return index
 }
 
-const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.OperationObject) => {
+const resolveParamRef = (
+  ref: string,
+  components: OpenAPIV3.ComponentsObject | undefined
+): OpenAPIV3.ParameterObject | undefined => {
+  let match = ref.match(/^#\/components\/parameters\/(.+)$/)
+  if (!match) return undefined
+  let target = components?.parameters?.[match[1]]
+  if (!target) return undefined
+  if ('$ref' in target) return resolveParamRef(target.$ref, components)
+  return target
+}
+
+const parseEndpointDef = (
+  method: string,
+  path: string,
+  def?: OpenAPIV3.OperationObject,
+  components?: OpenAPIV3.ComponentsObject
+) => {
   if (!def) return {}
   let imports = {}
   let p = path.replaceAll(/\{([^\}]*)\}/g, ':$1')
@@ -274,17 +335,38 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
   if (def.summary) meta += ` * ${def.summary}\n *\n`
   if (def.description) meta += ` * ${def.description.replace(/\n/g, '\n * ')}\n`
   if (def.operationId) meta += ` * @operationId ${def.operationId}\n`
-  if (def.externalDocs) meta += ` * @externalDocs ${def.externalDocs}\n`
+  if (def.externalDocs?.url) meta += ` * @externalDocs ${def.externalDocs.url}\n`
   if (def.tags) meta += ` * @tags ${def.tags.join(' ')}\n`
-  if (def.deprecated) meta == ' * @deprecated\n'
+  if (Array.isArray(def.security)) {
+    if (def.security.length === 0) {
+      meta += ` * @security none\n`
+    } else {
+      for (const s of def.security) {
+        const keys = Object.keys(s)
+        if (keys.length === 0) {
+          meta += ` * @security none\n`
+        } else {
+          for (const k of keys) {
+            const scopes = (s as any)[k] as string[]
+            meta += ` * @security ${k}${scopes && scopes.length ? ` ${scopes.join(' ')}` : ''}\n`
+          }
+        }
+      }
+    }
+  }
+  if (def.deprecated) meta += ' * @deprecated\n'
   meta += ' */'
   let endpoint = `${method}("${p}", ${schemaName}, ctx => {\n  throw new NotImplementedError()\n})`
 
   let sp = { path: {}, query: {}, header: {}, body: {}, formData: {} } // TODO handle body and formData cases
+
   for (let _p of def?.parameters || []) {
-    // @ts-ignore: TODO handle refs cases
-    if (_p.$ref) continue
-    let p = _p as OpenAPIV3.ParameterObject
+    let p: OpenAPIV3.ParameterObject | undefined
+    if ('$ref' in _p) {
+      p = resolveParamRef(_p.$ref, components)
+      if (!p) continue
+    } else p = _p as OpenAPIV3.ParameterObject
+    if (!sp[p.in]) continue
     let o = (s: string) => {
       const [_, so] = [...(s.match(/^\$T.optional\((.*)\)$/) || [])]
       s = so ?? s
@@ -310,6 +392,9 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
           .join(',')}}`
       : ''
   )
+
+  console.log(method, path)
+  console.log(schemaParams)
 
   let body = ''
   if (!['get', 'delete', 'options', 'head'].includes(method)) {
@@ -358,7 +443,12 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
         return [s, [rootRef]]
       }
 
-      for (let [_type, tv] of Object.entries((sv as OpenAPIV3.ResponseObject)?.content || {})) {
+      const respObj = sv as OpenAPIV3.ResponseObject
+      const content = respObj?.content || {}
+      const mediaTypes = Object.keys(content)
+      const exampleParts: string[] = []
+      let singleExample: any = undefined
+      for (let [_type, tv] of Object.entries(content)) {
         entries.push(
           unref(parseOapiSchema(tv.schema), m => {
             let l = m.split('/')
@@ -366,8 +456,51 @@ const parseEndpointDef = (method: string, path: string, def?: OpenAPIV3.Operatio
             return l[l.length - 1]
           })
         )
+        if (tv.examples && Object.keys(tv.examples).length) {
+          for (const [k, ex] of Object.entries(tv.examples)) {
+            exampleParts.push(`${JSON.stringify(k)}:${JSON.stringify(ex)}`)
+          }
+        }
+        if ((tv as any).example !== undefined && singleExample === undefined) {
+          singleExample = (tv as any).example
+        }
       }
-      return [s, [...new Set(entries)]]
+      if (entries.length === 0) {
+        const desc = respObj?.description
+        const opts = desc ? `{_noContent:true,description:${JSON.stringify(desc)}}` : `{_noContent:true}`
+        entries.push(`$T.any(${opts})`)
+      }
+      let unique = [...new Set(entries)]
+
+      // Build extra props to attach (media types, headers, examples) on the response wrapper.
+      const extras: string[] = []
+      if (mediaTypes.length > 0) extras.push(`_media:${JSON.stringify(mediaTypes)}`)
+      const headersObj = respObj?.headers || {}
+      const headerEntries: string[] = []
+      for (const [hName, hVal] of Object.entries(headersObj)) {
+        if ('$ref' in (hVal as any)) continue
+        const h = hVal as OpenAPIV3.HeaderObject
+        const headerSchema = unref(parseOapiSchema(h.schema || ({ type: 'string' } as any), {
+          description: h.description,
+        }), m => {
+          let l = m.split('/')
+          imports[l[l.length - 1]] = m
+          return l[l.length - 1]
+        })
+        const wrapped = h.required ? headerSchema : `$T.optional(${headerSchema})`
+        headerEntries.push(`${JSON.stringify(hName)}:${wrapped}`)
+      }
+      if (headerEntries.length) extras.push(`_headers:{${headerEntries.join(',')}}`)
+      if (exampleParts.length) extras.push(`_examples:{${exampleParts.join(',')}}`)
+      if (singleExample !== undefined) extras.push(`_example:${JSON.stringify(singleExample)}`)
+      if (typeof respObj?.description === 'string' && respObj.description) {
+        extras.push(`_description:${JSON.stringify(respObj.description)}`)
+      }
+      if (extras.length) {
+        const extrasLit = `{${extras.join(',')}}`
+        unique = unique.map(e => `Object.assign({}, ${e}, ${extrasLit})`)
+      }
+      return [s, unique]
     })
   )
 
@@ -397,18 +530,34 @@ const parseEndpoints = (def: OpenAPIV3.Document) => {
   let endpoints: Record<string, EndpointEntry> = {}
   for (let [fullPath, pathVal] of Object.entries(def.paths || {})) {
     if (!pathVal) continue
-    let match = fullPath.match(/^\/?(v\d+[^\/]*\/)?(?:\/?(public|private))?\/?([^\/]+)\/?(.*)$/)
+    let match = fullPath.match(/^\/?(?:(v\d+)[^\/]*\/)?(?:\/?(public|private))?\/?([^\/]+)\/?(.*)$/)
     if (!match) continue
     let [_, version, visibility, scope, path] = [...match]
     path = `/${path}`
     let methods = ['get', 'put', 'patch', 'post', 'delete', 'options', 'head'] as const
+    let pathParams = pathVal.parameters || []
     for (let m of methods) {
       let endpointDef = pathVal?.[m]
       if (!endpointDef) continue
       let ref = `#/paths${version ? `/${version}` : ''}${visibility ? `/${visibility}` : ''}${
         scope ? `/${scope}` : ''
       }/${m}${path}`
-      let { schema, endpoint } = parseEndpointDef(m, fullPath, endpointDef)
+      let opParams = endpointDef.parameters || []
+      let opKeys = new Set(
+        opParams
+          .map(p => {
+            let resolved = '$ref' in p ? resolveParamRef(p.$ref, def.components) : (p as OpenAPIV3.ParameterObject)
+            return resolved ? `${resolved.in}:${resolved.name}` : null
+          })
+          .filter((k): k is string => k !== null)
+      )
+      let inheritedParams = pathParams.filter(p => {
+        let resolved = '$ref' in p ? resolveParamRef(p.$ref, def.components) : (p as OpenAPIV3.ParameterObject)
+        if (!resolved) return false
+        return !opKeys.has(`${resolved.in}:${resolved.name}`)
+      })
+      let mergedDef = { ...endpointDef, parameters: [...inheritedParams, ...opParams] }
+      let { schema, endpoint } = parseEndpointDef(m, fullPath, mergedDef, def.components)
       endpoints[ref] = {
         version,
         visibility: visibility as 'public' | 'private',
@@ -458,7 +607,34 @@ const writeFiles = async (
           imports[depOrig].push(depName)
         }
       }
-      decl.push(`export const ${s.key} = ${s.schema}\nexport type ${s.key} = Static<typeof ${s.key}>\n`)
+      // For requestBodies/responses that are just a single ref to another schema,
+      // preserve identity by tagging a _responseId / _requestBodyId rather than
+      // aliasing it (which would lose the original component name in the spec).
+      const isSingleAlias =
+        (type === 'responses' || type === 'requestBodies') &&
+        s.dependsOn.size === 1 &&
+        s.schema.trim() === [...s.dependsOn][0].split('/').pop()
+      const responseExtras: string[] = []
+      if (type === 'responses') {
+        if (s.responseDescription) responseExtras.push(`_description: ${JSON.stringify(s.responseDescription)}`)
+        if (s.responseExample !== undefined) responseExtras.push(`_example: ${JSON.stringify(s.responseExample)}`)
+        if (s.responseExamples) responseExtras.push(`_examples: ${JSON.stringify(s.responseExamples)}`)
+        if (s.responseMedia && s.responseMedia.length)
+          responseExtras.push(`_media: ${JSON.stringify(s.responseMedia)}`)
+      }
+      if (isSingleAlias) {
+        const tagKey = type === 'responses' ? '_responseId' : '_requestBodyId'
+        const extras = [`${tagKey}: "${s.key}"`, ...responseExtras]
+        decl.push(
+          `export const ${s.key} = { ...${s.schema}, ${extras.join(', ')} } as typeof ${s.schema}\nexport type ${s.key} = Static<typeof ${s.key}>\n`
+        )
+      } else if (type === 'responses' && responseExtras.length) {
+        decl.push(
+          `export const ${s.key} = Object.assign({}, ${s.schema}, { ${responseExtras.join(', ')} })\nexport type ${s.key} = Static<typeof ${s.key}>\n`
+        )
+      } else {
+        decl.push(`export const ${s.key} = ${s.schema}\nexport type ${s.key} = Static<typeof ${s.key}>\n`)
+      }
     })
     if (decl.length === 0) return ''
     return `import type { Static } from 'galbe/schema'\nimport { $T } from 'galbe'\n${Object.entries(imports)
@@ -527,10 +703,10 @@ const writeFiles = async (
         .map(([k, v]) => `import { ${[...v].join(', ')} } from '${k}'`)
         .join('\n')}\n\n` +
       `${sDecl.map(d => d).join('\n\n')}\n`
-
+    const deepness = scopeKey.split('/').length - 1
     let routeFile =
       `import { NotImplementedError, type Galbe } from 'galbe'\n` +
-      `import { ${[...rImports].join(', ')} } from '../schemas${scopeKey}.schema'\n\n` +
+      `import { ${[...rImports].join(', ')} } from '${Array(deepness).fill('../').join('')}schemas${scopeKey}.schema'\n\n` +
       `export default (g: Galbe) => {\n` +
       rDecl.map(d => d.replaceAll('\n', '\n  ')).join('\n\n') +
       `\n}\n`
