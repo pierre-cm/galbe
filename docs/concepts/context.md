@@ -1,8 +1,8 @@
 # Context
 
-An instance of the context object is created when a new request is initiated and is carried throughout the entire request lifecycle. See the [Lifecycle](https://galbe.dev/documentation/lifecycle) section for more details.
+A `context` object is created when a new request is initiated and is carried throughout the entire request lifecycle. See the [Lifecycle](https://galbe.dev/documentation/lifecycle) section for more details.
 
-Its purpose is to carry all relevant information about the request and facilitate data sharing across the request lifecycle.
+Its purpose is to carry all relevant information about the request and to facilitate data sharing across the request lifecycle.
 
 ## Definition
 
@@ -16,15 +16,15 @@ An instance of the [Request](https://developer.mozilla.org/en-US/docs/Web/API/Re
 
 A JavaScript object representing the headers of the current request.
 
-- **key** (string): Header name
-- **value** (string | [schema defined](schemas.md#headers)): Header value
+- **key** (string): Header name (lower-cased).
+- **value** (string | [schema-defined](schemas.md#headers)): Header value.
 
 ### params
 
 A JavaScript object representing the route parameters of the current request.
 
-- **key** (string): Parameter name
-- **value** (string | [schema defined](schemas.md#params)): Parameter value
+- **key** (string): Parameter name.
+- **value** (string | [schema-defined](schemas.md#params)): Parameter value.
 
 ```js
 galbe.get('/default/:p1/foo/:p2', ctx => console.log(ctx.params))
@@ -36,8 +36,8 @@ galbe.get('/default/:p1/foo/:p2', ctx => console.log(ctx.params))
 
 A JavaScript object representing the query parameters of the current request.
 
-- **key** (string): Query parameter name
-- **value** (string | [schema defined](schemas.md#query)): Query parameter value
+- **key** (string): Query parameter name.
+- **value** (string | string[] | [schema-defined](schemas.md#query)): Query parameter value. Repeated keys are exposed as an array.
 
 ```js
 galbe.get('/test', ctx => console.log(ctx.query))
@@ -49,8 +49,8 @@ galbe.get('/test', ctx => console.log(ctx.query))
 
 A JavaScript object representing the cookies of the current request.
 
-- **key** (string): Cookie name
-- **value** (string): Cookie value
+- **key** (string): Cookie name.
+- **value** (string): Cookie value.
 
 > [!NOTE]
 > Cookies are parsed from the `Cookie` header.
@@ -63,51 +63,50 @@ galbe.get('/cookies', ctx => console.log(ctx.cookies))
 
 ### body
 
-The body payload of the incoming request. The body type is determined based on the following rules:
+The body payload of the incoming request. The body type is determined by the following rules:
 
-If no [Schema](schemas.md) is defined, Galbe will parse the body type according to the `content-type` header:
+If no [Schema](schemas.md) is defined, Galbe parses the body based on the `Content-Type` header:
 
-- `text/.*`: string
-- `application/json`: object
+- `text/*`: `string`
+- `application/json`: `object`
 - `application/x-www-form-urlencoded`: `{ [key: string]: any }`
 - `multipart/form-data`: `{ [key: string]: { headers: { name: string; type?: string; filename?: string }; content: any } }`
-- `other`: `AsyncGenerator<Uint8Array>`
+- `application/octet-stream`: `Uint8Array`
+- _other / no Content-Type_: `AsyncGenerator<Uint8Array>`
 
-If a [Schema](schemas.md) is defined, Galbe will parse the body according to the [Schema.body](schemas.md#body) definition for the current route.
+For `GET`, `OPTIONS`, and `HEAD` requests, `body` is always `null`.
 
-### set
+If a [Schema](schemas.md) is defined, Galbe parses the body according to the [Schema.body](schemas.md#body) definition for the current route.
 
-The `set` property contains modifiable attributes intended to provide information to the response parser.
+### contentType
 
-- **status**: Sets the response status.
-- **headers**: Sets the response headers.
-- **cookie**: Sets a cookie in the response.
+The body content-type group inferred from the `Content-Type` request header. One of `'json'`, `'text'`, `'urlForm'`, `'multipart'`, `'byteArray'`, or `'default'`. It is `undefined` for `GET`, `OPTIONS`, and `HEAD` requests.
 
-```js
-galbe.get('/example', ctx => {
-  ctx.set.status = 418;
-  ctx.set.cookie('foo', 'bar', { path: '/', httpOnly: true });
-  return "I don't do coffee";
-})
-```
+### remoteAddress
+
+A [SocketAddress](https://bun.com/docs/api/http#bun-serve) instance representing the remote address of the client (or `null` if unavailable).
+
+### route
+
+The matched [Route](routes.md) for the current request. Available from `onRoute` onwards in the request lifecycle.
 
 ### state
 
-The `state` property allows storing custom user-defined objects throughout the request lifecycle. It is commonly used to share data between [hooks](hooks.md) and the [handler](handler.md).
+The `state` property allows storing custom user-defined values throughout the request lifecycle. It is commonly used to share data between [hooks](hooks.md) and the [handler](handler.md).
 
-- **key** (string): User-defined key
-- **value** (any): User-defined object
+- **key** (string): User-defined key.
+- **value** (any): User-defined value.
 
 ```js
 galbe.get(
   '/example',
   [
     ctx => {
-      ctx.state['foo'] = 'bar';
+      ctx.state['foo'] = 'bar'
     }
   ],
   ctx => {
-    return ctx.state.foo;
+    return ctx.state.foo
   }
 )
 ```
@@ -117,6 +116,20 @@ $ curl http://localhost:3000/example
 bar
 ```
 
-### remoteAddress
+### set
 
-An instance of [SocketAddress](https://github.com/oven-sh/bun/blob/fe62a614046948ebba260bed87db96287e67921f/packages/bun-types/bun.d.ts#L2600-L2613) representing the remote address of the client.
+The `set` property contains modifiable attributes that drive the response.
+
+- **set.status** (`number`): The response status code.
+- **set.headers** (`Record<string, string | string[]>`): The response headers.
+- **set.cookie** (`(name: string, value: string, options?: CookieOptions) => void`): Append a cookie to the response.
+
+`CookieOptions` accepts: `path` (default `'/'`), `domain`, `maxAge`, `expires`, `secure`, `httpOnly`, and `sameSite` (`true | false | 'lax' | 'strict' | 'none'`).
+
+```js
+galbe.get('/example', ctx => {
+  ctx.set.status = 418
+  ctx.set.cookie('foo', 'bar', { path: '/', httpOnly: true })
+  return "I don't do coffee"
+})
+```

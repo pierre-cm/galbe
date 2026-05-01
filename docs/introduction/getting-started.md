@@ -1,8 +1,8 @@
 # Getting Started
 
-Galbe is a JavaScript web framework for building fast and versatile backend servers with Bun.
+Galbe is a JavaScript web framework for building fast and versatile backend servers with [Bun](https://bun.sh).
 
-Designed for simplicity, Galbe allows you to quickly create and configure a project. In addition to its ease of use, it offers various features that help you focus on your application's core logic.
+Designed for simplicity, Galbe lets you create and configure a project quickly. Beyond ease of use, it ships with the features you need to focus on your application's core logic.
 
 ## Requirements
 
@@ -70,7 +70,7 @@ Open `package.json` and add the following scripts:
 }
 ```
 
-These scripts use the Galbe CLI to run and build the application. More details are available in the [CLI](cli.md) section.
+These scripts use the Galbe CLI to run and build the application. More details are available in the [CLI](../reference/cli.md) section.
 
 Your `index.ts` file must export a default Galbe instance:
 
@@ -83,14 +83,14 @@ galbe.get("/hello", () => "Hello Mom!")
 export default galbe
 ```
 
-This approach is recommended but not mandatory. Galbe instances also provide a `listen` method, allowing you to manually start your server from within your code.
+Exporting the Galbe instance as the default export is the recommended approach but not mandatory. A Galbe instance also exposes a `listen(port?, hostname?)` method that lets you start the server manually from your own code.
 
 > [!WARNING]
-> If you choose not to use the Galbe CLI for running or building your app, you will not have access to features such as the [Automatic Route Analyzer](routes.md#automatic-route-analyzer).
+> If you choose not to use the Galbe CLI for running or building your app, you will not have access to features such as the [Automatic Route Analyzer](../concepts/routes.md#automatic-route-analyzer).
 
 ## Project Structure
 
-Galbe is highly flexible in terms of project structure. The [Automatic Route Analyzer](routes.md#automatic-route-analyzer), triggered by the `routes` configuration option (default: `src/**/*.route.{js,ts}`), enables versatile project organization.
+Galbe is highly flexible in terms of project structure. The [Automatic Route Analyzer](../concepts/routes.md#automatic-route-analyzer), triggered by the `routes` configuration option (default: `src/**/*.route.{js,ts}`), enables versatile project organization.
 
 Here are two examples of valid project structures:
 
@@ -132,9 +132,9 @@ Here are two examples of valid project structures:
 └── tsconfig.json
 ```
 
-In both cases, the [Automatic Route Analyzer](routes.md#automatic-route-analyzer) will detect `foo.route.ts` and `bar.route.ts` to set up route definitions.
+In both cases, the [Automatic Route Analyzer](../concepts/routes.md#automatic-route-analyzer) will detect `foo.route.ts` and `bar.route.ts` to set up route definitions.
 
-For more details, see the [Route Files](routes.md#route-files) section.
+For more details, see the [Route Files](../concepts/routes.md#route-files) section.
 
 > [!NOTE]
 > These examples work with the default configuration, but you can customize the `routes` property to fit your project structure. Define `routes` with your preferred pattern(s) to match your file organization.

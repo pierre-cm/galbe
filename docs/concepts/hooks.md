@@ -1,6 +1,6 @@
 # Hooks
 
-Hooks provide a simple way to execute specific actions before and/or after reaching a route endpoint in Galbe.
+Hooks provide a simple way to execute logic before and/or after the handler runs for a route in Galbe.
 
 ## Defining Hooks
 
@@ -16,26 +16,26 @@ A hook takes two arguments: `context` and `next`.
 
 ### context
 
-The `context` object contains request information and a modifiable `state` property that persists across all hooks and the handler. This is useful for sharing data across hooks and handlers. More details are available in the [Context](context.md) section.
+The `context` object contains request information and a modifiable `state` property that persists across all hooks and the handler. This is useful for sharing data between hooks and the handler. See the [Context](context.md) section for full details.
 
 ### next
 
-The `next` function calls the next hook in the list, or the handler if the current hook is the last one. The `next` function should be called at most once. If omitted, Galbe will automatically call it at the end of the current hook’s execution.
+The `next` function calls the next hook in the chain, or the handler if the current hook is the last one. It should be called at most once. If a hook does not call `next` (and does not return a response), Galbe will call it automatically when the hook returns.
 
 > [!TIP]
-> Hooks are interruptible, meaning they can return a response at any time. This is useful for implementing custom logic such as authentication, authorization, and caching.
+> Hooks are **preemptable**: they can return a response at any time to short-circuit the chain. This is useful for authentication, authorization, caching, and similar concerns.
 >
 > For more details on response handling, see [Response Types](handler.md#response-types).
 
 ## Declaring Hooks
 
-Hooks should be declared before the handler method in the [Route Definition](routes.md#route-definition) as a list of hook functions.
+Hooks are declared before the handler in the [Route Definition](routes.md#defining-routes), as an array of hook functions.
 
 ```ts
 galbe.get('/foo', [hook1, hook2, ...], ctx => {})
 ```
 
-Hooks execute in the order they are declared, just before the [Handler](handler.md). For a deeper understanding of their execution in the request lifecycle, see the [Lifecycle](https://galbe.dev/documentation/lifecycle) section.
+Hooks execute in the order they are declared, just before the [Handler](handler.md). For more on where hooks fit in the request lifecycle, see the [Lifecycle](https://galbe.dev/documentation/lifecycle) section.
 
 ### Examples
 

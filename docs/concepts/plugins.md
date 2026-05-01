@@ -1,6 +1,6 @@
 # Plugins
 
-Galbe provides a powerful plugin system that allows developers to extend and customize the framework’s behavior. The plugin capabilities integrate with the [Request Lifecycle](https://galbe.dev/documentation/lifecycle).
+Galbe provides a plugin system that lets you extend and customize the framework's behavior. Plugin hooks integrate directly with the [Request Lifecycle](https://galbe.dev/documentation/lifecycle).
 
 ## Definition
 
@@ -22,9 +22,9 @@ type GalbePlugin = {
 The plugin name should be a Unique Plugin Identifier to prevent conflicts with other plugins. Ideally, it follows the format `com.example.myplugin`.
 
 ### init
-This method is called immediately after the server starts. It receives two arguments:
-- `config`: The plugin-specific configuration (See [Configuration](getting-started.md#properties) `plugin` property).
-- `galbe`: The Galbe server instance, from which you can retrieve routes using `galbe.router.routes`.
+This method is called once when the server starts (after route discovery and before the first request is served). It receives two arguments:
+- `config`: The plugin-specific configuration (see the [`plugin`](../reference/configuration.md#plugin) configuration property).
+- `galbe`: The Galbe server instance. From it you can read registered routes (`galbe.router.routes`) and route metadata (`galbe.meta`).
 
 ### onFetch
 This method is executed at the beginning of an incoming request. It receives a restricted `context` object containing `request`, `set`, and `state`.
@@ -38,23 +38,26 @@ Executed after the router identifies a matching route for the request. It takes 
 Runs after request validation but before route hooks and the handler are called. Like the previous lifecycle methods, it is **preemptable**.
 
 ### afterHandle
-Called after the route handler is executed but before sending the response. It receives two arguments:
-- `response`: The [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response) object from the handler.
+Called after the route handler runs but before the response is sent. It receives two arguments:
+- `response`: The [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response) object built from the handler's return value.
 - `context`: The request [Context](context.md).
 
-It is also **preemptable**, meaning any returned response will override the original handler response.
+It is also **preemptable**: any returned response overrides the original one.
 
 ### cli
-This method allows plugins to register custom CLI commands. It receives an array of existing commands and can return a modified array or `void`.
+Lets a plugin register custom commands on the [Galbe CLI](../reference/cli.md). It receives the current list of `GalbeCLICommand` entries (one per registered route) and may return a modified list or `void` to keep the input as-is. Each `GalbeCLICommand` describes a command name, a list of tags, the route it targets, optional `arguments` / `options`, and an optional `action` callback that overrides the default behavior.
 
 ## Plugin Registration
 
-To register a plugin with your Galbe server, use the `use` method on your Galbe instance.
+To register a plugin, use the `use` method on your Galbe instance.
 
 ```js
 const galbe = new Galbe()
 galbe.use(plugin)
 ```
+
+> [!NOTE]
+> `use` only stores the plugin. Each plugin's `init` runs when the server starts (e.g. when `galbe.listen()` is called).
 
 ## How to Create a Plugin
 

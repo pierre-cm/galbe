@@ -2,17 +2,15 @@
 
 A Command Line Interface is shipped with the Galbe package. You can use it to perform useful tasks around your application.
 
-After [Installing Galbe](getting-started.md#automatic-installation), the CLI will be available locally to your project.
+After [installing Galbe](../introduction/getting-started.md#automatic-installation-recommended), the CLI is available locally to your project.
 
-However, if you want to use it directly from your terminal, you must either:
-
-Install it globally using the following command:
+To use it directly from your terminal, either install it globally:
 
 ```bash
 $ bun i -g galbe
 ```
 
-Or run it with `bunx`:
+Or run it through `bunx`:
 
 ```bash
 $ bunx galbe
@@ -24,18 +22,18 @@ Start a dev server running your Galbe application.
 
 #### Arguments
 
-| Name  | Description                                              |
-| ----- | -------------------------------------------------------- |
-| index | The js or ts file that export your Galbe server instance. |
+| Name  | Description                                               |
+| ----- | --------------------------------------------------------- |
+| index | The js or ts file that exports your Galbe server instance. |
 
 #### Options
 
-| Short | Long            | Description                 | Default |
-| ----- | --------------- | --------------------------- | ------- |
-| -p    | --port          | port number [1-65535]       | 3000    |
-| -w    | --watch         | watch file changes dir      | false   |
-| -wi   | --watchignore   | ignored watch files regex   |         |
-| -nc   | --noclear       | don't clear on file changes | false   |
+| Short | Long          | Description                                | Default |
+| ----- | ------------- | ------------------------------------------ | ------- |
+| -p    | --port        | port number [1-65535]                      | 3000    |
+| -w    | --watch [dir] | watch file changes (defaults to index dir) | false   |
+| -wi   | --watchignore | ignored watch files regex                  |         |
+| -nc   | --noclear     | don't clear on file changes                | false   |
 
 #### Example
 
@@ -67,17 +65,17 @@ Bundle your Galbe application.
 
 #### Arguments
 
-| Name  | Description                                              |
-| ----- | -------------------------------------------------------- |
-| index | The js or ts file that export your Galbe server instance. |
+| Name  | Description                                               |
+| ----- | --------------------------------------------------------- |
+| index | The js or ts file that exports your Galbe server instance. |
 
 #### Options
 
-| Short | Long      | Description                    | Default  |
-| ----- | --------- | ------------------------------ | -------- |
-| -o    | --out     | output directory               | dist/app |
-| -C    | --compile | create a standalone executable | false    |
-| -c    | --config  | bun config (js or ts)          |          |
+| Short | Long      | Description                       | Default  |
+| ----- | --------- | --------------------------------- | -------- |
+| -o    | --out     | output directory                  | dist/app |
+| -C    | --compile | create a standalone executable    | false    |
+| -c    | --config  | extra Bun build config (js or ts) |          |
 
 #### Example
 
@@ -102,9 +100,9 @@ Generate a client for your Galbe application.
 
 #### Arguments
 
-| Name  | Description                                              |
-| ----- | -------------------------------------------------------- |
-| index | The js or ts file that export your Galbe server instance. |
+| Name  | Description                                               |
+| ----- | --------------------------------------------------------- |
+| index | The js or ts file that exports your Galbe server instance. |
 
 #### Options
 
@@ -198,8 +196,7 @@ Hello Pierre! You're 29 y.o.
 ```
 
 > [!IMPORTANT]
-> A `GCLI_SERVER_URL` environment variable must be defined. It should indicate the URL of the Galbe server you want to target.
-> In that specific case `http://localhost:3000`.
+> A `GCLI_SERVER_URL` environment variable must be defined. It should point to the URL of the Galbe server you want to target — in that specific case, `http://localhost:3000`.
 
 ### spec
 
@@ -207,9 +204,9 @@ Generate the spec of your Galbe application.
 
 #### Arguments
 
-| Name  | Description                                              |
-| ----- | -------------------------------------------------------- |
-| index | The js or ts file that export your Galbe server instance. |
+| Name  | Description                                               |
+| ----- | --------------------------------------------------------- |
+| index | The js or ts file that exports your Galbe server instance. |
 
 #### Options
 
@@ -340,4 +337,45 @@ $ galbe dev index.ts
 done
 
 🚀 Server running at http://localhost:3000
+```
+
+### model
+
+Generate TypeScript types from a database schema.
+
+#### Options
+
+| Short | Long     | Description                                                    | Default     |
+| ----- | -------- | -------------------------------------------------------------- | ----------- |
+| -u    | --url    | database connection url (e.g. `postgres://user:pwd@host:port`) | _required_  |
+| -t    | --table  | table name (e.g. `users` or `public.users`)                    | _all tables_|
+| -s    | --schema | schema name                                                    | `public`    |
+| -o    | --out    | output file (`.ts`) or directory                               | `.`         |
+| -F    | --force  | force overriding output                                        | false       |
+
+#### Example
+
+```bash
+$ galbe generate model -u postgres://postgres:secret@localhost:5432/app -o src/models.ts
+```
+
+If `--out` is a directory, one file per table is created (`<tableName>.ts`). If it ends in `.ts`, all generated types are written to a single file.
+
+## info
+
+Print information about the current OS, Bun, and Galbe versions.
+
+#### Example
+
+```bash
+$ galbe info
+OS
+  name: Linux
+  arch: x64
+  version: 6.8.0-110-generic
+Bun
+  version: 1.1.34
+  revision: ...
+Galbe
+  version: 0.x.y
 ```

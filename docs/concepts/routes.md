@@ -1,23 +1,24 @@
 # Routes
 
-Routes serve as the entry points for handling client requests in a Galbe application. This section covers route definition, available configuration options, and the Automatic Route Analyzer, which simplifies route setup.
+Routes are the entry points for handling client requests in a Galbe application. This section covers route definition, available configuration options, and the Automatic Route Analyzer that simplifies route setup.
 
 ## Defining Routes
 
 Here's how to define routes in Galbe:
 
 ```ts
-galbe.[method](path: string, schema?: Schema, hooks?: Hooks[], handler: Handler)
+galbe.[method](path: string, schema?: Schema, hooks?: Hook[], handler: Handler)
 ```
 
 - **method** (`get` | `post` | `put` | `delete` | `patch` | `options` | `head`)
   - The [HTTP request method](https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods) for the route.
 
 - **path** (string)
-  - The URL path of the route, composed of segments separated by `/`. Each segment may contain alphanumeric characters and dashes but should not start or end with a dash.
+  - The URL path of the route, composed of segments separated by `/`. Segments may contain alphanumeric characters, dashes, and dots, and must not start or end with a dash.
+  - A leading `/` is added automatically if missing.
   - Special segments:
-    - `:param` → A segment starting with `:` represents a parameter.
-    - `*` → A wildcard segment matching any sequence of segments.
+    - `:param` → A segment starting with `:` represents a path parameter.
+    - `*` → A wildcard segment that matches any single path segment. When used as the last segment of a path, it also matches the parent path (e.g. `/foo/*` matches both `/foo/bar` and `/foo`).
 
 - **schema** (Schema) _(Optional)_
   - See the [Schemas](schemas.md) section.
@@ -58,7 +59,7 @@ galbe.get(
 )
 ```
 
-#### Route with Schemas and Hooks
+#### Route with Schema and Hooks
 
 <!-- prettier-ignore -->
 ```js
@@ -72,19 +73,19 @@ galbe.get(
 
 ## Defining Static Routes
 
-Static routes serve files from the filesystem. If the target is a directory, it will recursively serve all files within it.
+Static routes serve files from the filesystem. If the target is a directory, all files within it are served recursively.
 
 ```ts
 galbe.static(path: string, target: string, options?: StaticEndpointOptions)
 ```
 
-- **path** (string): The URL path of the route.
+- **path** (string): The URL path under which the files are served.
 
 - **target** (string): The path to the directory or file to serve.
 
 - **options** (StaticEndpointOptions) _(Optional)_:
-  - **resolve** ((path: string, target: string) => string | null | undefined | void) _(Optional)_
-    A function that resolves the path to the file to serve. The function may return a string corresponding to the new target.
+  - **resolve** (`(path: string, target: string) => string | null | undefined | void`) _(Optional)_
+    A function that maps a request path to a file on disk. Return a string to override the resolved file, or a falsy value to skip serving that path.
 
 ### Examples
 
@@ -93,16 +94,19 @@ galbe.static(path: string, target: string, options?: StaticEndpointOptions)
 galbe.static('/static', './public')
 ```
 
+> [!NOTE]
+> When a static route is built (`galbe build`), the targeted assets are copied next to the bundle so the executable remains self-contained.
+
 ## Automatic Route Analyzer
 
 > [!NOTE]
-> This feature is only available if you run or build the app using the [Galbe CLI](getting-started.md#galbe-cli). The CLI is used by default if you followed the [Automatic Installation](getting-started.md#automatic-installation) or configured `package.json` accordingly.
+> This feature is only available when you run or build the app using the [Galbe CLI](../reference/cli.md). The CLI is used by default if you followed the [Automatic Installation](../introduction/getting-started.md#automatic-installation-recommended) or configured your `package.json` accordingly.
 
-The Automatic Route Analyzer scans all Route Files in your project and sets up route definitions automatically. By default, it looks for files matching `src/**/*.route.{js,ts}`. This behavior can be customized via the `routes` property in your Galbe configuration. Setting it to `false` disables the analyzer.
+The Automatic Route Analyzer scans all Route Files in your project and registers their routes automatically. By default, it looks for files matching `src/**/*.route.{js,ts}`. This behavior can be customized via the `routes` property in your Galbe configuration. Setting it to `false` disables the analyzer.
 
 ### Route Files
 
-To be analyzed correctly, a Route File must export a default function that accepts a Galbe instance as its only argument. Define your routes within this function. Example in JavaScript:
+To be analyzed correctly, a Route File must export a default function that accepts a Galbe instance as its only argument. Define your routes within this function:
 
 ```ts
 export default galbe => {
@@ -110,7 +114,7 @@ export default galbe => {
 }
 ```
 
-The Automatic Route Analyzer can also extract metadata from multiline comments. Some plugins utilize this metadata for specific tasks. Example:
+The Automatic Route Analyzer can also extract metadata from JSDoc-style block comments. Some plugins consume this metadata for tasks such as documentation generation. Example:
 
 ```js
 /**
@@ -128,6 +132,7 @@ export default galbe => {
 }
 ```
 
-> [!TIP]
-> To exclude a route from analysis, add `//@galbe-ignore` before its definition. This is useful for preventing certain routes from being included in automatic analysis or documentation generation.
+The first paragraph of a comment is captured as the route's description (its first line is used as a summary). Lines starting with `@tag` are stored as tag metadata; tags repeated multiple times are exposed as arrays.
 
+> [!TIP]
+> To exclude a route or a whole route file from analysis, add a `@galbe-ignore` comment immediately before its definition (or before the file's default export). Use `@galbe-hide` instead to keep the route registered but hide it from generated artifacts (e.g. OpenAPI specs, generated clients).

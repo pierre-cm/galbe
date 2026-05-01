@@ -2,7 +2,7 @@
 
 ## Configuring Galbe
 
-By default, Galbe automatically attempts to resolve a configuration file named `galbe.config.{js,ts}` located in the same directory as your entry file.
+By default, Galbe automatically resolves a configuration file named `galbe.config.{js,ts}` located in the same directory as your entry file.
 
 The configuration file should export a default object containing your settings:
 
@@ -12,10 +12,10 @@ export default {
 }
 ```
 
-Alternatively, you can pass your configuration directly to your Galbe server during instantiation, as shown below:
+Alternatively, you can pass your configuration directly to the Galbe constructor at instantiation:
 
 ```ts
-import { Galbe } from "galbe"
+import { Galbe } from 'galbe'
 
 const galbe = new Galbe({
   // config properties
@@ -25,65 +25,84 @@ export default galbe
 ```
 
 > [!NOTE]
-> You can use both configuration methods simultaneously. Galbe will first apply the settings from `galbe.config.{js,ts}`, and any properties passed during instantiation will override the corresponding ones from the configuration file.
+> You can use both methods simultaneously. Galbe first applies the settings from `galbe.config.{js,ts}`, and any properties passed during instantiation override the corresponding ones from the configuration file.
 
 ## Configuration Properties
 
 ### hostname
+
 The hostname of the server. Default: `localhost`.
 
 ### port
+
 The port number the server will listen on. Default: `3000`.
 
 ### reusePort
-Enables or disables the `SO_REUSEPORT` socket option. Default: `false`.
+
+Enables the `SO_REUSEPORT` socket option, allowing multiple processes to share the same port (Linux only). Default: `false`.
 
 ### basePath
-A base path added as a prefix to all routes.
+
+A base path added as a prefix to all routes. A leading `/` is added automatically if missing.
 
 ### routes
-A glob pattern or list of glob patterns defining the route files to be analyzed by the [Automatic Route Analyzer](routes.md#automatic-route-analyzer). Default: `src/**/*.route.{js,ts}`.
+
+A glob pattern (or array of glob patterns) defining the route files to be picked up by the [Automatic Route Analyzer](../concepts/routes.md#automatic-route-analyzer). Set to `false` to disable the analyzer entirely. Default: `src/**/*.route.{js,ts}`.
 
 ### plugin
-A property used by plugins to add specific configurations. Each key should correspond to a [Unique Plugin Identifier](plugins.md).
+
+A namespace used by plugins to read their configuration. Each key should match a [Unique Plugin Identifier](../concepts/plugins.md#name).
+
+```ts
+export default {
+  plugin: {
+    'com.example.myplugin': { /* plugin-specific config */ }
+  }
+}
+```
 
 ### tls
-Enables or disables TLS support. Default: `false`.
-- **tls.key**: Path to the private key file.
-- **tls.cert**: Path to the certificate file.
-- **tls.ca**: Path to the certificate authority file.
 
-### requestValidator.enabled
-Enables or disables _request_ schema validation (see [Request Schema Definition](schemas.md#request-schema-definition)). Default: `true`.
+Enables TLS support. Accepts a [Bun TLSOptions](https://bun.com/docs/api/http#tls) object. When omitted, the server runs over plain HTTP.
 
-### responseValidator.enabled
-Enables or disables _response_ schema validation (see [Response Schema Definition](schemas.md#response)). Default: `true`.
-
-### router.cacheEnabled
-Enables or disables route caching (see [Router Caching](router.md#caching)). Default: `false`.
+- **tls.key**: Path to the private key file (or its contents).
+- **tls.cert**: Path to the certificate file (or its contents).
+- **tls.ca**: Path to the certificate authority file (or its contents).
 
 ### server
-Allows passing custom options to the underlying [Bun.serve](https://bun.sh/docs/api/http#bun-serve) method.
+
+Custom options passed through to the underlying [Bun.serve](https://bun.com/docs/api/http#bun-serve) call. Useful for fine-grained server tuning beyond what Galbe exposes directly.
+
+### requestValidator.enabled
+
+Enables _request_ schema validation (see [Request Schema Definition](../concepts/schemas.md#request-schema-definition)). Default: `true`.
+
+### responseValidator.enabled
+
+Enables _response_ schema validation (see [response](../concepts/schemas.md#response)). Default: `true`.
+
+### router.cacheEnabled
+
+Enables route caching for dynamic routes (see [Router Caching](../concepts/router.md#caching)). Default: `false`.
 
 ## Config Type Safety
 
-To ensure type safety for your configuration, use the `config` helper method, which leverages your IDE’s IntelliSense:
+To enforce type safety in your configuration file, use the `config` helper, which leverages your IDE's IntelliSense:
 
 ```ts
-import { config } from "galbe"
+import { config } from 'galbe'
 
 export default config({
   // ...
 })
 ```
 
-Alternatively, if you are using TypeScript, you can apply the `GalbeConfig` type to enforce type consistency:
+Alternatively, you can apply the `GalbeConfig` type with `satisfies`:
 
 ```ts
-import type { GalbeConfig } from "galbe"
+import type { GalbeConfig } from 'galbe'
 
 export default {
   // ...
 } satisfies GalbeConfig
 ```
-

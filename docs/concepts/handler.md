@@ -1,16 +1,16 @@
 # Handler
 
-A handler is a function that gets executed when a request matches the route definition. It is responsible for processing the request and sending a response.
+A handler is a function that runs when a request matches a route definition. It is responsible for processing the request and producing a response.
 
 ## Handler Declaration
 
-The handler should be declared as the last argument of the [Route Definition](routes.md#route-definition) method.
+The handler must be the last argument of the [Route Definition](routes.md#defining-routes) method.
 
 ```js
-galbe.get('foo', schema, [hook1, hook2], ctx => {})
+galbe.get('/foo', schema, [hook1, hook2], ctx => {})
 ```
 
-Handlers are called after the last hook call, or right after the request parsing if no hook is declared. To get a better understanding of the request lifecycle, you can refer to the [Lifecycle](https://galbe.dev/documentation/lifecycle) section.
+Handlers run after the last hook, or right after request parsing if no hook is declared. See the [Lifecycle](https://galbe.dev/documentation/lifecycle) section for more details on the request lifecycle.
 
 ## Handler Definition
 
@@ -21,41 +21,39 @@ const handler = ctx => {
 }
 ```
 
-The handler function takes a `context` object as its single argument and might return a `response`.
+A handler takes a `context` object as its single argument and may return a response value.
 
 ### Context
 
-The `context` object contains the request information as well as a `set` object that serves as a response modifier. You can find more detailed information about the `context` object in the [Context](context.md) section.
+The `context` object carries the request information as well as a `set` object used to shape the response. See the [Context](context.md) section for full details.
 
 ### Response
 
-To send a response, your handler can return an object. The response sent will depend on the type of the object returned. There are four types of responses that can be returned by a handler method. More details are provided in the next section.
+To send a response, the handler returns a value. The actual HTTP response is derived from the type of that value. The next section enumerates each supported return type.
 
 ## Response Types
 
 > [!NOTE]
-> This section only covers response body payloads. To return specific response headers and/or status, you should define them with the `context.set` object before the return statement. More details can be found in the [Context](context.md) section.
+> This section only covers response body payloads. To set the response status or headers, mutate `context.set` before returning. See the [Context](context.md) section for details.
 
 ### String
 
-Case where a `string` is returned by the handler.
+A `string` returned by the handler.
 
-- status: 200
-- content-type: `text/plain`
+- status: `200` (or `ctx.set.status`)
+- content-type: `text/plain` (or `application/json` if a JSON response schema is declared for the status)
 
 #### Example
 
 ```js
-galbe.get('/example', ctx => {
-  return 'Hello Mom!'
-})
+galbe.get('/example', ctx => 'Hello Mom!')
 ```
 
 ### Object
 
-Case where an `object` is returned by the handler.
+Any plain object (including arrays) returned by the handler.
 
-- status: 200
+- status: `200` (or `ctx.set.status`)
 - content-type: `application/json`
 
 #### Example
@@ -66,11 +64,22 @@ galbe.get('/example', ctx => {
 })
 ```
 
+### Uint8Array
+
+A `Uint8Array` returned by the handler is sent as a binary response.
+
+- status: `200` (or `ctx.set.status`)
+- content-type: `application/octet-stream` (unless overridden via `ctx.set.headers`)
+
+#### Example
+
+```js
+galbe.get('/example', () => new Uint8Array([0xde, 0xad, 0xbe, 0xef]))
+```
+
 ### Response Instance
 
-Case where a [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response) instance is returned by the handler.
-
-In this case, `context.set` properties are not taken into account to construct the response.
+A [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response) instance returned by the handler is sent verbatim. In this case, `ctx.set` is **not** applied — the `Response` is responsible for its own status and headers.
 
 #### Example
 
@@ -84,12 +93,14 @@ galbe.get('/example', ctx => {
 })
 ```
 
-### Generator
+### Generator / ReadableStream
 
-Case where a [Generator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Generator) instance is returned by the handler.
+A [Generator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Generator), [AsyncGenerator](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncGenerator), or [ReadableStream](https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream) returned by the handler is streamed to the client as [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) (SSE).
 
-- status: 200
+- status: `200` (or `ctx.set.status`)
 - content-type: `text/event-stream`
+
+Each yielded value becomes one SSE message (`id:<uuid>\ndata:<value>\n\n`). If the request includes a `Last-Event-ID` header, that ID is used for the first message.
 
 #### Example
 
@@ -101,19 +112,21 @@ async function* generator(array) {
   }
 }
 
-galbe.get('/example', ctx => generator(['one', 'two', 'three']))
+galbe.get('/example', () => generator(['one', 'two', 'three']))
 ```
 
 ## Throwing Errors
 
-Throwing a `RequestError` at any point in the handler execution will result in a response with the specified status and payload.
+Throwing a `RequestError` at any point during request handling produces a response with the specified status and payload.
 
 #### Example
 
 ```ts
-galbe.get("/test", () => {
+import { RequestError } from 'galbe'
+
+galbe.get('/test', () => {
   throw new RequestError({ status: 418, payload: '🫖' })
 })
 ```
 
-Any other kind of error will result in a `500` response with the error message `"Internal Server Error"` by default. You can always customize it by defining a custom [Error Handler](error-handler.md).
+Any other thrown value results in a `500` response with the message `"Internal Server Error"` by default. You can customize this by registering a custom [Error Handler](error-handler.md).
