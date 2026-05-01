@@ -236,4 +236,20 @@ describe('routeFiles', () => {
     expect(k.meta?.[0].file).toMatch(/test\.route\..*$/)
     expect(k.meta?.[1].file).toMatch(/test\.route\..*$/)
   })
+
+  test('proxy.static records (path, target) on _staticTargets', async () => {
+    // Regression: the build step needs to know the user-supplied static
+    // (path, target) pairs to copy assets next to the bundle. Previously this
+    // was done via a side effect inside `proxy.static` gated by a build env
+    // var; now the proxy just records the pairs and the build command does
+    // the copy.
+    const g = new Galbe()
+    const proxy = new GalbeProxy(g)
+    await proxy.static('/static', './test/resources')
+    await proxy.static('/img', './test/resources/image.png')
+    expect(proxy._staticTargets).toEqual([
+      { path: '/static', target: './test/resources' },
+      { path: '/img', target: './test/resources/image.png' },
+    ])
+  })
 })

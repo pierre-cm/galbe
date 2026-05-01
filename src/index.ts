@@ -8,6 +8,7 @@ import type {
   Handler,
   Endpoint,
   Context,
+  ContextSet,
   ErrorHandler,
   GalbePlugin,
   STBody,
@@ -88,14 +89,7 @@ const galbeMethod = <
     request: {} as Request,
     cookies: {} as Record<string, string>,
     state: {},
-    set: {} as {
-      headers: {
-        'set-cookie': string[]
-        [header: string]: string | string[]
-      }
-      status?: number
-      cookie: (cookie: string | Record<string, string>) => void
-    },
+    set: {} as ContextSet,
   }
   return {
     method,

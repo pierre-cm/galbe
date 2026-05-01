@@ -3,9 +3,11 @@ import type {
   STIntersection,
   STJson,
   STLiteral,
+  STNumber,
+  STInteger,
   STObject,
-  STProps,
   STSchema,
+  STString,
   STUnion,
 } from '../../../src/schema'
 
@@ -43,21 +45,6 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     let kind = schema[Kind]
     let isJson = false
 
-    let pattern = schema?.pattern?.toString()
-    if (pattern) pattern = pattern.substring(1, pattern.length - 1)
-
-    let minLength = schema?.minLength
-    let maxLength = schema?.maxLength
-    let minimum = schema?.min
-    let maximum = schema?.max
-    let exclusiveMinimum = schema?.exclusiveMin
-    let exclusiveMaximum = schema?.exclusiveMax
-    // ArrayOptions exposes minLength/maxLength (matching the schema-builder API);
-    // OpenAPI calls them minItems/maxItems.
-    let minItems = schema?.[Kind] === 'array' ? schema?.minLength : undefined
-    let maxItems = schema?.[Kind] === 'array' ? schema?.maxLength : undefined
-    let uniqueItems = schema?.unique
-
     if (components.schemas && (schema.id as string) in components.schemas) {
       //@ts-ignore
       return { schema: { $ref: `#/components/schemas/${schema.id}` } }
@@ -69,41 +56,40 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       s = { nullable: true, enum: [null] }
     } else if (kind === 'boolean') s = { type: 'boolean' }
     else if (kind === 'byteArray') s = { type: 'string', format: 'binary' }
-    else if (kind === 'number')
+    else if (kind === 'number' || kind === 'integer') {
+      const n = schema as STNumber | STInteger
       s = {
-        type: 'number',
-        ...(exclusiveMinimum !== undefined ? { exclusiveMinimum } : {}),
-        ...(exclusiveMaximum !== undefined ? { exclusiveMaximum } : {}),
-        ...(minimum !== undefined ? { minimum } : {}),
-        ...(maximum !== undefined ? { maximum } : {}),
+        type: kind,
+        ...(n.exclusiveMin !== undefined ? { exclusiveMinimum: n.exclusiveMin } : {}),
+        ...(n.exclusiveMax !== undefined ? { exclusiveMaximum: n.exclusiveMax } : {}),
+        ...(n.min !== undefined ? { minimum: n.min } : {}),
+        ...(n.max !== undefined ? { maximum: n.max } : {}),
       }
-    else if (kind === 'integer')
-      s = {
-        type: 'integer',
-        ...(exclusiveMinimum !== undefined ? { exclusiveMinimum } : {}),
-        ...(exclusiveMaximum !== undefined ? { exclusiveMaximum } : {}),
-        ...(minimum !== undefined ? { minimum } : {}),
-        ...(maximum !== undefined ? { maximum } : {}),
-      }
-    else if (kind === 'string')
+    } else if (kind === 'string') {
+      const str = schema as STString
+      let pattern = str.pattern?.toString()
+      if (pattern) pattern = pattern.substring(1, pattern.length - 1)
       s = {
         type: 'string',
-        ...(schema?.format ? { format: schema.format } : {}),
+        ...(str.format ? { format: str.format } : {}),
         ...(pattern ? { pattern } : {}),
-        ...(minLength !== undefined ? { minLength } : {}),
-        ...(maxLength !== undefined ? { maxLength } : {}),
+        ...(str.minLength !== undefined ? { minLength: str.minLength } : {}),
+        ...(str.maxLength !== undefined ? { maxLength: str.maxLength } : {}),
       }
-    else if (kind === 'any') s = {}
+    } else if (kind === 'any') s = {}
     else if (kind === 'literal') {
       let value = (schema as STLiteral).value
       s = { type: 'string', enum: [value] }
     } else if (kind === 'array') {
+      const arr = schema as STArray
+      // ArrayOptions exposes minLength/maxLength (matching the schema-builder API);
+      // OpenAPI calls them minItems/maxItems.
       s = {
         type: 'array',
-        items: schemaToOpenapi((schema as STArray).items).schema,
-        ...(minItems !== undefined ? { minItems } : {}),
-        ...(maxItems !== undefined ? { maxItems } : {}),
-        ...(uniqueItems ? { uniqueItems } : {}),
+        items: schemaToOpenapi(arr.items).schema,
+        ...(arr.minLength !== undefined ? { minItems: arr.minLength } : {}),
+        ...(arr.maxLength !== undefined ? { maxItems: arr.maxLength } : {}),
+        ...(arr.unique ? { uniqueItems: arr.unique } : {}),
       }
     } else if (kind === 'object' || kind === 'multipartForm') {
       let props = (schema as STObject).props || {}
@@ -116,22 +102,9 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
         ...(required.length ? { required } : {}),
       }
     } else if (kind === 'json') {
-      let props = ((schema as STJson).props || {}) as STProps
-      let type = (schema as STJson).type
-      if (type === 'unknown') type = 'object'
-      let required = Object.entries(props)
-        .filter(([_, v]) => !v?.[Optional])
-        .map(([k, _]) => k)
+      const inner = (schema as STJson).value as STSchema | undefined
       isJson = true
-      s = {
-        type: type,
-        ...(type === 'object'
-          ? {
-              properties: Object.fromEntries(Object.entries(props).map(([k, v]) => [k, schemaToOpenapi(v).schema])),
-              ...(required.length ? { required } : {}),
-            }
-          : {}),
-      }
+      s = inner ? schemaToOpenapi(inner).schema : { type: 'object' }
     } else if (kind === 'union') {
       let anyOf: STSchema[] = (schema as STUnion).anyOf
       let nullable = anyOf.some(s => s[Kind] === 'null')
@@ -257,11 +230,12 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
             let p = parseParam(k, v, 'header')
             if (k.match(/authorization/i)) {
               // TODO: handle other auth methods
-              if (v.pattern && v?.pattern?.toString() === '/^Bearer /') {
+              const str = v as STString
+              if (str.pattern && str.pattern.toString() === '/^Bearer /') {
                 if (!metaSecuritySet) security.push({ bearerAuth: [] })
                 const scheme: OpenAPIV3.HttpSecurityScheme = { type: 'http', scheme: 'bearer' }
-                if (typeof v.format === 'string') scheme.bearerFormat = v.format
-                if (typeof v.description === 'string') scheme.description = v.description
+                if (typeof str.format === 'string') scheme.bearerFormat = str.format
+                if (typeof str.description === 'string') scheme.description = str.description
                 if (!components.securitySchemes) components.securitySchemes = {}
                 components.securitySchemes.bearerAuth = scheme
                 return null

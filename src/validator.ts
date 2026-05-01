@@ -1,5 +1,17 @@
-import { InternalError, type STResponse } from './index'
-import type { STSchema, STProps, STUnion, STIntersection } from './schema'
+import { InternalServerError, type STResponse } from './index'
+import type {
+  STSchema,
+  STProps,
+  STUnion,
+  STIntersection,
+  STJson,
+  STLiteral,
+  STArray,
+  STNumber,
+  STInteger,
+  STString,
+  STObject,
+} from './schema'
 import { Kind, Optional, Stream } from './schema'
 import { isIterator } from './util'
 
@@ -30,7 +42,8 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
     if (!(typeof elt === 'string')) throw `Not a valid string`
     schemaValidation(elt, schema)
   } else if (schema[Kind] === 'literal') {
-    if (elt !== schema.value) throw `Not a valid value. Found "${elt}" but expected "${schema.value}"`
+    const lit = schema as STLiteral
+    if (elt !== lit.value) throw `Not a valid value. Found "${elt}" but expected "${lit.value}"`
   } else if (schema[Kind] === 'object') {
     if (opt?.parse && typeof elt === 'string') {
       try {
@@ -42,7 +55,7 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
     if (typeof elt !== 'object') throw `Not a valid object`
     if (Array.isArray(elt)) throw `Expected an object, not an array`
     const err: ValidationError = {}
-    Object.entries(schema.props as STProps).forEach(([k, s]) => {
+    Object.entries((schema as STObject).props as STProps).forEach(([k, s]) => {
       if (elt === null || !(k in elt)) {
         if (!s?.[Optional]) err[k] = 'Required'
         return
@@ -55,7 +68,7 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
     })
     if (Object.keys(err).length) errors.push(err)
   } else if (schema[Kind] === 'json') {
-    elt = validate(elt, { ...schema, [Kind]: schema.type }, opt)
+    elt = validate(elt, (schema as STJson).value, opt)
   } else if (schema[Kind] === 'array') {
     if (opt?.parse && typeof elt === 'string') {
       try {
@@ -65,7 +78,7 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
       }
     }
     if (!Array.isArray(elt)) throw 'Not a valid array'
-    for (const i of elt) validate(i, schema.items)
+    for (const i of elt) validate(i, (schema as STArray).items)
     schemaValidation(elt, schema)
   } else if (schema[Kind] === 'byteArray') {
     if (opt?.parse && typeof elt === 'string') elt = Uint8Array.from(elt, c => c.charCodeAt(0))
@@ -103,14 +116,14 @@ export const validateResponse = (response: any, schema: STResponse, status: numb
   const s = schema?.[status] ?? schema?.['default']
   if (!s) return
   if (response instanceof ReadableStream) {
-    if (!s[Stream]) throw new InternalError(`Expected ${s[Kind]} response, but got ReadableStream`)
+    if (!s[Stream]) throw new InternalServerError(`Expected ${s[Kind]} response, but got ReadableStream`)
   } else if (isIterator(response)) {
-    if (!s[Stream]) throw new InternalError(`Expected ${s[Kind]} response, but got Iterator`)
+    if (!s[Stream]) throw new InternalServerError(`Expected ${s[Kind]} response, but got Iterator`)
   } else {
     try {
       validate(response, s)
     } catch (error) {
-      throw new InternalError({ ResponseValidationError: error })
+      throw new InternalServerError({ ResponseValidationError: error })
     }
   }
 }
@@ -118,25 +131,28 @@ export const validateResponse = (response: any, schema: STResponse, status: numb
 const schemaValidation = (value: any, schema: STSchema) => {
   const errors = []
   if (schema[Kind] === 'integer' || schema[Kind] === 'number') {
-    if (schema.exclusiveMin !== undefined)
-      if ((value as number) <= schema.exclusiveMin) errors.push(`Is less or equal to ${schema.exclusiveMin}`)
-    if (schema.exclusiveMax !== undefined)
-      if ((value as number) >= schema.exclusiveMax) errors.push(`Is greater or equal to ${schema.exclusiveMax}`)
-    if (schema.min !== undefined) if ((value as number) < schema.min) errors.push(`Is less than ${schema.min}`)
-    if (schema.max !== undefined) if ((value as number) > schema.max) errors.push(`Is greater than ${schema.max}`)
+    const n = schema as STNumber | STInteger
+    if (n.exclusiveMin !== undefined)
+      if ((value as number) <= n.exclusiveMin) errors.push(`Is less or equal to ${n.exclusiveMin}`)
+    if (n.exclusiveMax !== undefined)
+      if ((value as number) >= n.exclusiveMax) errors.push(`Is greater or equal to ${n.exclusiveMax}`)
+    if (n.min !== undefined) if ((value as number) < n.min) errors.push(`Is less than ${n.min}`)
+    if (n.max !== undefined) if ((value as number) > n.max) errors.push(`Is greater than ${n.max}`)
   } else if (schema[Kind] === 'string') {
-    if (schema.minLength !== undefined && (value as string).length < schema.minLength)
-      errors.push(`Length is too small (${schema.minLength} char min)`)
-    if (schema.maxLength !== undefined && (value as string).length > schema.maxLength)
-      errors.push(`Length is too large (${schema.maxLength} char max)`)
-    if (schema.pattern !== undefined && !(value as string).match(schema.pattern))
-      errors.push(`Does not match pattern ${schema.pattern}`)
+    const str = schema as STString
+    if (str.minLength !== undefined && (value as string).length < str.minLength)
+      errors.push(`Length is too small (${str.minLength} char min)`)
+    if (str.maxLength !== undefined && (value as string).length > str.maxLength)
+      errors.push(`Length is too large (${str.maxLength} char max)`)
+    if (str.pattern !== undefined && !(value as string).match(str.pattern))
+      errors.push(`Does not match pattern ${str.pattern}`)
   } else if (schema[Kind] === 'array') {
-    if (schema.minLength !== undefined && (value as any[]).length < schema.minLength)
-      errors.push(`Must contain at least ${schema.minLength} item${schema.minLength > 1 ? 's' : ''}`)
-    if (schema.maxLength !== undefined && (value as any[]).length > schema.maxLength)
-      errors.push(`Must contain at most ${schema.maxLength} item${schema.maxLength > 1 ? 's' : ''}`)
-    if (schema.unique === true && new Set(value as any[]).size !== (value as any[]).length)
+    const arr = schema as STArray
+    if (arr.minLength !== undefined && (value as any[]).length < arr.minLength)
+      errors.push(`Must contain at least ${arr.minLength} item${arr.minLength > 1 ? 's' : ''}`)
+    if (arr.maxLength !== undefined && (value as any[]).length > arr.maxLength)
+      errors.push(`Must contain at most ${arr.maxLength} item${arr.maxLength > 1 ? 's' : ''}`)
+    if (arr.unique === true && new Set(value as any[]).size !== (value as any[]).length)
       errors.push(`Has duplicate values`)
   }
   if (errors.length) throw Array.isArray(errors) && errors.length === 1 ? errors[0] : errors

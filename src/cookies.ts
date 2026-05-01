@@ -1,5 +1,5 @@
 export type CookieOptions = {
-  path: string
+  path?: string
   maxAge?: number
   httpOnly?: boolean
   sameSite?: true | false | 'lax' | 'strict' | 'none'

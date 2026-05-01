@@ -1,4 +1,3 @@
-import { cpSync } from 'fs'
 import type { GalbeConfig, GalbePlugin, Method, Route } from './types'
 
 import { readdir, lstat } from 'fs/promises'
@@ -39,6 +38,7 @@ export class GalbeProxy {
   _metaTmp?: RoutesMeta
   _filepath?: string
   _meta: Array<RouteFileMeta> = []
+  _staticTargets: Array<{ path: string; target: string }> = []
   constructor(g: Galbe, cb?: RouteInstanciationCallback) {
     this.#g = g
     this._cb = cb
@@ -110,9 +110,9 @@ export class GalbeProxy {
     return this.handleRoute('head', ...args)
   }
   async static(...args: any[]) {
-    if (!!Bun.env.GALBE_BUILD_OUT) {
-      let [_, target] = args
-      cpSync(target, `${Bun.env.GALBE_BUILD_OUT}/static-${Bun.env.GALBE_BUILD}/${target}`, { recursive: true, dereference: true })
+    const [path, target] = args
+    if (typeof path === 'string' && typeof target === 'string') {
+      this._staticTargets.push({ path, target })
     }
     return this.handleRoute('static', ...args)
   }

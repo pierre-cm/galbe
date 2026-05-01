@@ -9,10 +9,10 @@ import { CWD, fmtVal, silentExec } from '../util'
 import { Galbe } from '../../src'
 import { defineRoutes, GalbeProxy } from '../../src/routes'
 import { BuildConfig } from 'bun'
-import { existsSync } from 'fs'
+import { cpSync, existsSync } from 'fs'
 import { softMerge } from '../../src/util'
 
-const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string) => {
+const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string, outPath: string) => {
   const buildPath = resolve(tmpdir(), buildId)
   const indexDir = dirname(indexPath)
 
@@ -34,6 +34,13 @@ const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string) =>
   await proxy.init()
 
   if (errors.length) throw errors
+
+  // Copy static assets next to the bundle so the runtime can resolve them
+  // via static-${BUILD_ID}/<target> at request time.
+  for (const { target } of proxy._staticTargets) {
+    cpSync(target, `${outPath}/static-${buildId}/${target}`, { recursive: true, dereference: true })
+  }
+
   await mkdir(buildPath, { recursive: true })
 
   let buildIndex =
@@ -76,7 +83,6 @@ export default (cmd: Command) => {
       }
 
       Bun.env.GALBE_BUILD = buildID
-      Bun.env.GALBE_BUILD_OUT = outPath
 
       const bunfig = config ? (await import(resolve(CWD, config)))?.default || {} : {}
 
@@ -101,7 +107,7 @@ export default (cmd: Command) => {
       }
       let buildIndex: string = ''
       try {
-        buildIndex = await createBuildIndex(index, g, buildID)
+        buildIndex = await createBuildIndex(index, g, buildID, outPath)
       } catch (errors) {
         console.log(`\nerror: build errors`)
         for (let error of errors) console.log(error)

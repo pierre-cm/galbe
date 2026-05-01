@@ -1,6 +1,6 @@
 import type { Context, Method, Route } from './types'
 
-import { InternalError, RequestError } from './types'
+import { InternalServerError, RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
 import { Galbe } from './index'
 import { validateResponse } from './validator'
@@ -14,7 +14,7 @@ const EMPTY_BODY_METHODS = ['GET', 'OPTIONS', 'HEAD']
 
 const handleInternalError = (error: any) => {
   console.error(error)
-  return new InternalError()
+  return new InternalServerError()
 }
 
 const setupPluginCallbacks = (galbe: Galbe) => ({
@@ -181,7 +181,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         for (let eh of galbe.errorCb)
           customError = responseParser(eh(error, context as Context), context as Context, cookies)
         if (customError) return customError
-        if (error instanceof InternalError) {
+        if (error instanceof InternalServerError) {
           console.log(`Internal Error`, error?.payload || '')
           return new Response('Internal Server Error', {
             status: error.status,

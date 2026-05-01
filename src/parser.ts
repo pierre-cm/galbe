@@ -1,4 +1,4 @@
-import type { MaybeArray, STBody, Context, STResponse, STBodyValue, STBodyType } from './index'
+import type { MaybeArray, STBody, Context, STResponse, STBodyContent, STBodyValue, STBodyType } from './index'
 import type {
   STStream,
   STMultipartForm,
@@ -13,12 +13,13 @@ import type {
   STPropsValue,
   STUnion,
   STIntersection,
+  STArray,
 } from './schema'
 
 import { readableStreamToArrayBuffer } from 'bun'
 import { Kind, Optional, Stream } from './schema'
 import { validate } from './validator'
-import { InternalError, RequestError } from './index'
+import { InternalServerError, RequestError } from './index'
 import { isIterator } from './util'
 
 const textDecoder = new TextDecoder()
@@ -38,8 +39,12 @@ export const requestBodyParser = async (
   schemas?: STBody | STNull,
   contentType?: STBodyType
 ) => {
-  let schema: STBodyValue =
-    (schemas as STNull)?.[Kind] === 'null' ? schemas : contentType ? schemas?.[contentType] : undefined
+  let schema: STBodyValue | STNull =
+    (schemas as STNull)?.[Kind] === 'null'
+      ? (schemas as STNull)
+      : contentType
+        ? (schemas as Partial<STBodyContent>)?.[contentType]
+        : undefined
   let kind = schema?.[Kind]
   let isStream = schema && Stream in schema
   try {
@@ -95,7 +100,7 @@ export const requestBodyParser = async (
         if (isStream) return rsToAsyncIterator(body)
         return new Uint8Array(await readableStreamToArrayBuffer(body))
       } else if (contentType === 'text') {
-        if (!['string', 'boolean', 'number', 'integer', 'union', 'literal'].includes(kind))
+        if (!kind || !['string', 'boolean', 'number', 'integer', 'union', 'literal'].includes(kind))
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (body === null)
           return isStream
@@ -105,27 +110,28 @@ export const requestBodyParser = async (
                   controller.close()
                 },
               })
-            : validate('', schema, { parse: true })
+            : validate('', schema as STSchema, { parse: true })
         if (isStream) return $streamToString(body)
         if (kind === 'union') {
           let str = await streamToString(body)
-          return unionize(str, schema)
+          return unionize(str, schema as STUnion)
         }
         return await streamToString(body, schema as STBodyValue)
       } else if (contentType === 'json') {
         if (
+          !kind ||
           !['object', 'json', 'boolean', 'number', 'integer', 'string', 'array', 'union', 'intersection'].includes(kind)
         )
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (kind === 'union') {
           let str = body === null ? 'null' : await streamToString(body)
           let json = JSON.parse(str)
-          return unionize(json, schema)
+          return unionize(json, schema as STUnion)
         }
         if (kind === 'intersection') {
           let str = body === null ? 'null' : await streamToString(body)
           let json = JSON.parse(str)
-          return intersectionize(json, schema)
+          return intersectionize(json, schema as STIntersection<any>)
         }
         const str = body === null ? 'null' : await streamToString(body)
         let json
@@ -137,9 +143,9 @@ export const requestBodyParser = async (
             payload: { body: err?.message ?? 'Parsing error' },
           })
         }
-        return validate(json, schema, { parse: true })
+        return validate(json, schema as STSchema, { parse: true })
       } else if (contentType === 'urlForm') {
-        if (!['object', 'union'].includes(kind))
+        if (!kind || !['object', 'union'].includes(kind))
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (body === null)
           return isStream
@@ -156,16 +162,17 @@ export const requestBodyParser = async (
                     controller.close()
                   },
                 }),
-                schema
+                schema as STObject
               )
         if (kind === 'union') {
           const b = await streamToUrlForm(body)
-          return unionize(b, schema)
+          return unionize(b, schema as STUnion)
         }
         if (isStream) return $streamToUrlForm(body, schema as STStream<STObject>)
         else return await streamToUrlForm(body, schema as STObject)
       } else if (contentType === 'multipart') {
-        if (kind !== 'multipartForm') throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
+        if (kind !== 'multipartForm' && kind !== 'union')
+          throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (body === null)
           return isStream
             ? new ReadableStream({
@@ -178,7 +185,7 @@ export const requestBodyParser = async (
         const boundary = headers?.['content-type']?.match(/boundary\="?([^"]*)"?;?.*$/)?.[1] || ''
         if (kind === 'union') {
           let mp = await streamToMultipartForm(body, boundary)
-          return unionize(mp, schema)
+          return unionize(mp, schema as STUnion)
         }
         if (isStream) return $streamToMultipartForm(body, boundary, schema as STStream<STMultipartForm>)
         return streamToMultipartForm(body, boundary, schema as STMultipartForm)
@@ -223,7 +230,8 @@ async function* $streamToUrlForm(
           decodeURIComponent(textDecoder.decode(bV)),
         ]
         try {
-          let s = schema?.props?.[key]?.[Kind] === 'array' ? schema?.props?.[key].items : schema?.props?.[key]
+          const propSchema = schema?.props?.[key]
+          let s = propSchema?.[Kind] === 'array' ? (propSchema as STArray).items : propSchema
           val = s ? paramParser(val, s) : val
         } catch (error) {
           throw new RequestError({ status: 400, payload: { body: { [key]: error } } })
@@ -254,7 +262,8 @@ async function* $streamToUrlForm(
     decodeURIComponent(textDecoder.decode(rest)),
   ]
   try {
-    let s = schema?.props?.[key]?.[Kind] === 'array' ? schema?.props?.[key].items : schema?.props?.[key]
+    const propSchema = schema?.props?.[key]
+    let s = propSchema?.[Kind] === 'array' ? (propSchema as STArray).items : propSchema
     val = s ? paramParser(val, s) : val
   } catch (error) {
     throw new RequestError({ status: 400, payload: { body: { [key]: error } } })
@@ -553,7 +562,7 @@ const paramParser = (
     let errors: Record<number, any> = {}
     for (let [idx, v] of value.entries()) {
       try {
-        pv.push(paramParser(v, type.items as STMultipartFormValues) as Static<STPropsValue>)
+        pv.push(paramParser(v, (type as STArray).items as STMultipartFormValues) as Static<STPropsValue>)
       } catch (error) {
         errors[idx] = error
       }
@@ -582,10 +591,11 @@ const paramParser = (
       validate(value, type)
       return value
     } else if (type[Kind] === 'literal') {
+      const lit = type as STLiteral
       let val: any = value
-      if (typeof type.value === 'boolean') val = value === 'true' ? true : value === 'false' ? false : value
-      if (typeof type.value === 'number') val = Number(value)
-      if (val !== type.value) throw `Not a valid value`
+      if (typeof lit.value === 'boolean') val = value === 'true' ? true : value === 'false' ? false : value
+      if (typeof lit.value === 'number') val = Number(value)
+      if (val !== lit.value) throw `Not a valid value`
       return val
     } else if (type[Kind] === 'object') {
       let json
@@ -596,11 +606,11 @@ const paramParser = (
       }
       return validate(json, type)
     } else if (type[Kind] === 'array') {
-      return [paramParser(value, type.items as STMultipartFormValues) as Static<STPropsValue>]
+      return [paramParser(value, (type as STArray).items as STMultipartFormValues) as Static<STPropsValue>]
     } else if (type[Kind] === 'byteArray') {
       return Uint8Array.from(value, c => c.charCodeAt(0))
     } else if (type[Kind] === 'union') {
-      const union = Object.values(type.anyOf)
+      const union = Object.values((type as STUnion).anyOf)
       for (const elt of union) {
         try {
           return paramParser(value, elt as STMultipartFormValues)
@@ -744,7 +754,7 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
       return new Response(response, details)
     } catch (error) {
       console.error(error)
-      throw new InternalError()
+      throw new InternalServerError()
     }
   }
 }
@@ -752,11 +762,10 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
 const unionize = (b: any, schema: STUnion) => {
   let res
   let error
-  const discriminants = schema.anyOf.reduce(
-    (acc, obj) =>
-      acc.filter(k => obj?.props && k in obj.props && obj.props[k]?.[Kind] === 'literal' && !obj.props[k]?.[Optional]),
-    Object.keys(schema.anyOf[0]?.props || {})
-  )
+  const discriminants = schema.anyOf.reduce((acc, obj) => {
+    const props = (obj as STObject).props
+    return acc.filter(k => props && k in props && props[k]?.[Kind] === 'literal' && !props[k]?.[Optional])
+  }, Object.keys((schema.anyOf[0] as STObject)?.props || {}))
   for (let s of schema.anyOf) {
     try {
       res = validate(b, s, { parse: true })

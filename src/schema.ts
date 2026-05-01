@@ -18,6 +18,8 @@ export interface Options {
    * describing the header's value type.
    */
   headers?: Record<string, any>
+  /** Marks the schema as deprecated. Surfaced by spec generators (e.g. OpenAPI). */
+  deprecated?: boolean
 }
 export interface ByteArrayOptions extends Options {
   minLength?: number
@@ -61,8 +63,6 @@ export interface STSchema extends Options {
   [Stream]?: boolean
   params: unknown[]
   static: unknown
-  props?: STProps
-  [key: string]: any
 }
 export type STPropsValue =
   | STBoolean
@@ -207,8 +207,8 @@ export interface STObject<T extends STProps = STProps> extends STSchema {
 }
 export interface STJson<T extends STBoolean | STNumber | STString | STObject = any> extends STSchema {
   [Kind]: 'json'
-  type: 'boolean' | 'number' | 'string' | 'object' | 'unknown'
   static: Static<T>
+  value: T
 }
 type ObjectStatic<T extends STProps, P extends unknown[]> = ObjectStaticProps<T, { [K in keyof T]: Static<T[K], P> }>
 type OptionalPropertyKeys<T extends STProps> = {
@@ -228,45 +228,17 @@ function _Object<T extends STProps>(properties?: T, options: Options = {}): STOb
     ? { ...options, [Kind]: 'object', props: clonedProperties, required: requiredKeys }
     : { ...options, [Kind]: 'object', props: clonedProperties }) as unknown as STObject<T>
 }
-function _Json<T extends STBoolean | STNumber | STString | STObject>(value?: T, options: Options = {}): STJson<T> {
-  if (value?.[Kind] === 'boolean') return { ..._Bool(options), [Kind]: 'json', type: 'boolean' }
-  if (value?.[Kind] === 'number') return { ..._Number(options), [Kind]: 'json', type: 'number' }
-  if (value?.[Kind] === 'string') return { ..._String(options), [Kind]: 'json', type: 'string' }
-  if (value?.[Kind] === 'object') return { ..._Object(value.props, options), [Kind]: 'json', type: 'object' }
-  throw Error('Invalid Json type definition')
+function _Json<T extends STBoolean | STNumber | STString | STObject>(value: T, options: Options = {}): STJson<T> {
+  const k = value?.[Kind]
+  if (k !== 'boolean' && k !== 'number' && k !== 'string' && k !== 'object') {
+    throw new Error('Invalid Json type definition')
+  }
+  return {
+    ...options,
+    [Kind]: 'json',
+    value,
+  } as unknown as STJson<T>
 }
-
-// UrlForm
-// export type STUrlFormValues =
-//   | STByteArray
-//   | STBoolean
-//   | STNumber
-//   | STInteger
-//   | STString
-//   | STLiteral
-//   | STObject
-//   | STUnion
-//   | STAny
-//   | STArray
-// export type STUrlFormProps = Record<string, STUrlFormValues>
-// export interface STUrlForm<T extends STUrlFormProps = STUrlFormProps> extends STSchema {
-//   [Kind]: 'urlForm'
-//   static: T extends undefined ? Record<string, any> : ObjectStatic<T, this['params']>
-//   props: T
-// }
-// function _UrlForm<T extends STUrlFormProps>(properties?: T, options: Options = {}): STUrlForm<T> {
-//   if (!properties) return { ...options, [Kind]: 'urlForm' } as unknown as STUrlForm<T>
-//   const propertyKeys = globalThis.Object.getOwnPropertyNames(properties)
-//   const optionalKeys = propertyKeys.filter(key => properties[key]?.[Optional])
-//   const requiredKeys = propertyKeys.filter(name => !optionalKeys.includes(name))
-//   const clonedProperties = propertyKeys.reduce(
-//     (acc, key) => ({ ...acc, [key]: { ...properties[key] } }),
-//     {} as STUrlFormProps
-//   )
-//   return (requiredKeys.length > 0
-//     ? { ...options, [Kind]: 'urlForm', props: clonedProperties, required: requiredKeys }
-//     : { ...options, [Kind]: 'urlForm', props: clonedProperties }) as unknown as STUrlForm<T>
-// }
 
 // MultipartForm
 export type STMultipartFormValues = STSchema
@@ -304,7 +276,7 @@ function _MultipartForm<T extends STProps>(properties?: T, options: Options = {}
 
 // Array
 type NonEmptyArray<T> = [T, ...T[]]
-export interface STArray<T extends STSchema = STSchema> extends STSchema {
+export interface STArray<T extends STSchema = STSchema> extends STSchema, ArrayOptions {
   [Kind]: 'array'
   static: Static<T>[]
   items: T
@@ -324,7 +296,6 @@ type UnionStatic<T extends STSchema[], P extends unknown[]> = {
 export interface STUnion<T extends NonEmptyArray<STSchema> = NonEmptyArray<STSchema>> extends STSchema {
   [Kind]: 'union'
   static: UnionStatic<T, this['params']>
-  props: T[number]['props']
   anyOf: T
 }
 export function _Union<T extends NonEmptyArray<STSchema>>(schemas: [...T], options: Options): STUnion<T> {
@@ -349,7 +320,6 @@ type IntersectionStatic<T extends readonly STSchema[], P extends unknown[]> = T 
 export interface STIntersection<T extends NonEmptyArray<STObject | STUnion | STIntersection<any>>> extends STSchema {
   [Kind]: 'intersection'
   static: IntersectionStatic<T, this['params']>
-  props: T[number]['props']
   allOf: T
 }
 
@@ -361,17 +331,6 @@ export function _Intersection<T extends NonEmptyArray<STObject | STUnion | STInt
     ...options,
     [Kind]: 'intersection',
     allOf: schemas as T,
-    props: schemas.reduce(
-      (b, c) => ({
-        ...b,
-        ...(c.props || {}),
-        ...Object.fromEntries(
-          Object.entries(b).filter(([_, v]) => (v as STSchema)[Kind] === 'literal' || !(v as STSchema)[Optional])
-          // TODO: handle cases where left != right
-        ),
-      }),
-      {}
-    ) as STProps,
     optional: () => ({ ...s, [Optional]: true }),
   }
   return s as unknown as STIntersection<T>
@@ -445,10 +404,6 @@ export class SchemaType {
   ): STJson<T> {
     return _Json(value, options)
   }
-  /** Creates an UrlForm Schema Type */
-  // public urlForm<T extends STUrlFormProps>(properties?: T, options: Options = {}): STUrlForm<T> {
-  //   return _UrlForm(properties, options)
-  // }
   /** Creates a MultipartForm Schema Type */
   public multipartForm<T extends STProps>(properties?: T, options: Options = {}): STMultipartForm<T> {
     return _MultipartForm(properties, options)
@@ -486,9 +441,12 @@ export class SchemaType {
   ): Omit<STStream<T>, 'static'> & {
     static: AsyncGenerator<
       Entries<{
-        [P in KeysOfUnion<T['props']> as ValueAt<T['props'], P> extends STSchema ? P : never]: Static<
-          ValueAt<T['props'], P>
-        >
+        [P in KeysOfUnion<MemberProps<T['anyOf'][number]>> as ValueAt<
+          MemberProps<T['anyOf'][number]>,
+          P
+        > extends STSchema
+          ? P
+          : never]: Static<ValueAt<MemberProps<T['anyOf'][number]>, P>>
       }>
     >
     params: unknown[]
@@ -497,9 +455,9 @@ export class SchemaType {
     schema: T
   ): Omit<STStream<T>, 'static'> & {
     static: AsyncGenerator<
-      T['props'] extends undefined
+      MemberProps<T['allOf'][number]> extends undefined
         ? never
-        : T['props'] extends STProps
+        : MemberProps<T['allOf'][number]> extends STProps
           ? Entries<{
               [K in keyof Static<T>]: Static<T>[K]
             }>
@@ -541,6 +499,7 @@ export class SchemaType {
 }
 type KeysOfUnion<U> = U extends unknown ? keyof U : never
 type ValueAt<U, K extends PropertyKey> = U extends unknown ? (K extends keyof U ? U[K] : never) : never
+type MemberProps<U> = U extends { props: infer P } ? P : never
 
 export const schemaToTypeStr = (schema: STSchema): string => {
   let type = 'unknown'
@@ -565,7 +524,7 @@ export const schemaToTypeStr = (schema: STSchema): string => {
       .map(([k, v]) => `${typeof k === 'string' ? `'${k}'` : k}${v?.[Optional] ? '?' : ''}:${schemaToTypeStr(v)}`)
       .join(';')}}`
   } else if (kind === 'json') {
-    type = `Json<${schemaToTypeStr({ ...schema, [Kind]: schema.type })}>`
+    type = `Json<${schemaToTypeStr((schema as STJson).value)}>`
   } else if (kind === 'union') {
     let anyOf = (schema as STUnion).anyOf
     type = anyOf.map(s => schemaToTypeStr(s)).join('|')
