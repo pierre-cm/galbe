@@ -253,7 +253,9 @@ paths:
 
 ### code
 
-Generate the code and project structure from spec.
+Generate the code and project structure from a spec.
+
+The command is **non-destructive**: re-running it on an existing project diffs the spec against the routes already in `src/routes/**` and surgically updates them. Schema definitions and route metadata (JSDoc, schema arg) are refreshed, but your handler bodies and hooks are preserved verbatim. Routes that exist in code but are absent from the new spec are reported as **stale** and require an explicit decision before the command will write anything.
 
 #### Arguments
 
@@ -263,12 +265,45 @@ Generate the code and project structure from spec.
 
 #### Options
 
-| Short | Long     | Description                                       | Default                    |
-| ----- | -------- | ------------------------------------------------- | -------------------------- |
-| -f    | --format | input format [openapi:3.0:yaml, openapi:3.0:json] | openapi:3.0:(yaml \| json) |
-| -t    | --target | source target [ts, js]                            | ts                         |
-| -o    | --out    | output dir                                        | src                        |
-| -F    | --force  | force overriding output                           | false                      |
+| Short | Long             | Description                                                                     | Default                    |
+| ----- | ---------------- | ------------------------------------------------------------------------------- | -------------------------- |
+| -f    | --format         | input format [openapi:3.0:yaml, openapi:3.0:json]                               | openapi:3.0:(yaml \| json) |
+| -t    | --target         | source target [ts, js]                                                          | ts                         |
+| -o    | --out            | output dir                                                                      | src                        |
+| -n    | --dry-run        | show planned changes without writing                                            | false                      |
+|       | --remove-stale   | delete routes present in code but absent from the spec                          | false                      |
+|       | --rename         | `"OLD=NEW"` — preserve handler when a route id changes (repeatable)             |                            |
+|       | --ignore-route   | `"METHOD /path"` — leave a stale route alone, treat as user-managed (repeatable) |                            |
+
+#### How re-generation handles each route
+
+| Situation                                            | Action                                                                                          |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| In spec, not in code                                 | Added — fresh stub appended to the route file.                                                  |
+| In spec, in code (same `METHOD path`)                | Updated — JSDoc + schema argument refreshed; handler body and hook array left untouched.        |
+| In code, not in spec                                 | Stale — command exits with the list and prompts for `--rename`, `--ignore-route`, or `--remove-stale`. |
+| In code, with `--rename "OLD=NEW"`                   | Treated as an update of `NEW`. Handler preserved; path string and schema arg rewired.           |
+| In code, with `--ignore-route "METHOD /path"`        | Left alone, including its schema import.                                                        |
+| In code, with `--remove-stale`                       | Deleted; unused schema imports pruned.                                                          |
+
+User-added imports, helpers, and other top-level statements in route files are preserved.
+
+#### Stale-route prompt
+
+If you change the spec to drop a route, the next run will refuse to write and print:
+
+```bash
+$ galbe generate code petstore.spec.json
+The following routes exist in code but are not in the spec:
+  - DELETE /pet/:petId  (scope: /pet)
+
+Re-run with one of:
+  --rename "OLD=NEW"          treat as a rename, preserve handler
+  --ignore-route "ROUTE"      leave alone, keep as user-managed
+  --remove-stale              confirm deletion of stale routes
+```
+
+Use `--dry-run` at any point to preview the diff without touching the filesystem.
 
 #### Example
 

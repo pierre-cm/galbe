@@ -327,7 +327,7 @@ const parseEndpointDef = (
   components?: OpenAPIV3.ComponentsObject
 ) => {
   if (!def) return {}
-  let imports = {}
+  let imports: Record<string, string> = {}
   let p = path.replaceAll(/\{([^\}]*)\}/g, ':$1')
   // let description = def.summary || def.description
   let pathName = path.replaceAll(/\/\{[^\}]*\}/g, 'X').replaceAll(/[^$\w\d_]+([$\w\d_])/g, (_, $1) => $1.toUpperCase())
@@ -360,7 +360,7 @@ const parseEndpointDef = (
   meta += ' */'
   let endpoint = `${method}("${p}", ${schemaName}, ctx => {\n  throw new NotImplementedError()\n})`
 
-  let sp = { path: {}, query: {}, header: {}, body: {}, formData: {} } // TODO handle body and formData cases
+  let sp: Record<string, Record<string, string>> = { path: {}, query: {}, header: {}, body: {}, formData: {} } // TODO handle body and formData cases
 
   for (let _p of def?.parameters || []) {
     let p: OpenAPIV3.ParameterObject | undefined
@@ -394,9 +394,6 @@ const parseEndpointDef = (
           .join(',')}}`
       : ''
   )
-
-  console.log(method, path)
-  console.log(schemaParams)
 
   let body = ''
   if (!['get', 'delete', 'options', 'head'].includes(method)) {
@@ -482,13 +479,16 @@ const parseEndpointDef = (
       for (const [hName, hVal] of Object.entries(headersObj)) {
         if ('$ref' in (hVal as any)) continue
         const h = hVal as OpenAPIV3.HeaderObject
-        const headerSchema = unref(parseOapiSchema(h.schema || ({ type: 'string' } as any), {
-          description: h.description,
-        }), m => {
-          let l = m.split('/')
-          imports[l[l.length - 1]] = m
-          return l[l.length - 1]
-        })
+        const headerSchema = unref(
+          parseOapiSchema(h.schema || ({ type: 'string' } as any), {
+            description: h.description,
+          }),
+          m => {
+            let l = m.split('/')
+            imports[l[l.length - 1]] = m
+            return l[l.length - 1]
+          }
+        )
         const wrapped = h.required ? headerSchema : `$T.optional(${headerSchema})`
         headerEntries.push(`${JSON.stringify(hName)}:${wrapped}`)
       }
@@ -574,83 +574,121 @@ const parseEndpoints = (def: OpenAPIV3.Document) => {
   return endpoints
 }
 
-const writeFiles = async (
-  path: string,
+const COMPONENT_TYPE_MAP = {
+  schemas: 'commons',
+  requestBodies: 'requests',
+  responses: 'responses',
+} as const
+
+const renderComponentSchemaFile = (
+  schemas: Record<string, SchemaEntry>,
+  type: 'schemas' | 'requestBodies' | 'responses'
+): string => {
+  if (Object.keys(schemas).length === 0) return ''
+  let imports: Record<string, string[]> = {}
+  let decl: string[] = []
+  Object.entries(schemas).forEach(([k, s]) => {
+    if (s.key === s.schema && s.dependsOn.size === 1) {
+      let depMatch = [...s.dependsOn][0].match(/^#\/components\/([^\/]+)\/([^\/]+)/)
+      if (!depMatch) return
+      let [_, depOrig, depName] = [...depMatch]
+      decl.push(`export { ${depName} } from './${COMPONENT_TYPE_MAP[depOrig as keyof typeof COMPONENT_TYPE_MAP]}.schema'\n`)
+      return
+    }
+    for (let dep of [k, ...s.dependsOn]) {
+      let depMatch = dep.match(/^#\/components\/([^\/]+)\/([^\/]+)/)
+      if (!depMatch) continue
+      let [_, depOrig, depName] = [...depMatch]
+      if (depOrig !== type) {
+        if (!(depOrig in imports)) imports[depOrig] = []
+        imports[depOrig].push(depName)
+      }
+    }
+    // For requestBodies/responses that are just a single ref to another schema,
+    // preserve identity by tagging a _responseId / _requestBodyId rather than
+    // aliasing it (which would lose the original component name in the spec).
+    const isSingleAlias =
+      (type === 'responses' || type === 'requestBodies') &&
+      s.dependsOn.size === 1 &&
+      s.schema.trim() === [...s.dependsOn][0].split('/').pop()
+    const responseExtras: string[] = []
+    if (type === 'responses') {
+      if (s.responseDescription) responseExtras.push(`_description: ${JSON.stringify(s.responseDescription)}`)
+      if (s.responseExample !== undefined) responseExtras.push(`_example: ${JSON.stringify(s.responseExample)}`)
+      if (s.responseExamples) responseExtras.push(`_examples: ${JSON.stringify(s.responseExamples)}`)
+      if (s.responseMedia && s.responseMedia.length) responseExtras.push(`_media: ${JSON.stringify(s.responseMedia)}`)
+    }
+    if (isSingleAlias) {
+      const tagKey = type === 'responses' ? '_responseId' : '_requestBodyId'
+      const extras = [`${tagKey}: "${s.key}"`, ...responseExtras]
+      decl.push(
+        `export const ${s.key} = { ...${s.schema}, ${extras.join(', ')} } as typeof ${s.schema}\nexport type ${s.key} = Static<typeof ${s.key}>\n`
+      )
+    } else if (type === 'responses' && responseExtras.length) {
+      decl.push(
+        `export const ${s.key} = Object.assign({}, ${s.schema}, { ${responseExtras.join(', ')} })\nexport type ${s.key} = Static<typeof ${s.key}>\n`
+      )
+    } else {
+      decl.push(`export const ${s.key} = ${s.schema}\nexport type ${s.key} = Static<typeof ${s.key}>\n`)
+    }
+  })
+  if (decl.length === 0) return ''
+  return `import type { Static } from 'galbe/schema'\nimport { $T } from 'galbe'\n${Object.entries(imports)
+    .map(
+      ([k, v]) =>
+        `import { ${[...new Set(v)].join(', ')} } from './${COMPONENT_TYPE_MAP[k as keyof typeof COMPONENT_TYPE_MAP]}.schema'\n`
+    )
+    .join('\n')}\n${decl.join('\n')}\n`
+}
+
+export type RoutePlanEntry = {
+  /** HTTP method, lowercase (matches the property accessed on `g`). */
+  method: string
+  /** Path as emitted in the call expression: full prefix included, OpenAPI braces converted to `:param`. Stable identity for diff/rename. */
+  path: string
+  schemaName: string
+  /** JSDoc block string (e.g. '/**\n * summary\n *\/'). */
+  meta: string
+  /** Rendered call expression body, e.g. 'get("/path", FooSchema, ctx => { ... })'. */
+  call: string
+}
+
+export type ScopePlan = {
+  /** e.g. '/main', '/v1/public/admin'. */
+  scopeKey: string
+  /** Output path without extension, e.g. 'routes/main.route'. */
+  routeFile: string
+  /** Output path without extension, e.g. 'schemas/main.schema'. */
+  schemaFile: string
+  /** Imports to inject in the scope schema file: relative path -> imported names. */
+  schemaImports: Record<string, string[]>
+  /** 'export const X = {...}' declarations for the scope schema file. */
+  schemaDecls: string[]
+  /** Schema names to import in the scope route file from its sibling schema file. */
+  routeSchemaImports: string[]
+  routes: RoutePlanEntry[]
+}
+
+export type GenerationPlan = {
+  /** Component schema files (commons/requests/responses), ready to write. Path is relative to outDir without extension. */
+  componentFiles: { path: string; content: string }[]
+  scopes: ScopePlan[]
+  target: 'js' | 'ts'
+}
+
+export const buildPlan = (
   endpoints: Record<string, EndpointEntry>,
   schemaIndex: Record<string, SchemaEntry>,
   target: 'js' | 'ts'
-) => {
-  const typeMap = {
-    schemas: 'commons',
-    requestBodies: 'requests',
-    responses: 'responses',
-  }
-  const parseSchemasToFile = (
-    schemas: Record<string, SchemaEntry>,
-    type: 'schemas' | 'requestBodies' | 'responses'
-  ) => {
-    if (Object.keys(schemas).length === 0) return ''
-    let imports: Record<string, string[]> = {}
-    let decl: string[] = []
-    Object.entries(schemas).forEach(([k, s]) => {
-      if (s.key === s.schema && s.dependsOn.size === 1) {
-        let depMatch = [...s.dependsOn][0].match(/^#\/components\/([^\/]+)\/([^\/]+)/)
-        if (!depMatch) return
-        let [_, depOrig, depName] = [...depMatch]
-        decl.push(`export { ${depName} } from './${typeMap[depOrig]}.schema'\n`)
-        return
-      }
-      for (let dep of [k, ...s.dependsOn]) {
-        let depMatch = dep.match(/^#\/components\/([^\/]+)\/([^\/]+)/)
-        if (!depMatch) continue
-        let [_, depOrig, depName] = [...depMatch]
-        if (depOrig !== type) {
-          if (!(depOrig in imports)) imports[depOrig] = []
-          imports[depOrig].push(depName)
-        }
-      }
-      // For requestBodies/responses that are just a single ref to another schema,
-      // preserve identity by tagging a _responseId / _requestBodyId rather than
-      // aliasing it (which would lose the original component name in the spec).
-      const isSingleAlias =
-        (type === 'responses' || type === 'requestBodies') &&
-        s.dependsOn.size === 1 &&
-        s.schema.trim() === [...s.dependsOn][0].split('/').pop()
-      const responseExtras: string[] = []
-      if (type === 'responses') {
-        if (s.responseDescription) responseExtras.push(`_description: ${JSON.stringify(s.responseDescription)}`)
-        if (s.responseExample !== undefined) responseExtras.push(`_example: ${JSON.stringify(s.responseExample)}`)
-        if (s.responseExamples) responseExtras.push(`_examples: ${JSON.stringify(s.responseExamples)}`)
-        if (s.responseMedia && s.responseMedia.length)
-          responseExtras.push(`_media: ${JSON.stringify(s.responseMedia)}`)
-      }
-      if (isSingleAlias) {
-        const tagKey = type === 'responses' ? '_responseId' : '_requestBodyId'
-        const extras = [`${tagKey}: "${s.key}"`, ...responseExtras]
-        decl.push(
-          `export const ${s.key} = { ...${s.schema}, ${extras.join(', ')} } as typeof ${s.schema}\nexport type ${s.key} = Static<typeof ${s.key}>\n`
-        )
-      } else if (type === 'responses' && responseExtras.length) {
-        decl.push(
-          `export const ${s.key} = Object.assign({}, ${s.schema}, { ${responseExtras.join(', ')} })\nexport type ${s.key} = Static<typeof ${s.key}>\n`
-        )
-      } else {
-        decl.push(`export const ${s.key} = ${s.schema}\nexport type ${s.key} = Static<typeof ${s.key}>\n`)
-      }
-    })
-    if (decl.length === 0) return ''
-    return `import type { Static } from 'galbe/schema'\nimport { $T } from 'galbe'\n${Object.entries(imports)
-      .map(([k, v]) => `import { ${[...new Set(v)].join(', ')} } from './${typeMap[k]}.schema'\n`)
-      .join('\n')}\n${decl.join('\n')}\n`
-  }
-
+): GenerationPlan => {
+  const componentFiles: { path: string; content: string }[] = []
   const sMaps = [
     { g: 'commons', o: 'schemas' },
     { g: 'requests', o: 'requestBodies' },
     { g: 'responses', o: 'responses' },
   ] as const
   for (let { g, o } of sMaps) {
-    let s = parseSchemasToFile(
+    let content = renderComponentSchemaFile(
       orderDeps(
         Object.fromEntries(
           Object.entries(schemaIndex).filter(([k, _]) => {
@@ -660,69 +698,117 @@ const writeFiles = async (
       ),
       o
     )
-    if (s) await writeCodeFile(resolve(path, 'schemas', `${g}.schema`), s, target)
+    if (content) componentFiles.push({ path: `schemas/${g}.schema`, content })
   }
 
-  let scopedDefs = Object.entries(endpoints).reduce((p, [_, v]) => {
+  let scopedDefs = Object.entries(endpoints).reduce<Record<string, EndpointEntry[]>>((p, [_, v]) => {
     let scopeKey = `${v.version ? `/${v.version}` : ''}${v.visibility ? `/${v.visibility}` : ''}${
       v.scope ? `/${v.scope}` : '/main'
     }`
     if (!(scopeKey in p)) p[scopeKey] = []
     p[scopeKey].push(v)
     return p
-  }, {}) as Record<string, EndpointEntry[]>
+  }, {})
 
+  const scopes: ScopePlan[] = []
   for (let [scopeKey, def] of Object.entries(scopedDefs)) {
-    let routePath = `routes${scopeKey}.route`
-    let schemaPath = `schemas${scopeKey}.schema`
+    let routeFile = `routes${scopeKey}.route`
+    let schemaFile = `schemas${scopeKey}.schema`
 
     let sImports: Record<string, Set<string>> = {}
     let sDecl: string[] = []
-
     let rImports: Set<string> = new Set()
-    let rDecl: string[] = []
+    let routes: RoutePlanEntry[] = []
 
     for (let d of def) {
-      // schema
       Object.entries(d.schema?.imports || {}).forEach(([iK, dep]) => {
-        let k = refToPath(dep, dirname(schemaPath))
+        let k = refToPath(dep, dirname(schemaFile))
         if (!k) return
         if (!(k in sImports)) sImports[k] = new Set()
         sImports[k].add(iK)
       })
       sDecl.push(`export const ${d.schema?.name} = ${d.schema?.def}`)
 
-      // route
       let ep = d.endpoint
       if (!ep) continue
       if (d.schema?.name) rImports.add(d.schema?.name)
-      rDecl.push(`  ${ep.meta}\ng.${ep.def}`)
+      // Source of truth for the path is the rendered call expression itself —
+      // reconstructing from version/visibility/scope/path drifts on edge cases
+      // (e.g. an empty trailing segment yields `/users/` instead of `/users`).
+      const callPathMatch = (ep.def ?? '').match(/^\w+\("([^"]*)"/)
+      const emittedPath = callPathMatch?.[1] ?? ''
+      routes.push({
+        method: d.method ?? '',
+        path: emittedPath,
+        schemaName: d.schema?.name ?? '',
+        meta: ep.meta ?? '',
+        call: ep.def ?? '',
+      })
     }
 
-    let schemaFile =
-      `import { $T } from 'galbe'\n\n` +
-      `${Object.entries(sImports)
-        .map(([k, v]) => `import { ${[...v].join(', ')} } from '${k}'`)
-        .join('\n')}\n\n` +
-      `${sDecl.map(d => d).join('\n\n')}\n`
-    const deepness = scopeKey.split('/').length - 1
-    let routeFile =
-      `import { NotImplementedError, type Galbe } from 'galbe'\n` +
-      `import { ${[...rImports].join(', ')} } from '${Array(deepness).fill('../').join('')}schemas${scopeKey}.schema'\n\n` +
-      `export default (g: Galbe) => {\n` +
-      rDecl.map(d => d.replaceAll('\n', '\n  ')).join('\n\n') +
-      `\n}\n`
+    scopes.push({
+      scopeKey,
+      routeFile,
+      schemaFile,
+      schemaImports: Object.fromEntries(Object.entries(sImports).map(([k, v]) => [k, [...v]])),
+      schemaDecls: sDecl,
+      routeSchemaImports: [...rImports],
+      routes,
+    })
+  }
 
-    if (sDecl?.length) await writeCodeFile(resolve(path, schemaPath), schemaFile, target)
-    if (rDecl?.length) await writeCodeFile(resolve(path, routePath), routeFile, target)
+  return { componentFiles, scopes, target }
+}
+
+export type ApplyPlanOptions = {
+  /** Override the route file content for given scope keys. When set, the value is written verbatim
+   * instead of fresh-rendering from the plan — used by the merger to preserve user code. */
+  routeContents?: Map<string, string>
+}
+
+export const applyPlan = async (plan: GenerationPlan, outDir: string, opts: ApplyPlanOptions = {}): Promise<void> => {
+  const { target } = plan
+
+  for (const f of plan.componentFiles) {
+    await writeCodeFile(resolve(outDir, f.path), f.content, target)
+  }
+
+  for (const scope of plan.scopes) {
+    if (scope.schemaDecls.length) {
+      const schemaContent =
+        `import { $T } from 'galbe'\n\n` +
+        `${Object.entries(scope.schemaImports)
+          .map(([k, v]) => `import { ${v.join(', ')} } from '${k}'`)
+          .join('\n')}\n\n` +
+        `${scope.schemaDecls.join('\n\n')}\n`
+      await writeCodeFile(resolve(outDir, scope.schemaFile), schemaContent, target)
+    }
+
+    if (scope.routes.length) {
+      const override = opts.routeContents?.get(scope.scopeKey)
+      let routeContent: string
+      if (override !== undefined) {
+        routeContent = override
+      } else {
+        const deepness = scope.scopeKey.split('/').length - 1
+        const importPath = `${Array(deepness).fill('../').join('')}schemas${scope.scopeKey}.schema`
+        const rDecl = scope.routes.map(r => `  ${r.meta}\ng.${r.call}`)
+        routeContent =
+          `import { NotImplementedError, type Galbe } from 'galbe'\n` +
+          `import { ${scope.routeSchemaImports.join(', ')} } from '${importPath}'\n\n` +
+          `export default (g: Galbe) => {\n` +
+          rDecl.map(d => d.replaceAll('\n', '\n  ')).join('\n\n') +
+          `\n}\n`
+      }
+      await writeCodeFile(resolve(outDir, scope.routeFile), routeContent, target)
+    }
   }
 }
 
-export const generateFromOapi = async (
+export const planFromOapi = async (
   input: string,
-  out: string,
   { version, ext, target }: { version: string; ext: 'json' | 'yaml'; target: 'js' | 'ts' }
-) => {
+): Promise<GenerationPlan> => {
   let def: OpenAPIV3.Document =
     ext === 'json' ? await Bun.file(input).json() : Bun.YAML.parse(await Bun.file(input).text())
 
@@ -732,5 +818,13 @@ export const generateFromOapi = async (
   let schemaIndex = buildSchemaIndex(def)
   let endpointDefs = parseEndpoints(def)
 
-  await writeFiles(out, endpointDefs, schemaIndex, target)
+  return buildPlan(endpointDefs, schemaIndex, target)
+}
+
+export const generateFromOapi = async (
+  input: string,
+  out: string,
+  opts: { version: string; ext: 'json' | 'yaml'; target: 'js' | 'ts' }
+) => {
+  await applyPlan(await planFromOapi(input, opts), out)
 }

@@ -33,7 +33,7 @@ describe('openapi roundtrip', () => {
     await Bun.write(join(dir, 'openapi.yaml'), await Bun.file(FIXTURE).text())
     await writeFile(join(dir, 'index.ts'), `import { Galbe } from 'galbe'\nexport default new Galbe()\n`)
 
-    await run(['generate', 'code', 'openapi.yaml', '-F'], dir)
+    await run(['generate', 'code', 'openapi.yaml'], dir)
     await run(['generate', 'spec', './index.ts', '-o', 'generated.yaml'], dir)
 
     original = Bun.YAML.parse(await Bun.file(FIXTURE).text()) as any
