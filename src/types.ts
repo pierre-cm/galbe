@@ -23,6 +23,8 @@ import type { Galbe } from './index'
 import { HttpStatus } from './util'
 import type { CookieOptions } from './cookies'
 
+export type MediaType = `${string}/${string}`
+
 export type STResponseValue =
   | STByteArray
   | STString
@@ -38,27 +40,48 @@ export type STResponseValue =
   | STStream
   | STAny
   | STNull
-export type STBodyContent = {
-  byteArray?: STByteArray | STStream
-  text?: STString | STLiteral | STBoolean | STNumber | STInteger | STUnion | STStream
-  json?: STJson | STObject | STBoolean | STInteger | STNumber | STString | STArray | STUnion | STIntersection<any>
-  urlForm?: STObject | STStream | STUnion
-  multipart?: STMultipartForm | STStream | STUnion
-  default?: STString | STByteArray | STStream | STAny
-}
-export type STBody = STNull | Partial<STBodyContent>
-export type STBodyType = keyof STBodyContent
-export type STBodyValue = STBodyContent[STBodyType]
 
-export type STResponseContent = {
-  json?: STJson | STObject | STBoolean | STInteger | STNumber | STString | STArray | STUnion | STIntersection<any>
-  text?: STString | STLiteral | STBoolean | STNumber | STInteger | STUnion | STStream
-  byteArray?: STByteArray | STStream
-  default?: STString | STByteArray | STStream | STAny
+export type STBodyValue =
+  | STByteArray
+  | STStream
+  | STString
+  | STLiteral
+  | STBoolean
+  | STNumber
+  | STInteger
+  | STObject
+  | STJson
+  | STArray
+  | STUnion
+  | STIntersection<any>
+  | STMultipartForm
+  | STAny
+
+export type STBodyContent = Partial<Record<MediaType, STBodyValue>>
+export type STBody = STNull | STBodyContent
+export type STBodyType = MediaType
+
+export type STResponseBodyValue =
+  | STByteArray
+  | STStream
+  | STString
+  | STLiteral
+  | STBoolean
+  | STNumber
+  | STInteger
+  | STObject
+  | STJson
+  | STArray
+  | STUnion
+  | STIntersection<any>
+  | STAny
+  | STNull
+
+export type STResponseContent = Partial<Record<MediaType, STResponseBodyValue>> & {
   description?: string
   responseHeaders?: Record<string, STSchema>
 }
-export type STResponseBodyKey = keyof Omit<STResponseContent, 'description' | 'responseHeaders'>
+export type STResponseBodyKey = MediaType
 export type STResponseEntry = STResponseValue | STResponseContent
 export type STResponse = Partial<Record<number | 'default', STResponseEntry>>
 
@@ -185,30 +208,26 @@ export type Context<
   Path extends string = string,
   S extends RequestSchema = RequestSchema,
 > = {
-  [K in STBodyType]: K extends keyof Exclude<S['body'], undefined | STNull>
-    ? {
-        headers: Static<STObject<Exclude<S['headers'], undefined>>>
-        params: {
-          [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
-        }
-        query: Static<STObject<Exclude<S['query'], undefined>>>
-        contentType: M extends 'get' | 'options' | 'head' ? undefined : K
-        body: M extends 'get' | 'options' | 'head'
-          ? null
-          : Exclude<S['body'], undefined> extends STNull
-            ? null
-            : K extends keyof Exclude<S['body'], undefined | STNull>
-              ? StaticBody<Exclude<Exclude<S['body'], undefined | STNull>[K], undefined>>
-              : never
-        request: Request
-        remoteAddress: SocketAddress | null
-        route?: Route
-        state: Record<string, any>
-        set: ContextSet
-        cookies: Record<string, string>
-      }
-    : never
-}[STBodyType]
+  [K in keyof Exclude<S['body'], undefined | STNull>]: {
+    headers: Static<STObject<Exclude<S['headers'], undefined>>>
+    params: {
+      [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
+    }
+    query: Static<STObject<Exclude<S['query'], undefined>>>
+    contentType: M extends 'get' | 'options' | 'head' ? undefined : K
+    body: M extends 'get' | 'options' | 'head'
+      ? null
+      : Exclude<S['body'], undefined> extends STNull
+        ? null
+        : StaticBody<Extract<Exclude<Exclude<S['body'], undefined | STNull>[K], undefined>, STSchema>>
+    request: Request
+    remoteAddress: SocketAddress | null
+    route?: Route
+    state: Record<string, any>
+    set: ContextSet
+    cookies: Record<string, string>
+  }
+}[keyof Exclude<S['body'], undefined | STNull>]
 export type Next = () => void | Promise<any>
 export type Hook<M extends Method = Method, Path extends string = string, S extends RequestSchema = RequestSchema> = (
   ctx: Context<M, Path, S>,

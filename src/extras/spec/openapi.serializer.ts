@@ -12,7 +12,7 @@ import type {
 } from '../../../src/schema'
 
 import { Galbe } from '../../../src'
-import { walkRoutes, HttpStatus, inferContentType } from '../../../src/util'
+import { walkRoutes, HttpStatus } from '../../../src/util'
 import { Kind, Optional } from '../../../src/schema'
 
 import { OpenAPIV3 } from 'openapi-types'
@@ -266,7 +266,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
             }
           }
           description = conflictDescription ? undefined : (description ?? undefined)
-          return [inferContentType(bodyType), { schema: schemaToOpenapi(schema).schema }]
+          return [bodyType, { schema: schemaToOpenapi(schema).schema }]
         })
       )
       requestBody = {
@@ -291,14 +291,13 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
             const desc = cm.description || HttpStatus[s as keyof typeof HttpStatus] || 'Response'
             const content: Record<string, { schema: any; example?: any; examples?: Record<string, any> }> = {}
             for (const [key, bodySchema] of Object.entries(cm)) {
-              if (key === 'description' || key === 'responseHeaders') continue
+              if (key === 'description' || key === 'responseHeaders' || key === 'example' || key === 'examples') continue
               const { schema: oaSchema } = schemaToOpenapi(bodySchema as STSchema)
-              const mediaType = inferContentType(key)
-              content[mediaType] = { schema: oaSchema }
+              content[key] = { schema: oaSchema }
               const ex = (bodySchema as any)?.examples
               const exSingle = (bodySchema as any)?.example
-              if (ex && Object.keys(ex).length) content[mediaType].examples = ex
-              if (exSingle !== undefined) content[mediaType].example = exSingle
+              if (ex && Object.keys(ex).length) content[key].examples = ex
+              if (exSingle !== undefined) content[key].example = exSingle
             }
             response = { description: desc, ...(Object.keys(content).length ? { content } : {}) }
           } else {

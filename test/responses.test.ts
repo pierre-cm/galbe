@@ -30,7 +30,7 @@ describe('responses', () => {
     galbe.post(
       '/none',
       {
-        body: { json: $T.optional($T.object()) },
+        body: { 'application/json': $T.optional($T.object()) },
         query: { text: $T.optional($T.string()), stream: $T.optional($T.string()) },
       },
       ctx => {

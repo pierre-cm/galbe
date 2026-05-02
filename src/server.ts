@@ -4,7 +4,8 @@ import { InternalServerError, RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
 import { Galbe } from './index'
 import { validateResponse } from './validator'
-import { inferBodyType } from './util'
+const normalizeContentType = (ct: string | null): string | undefined =>
+  ct ? ct.split(';')[0].trim() || undefined : undefined
 import { readCookies, stringifyCookie } from './cookies'
 
 type MakeOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
@@ -42,7 +43,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
       const context = {
         request: req,
         contentType: !EMPTY_BODY_METHODS.includes(req.method)
-          ? inferBodyType(req.headers.get('content-type'))
+          ? normalizeContentType(req.headers.get('content-type'))
           : undefined,
         remoteAddress: server.requestIP(req),
         set: {

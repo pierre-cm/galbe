@@ -120,10 +120,14 @@ export const validateResponse = (response: any, schema: STResponse, status: numb
     s = entry as STSchema
   } else {
     const c = entry as any
-    if (response instanceof Uint8Array) s = c.byteArray
-    else if (typeof response === 'string') s = c.text ?? c.json
-    else if (response !== null && typeof response === 'object') s = c.json ?? c.default
-    else s = c.default
+    if (response instanceof Uint8Array)
+      s = c['application/octet-stream'] ?? c['*/*']
+    else if (typeof response === 'string')
+      s = c['text/plain'] ?? c['application/json'] ?? c['*/*']
+    else if (response !== null && typeof response === 'object')
+      s = c['application/json'] ?? c['*/*']
+    else
+      s = c['*/*']
   }
   if (!s) return
   if (response instanceof ReadableStream) {

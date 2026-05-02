@@ -1,4 +1,4 @@
-import type { MaybeArray, STBody, Context, STResponse, STBodyContent, STBodyValue, STBodyType } from './index'
+import type { MaybeArray, STBody, Context, STResponse, STBodyContent, STBodyValue } from './index'
 import type {
   STStream,
   STMultipartForm,
@@ -20,7 +20,7 @@ import { readableStreamToArrayBuffer } from 'bun'
 import { Kind, Optional, Stream } from './schema'
 import { validate } from './validator'
 import { InternalServerError, RequestError } from './index'
-import { isIterator } from './util'
+import { isIterator, inferBodyType, type ParseMode } from './util'
 
 const textDecoder = new TextDecoder()
 const textEncoder = new TextEncoder()
@@ -37,14 +37,16 @@ export const requestBodyParser = async (
   body: ReadableStream | null,
   headers: Record<string, string>,
   schemas?: STBody | STNull,
-  contentType?: STBodyType
+  contentType?: string
 ) => {
-  let schema: STBodyValue | STNull =
+  const normalizedCT = contentType?.split(';')[0]?.trim()
+  let parseMode: ParseMode = inferBodyType(contentType)
+  let schema: STBodyValue | STNull | undefined =
     (schemas as STNull)?.[Kind] === 'null'
       ? (schemas as STNull)
-      : contentType
-        ? (schemas as Partial<STBodyContent>)?.[contentType]
-        : undefined
+      : normalizedCT
+        ? ((schemas as STBodyContent)?.[normalizedCT as `${string}/${string}`] ?? (schemas as STBodyContent)?.['*/*'])
+        : (schemas as STBodyContent)?.['*/*']
   let kind = schema?.[Kind]
   let isStream = schema && Stream in schema
   try {
@@ -53,11 +55,11 @@ export const requestBodyParser = async (
       throw new RequestError({ status: 400, payload: { body: `Expected null body` } })
     }
     if (!schemas || !Object.keys(schemas).length) {
-      // No schema defined, we base parsing on contentType only
-      if (contentType === 'byteArray') {
+      // No schema defined, we base parsing on parseMode only
+      if (parseMode === 'byteArray') {
         if (body === null) return new Uint8Array()
         return new Uint8Array(await readableStreamToArrayBuffer(body))
-      } else if (contentType === 'json') {
+      } else if (parseMode === 'json') {
         if (body === null) return null
         try {
           return JSON.parse(await streamToString(body))
@@ -67,25 +69,25 @@ export const requestBodyParser = async (
             payload: { body: err?.message ?? 'Parsing error' },
           })
         }
-      } else if (contentType === 'text') {
+      } else if (parseMode === 'text') {
         if (body === null) return ''
         return streamToString(body)
-      } else if (contentType === 'urlForm') {
+      } else if (parseMode === 'urlForm') {
         if (body === null) return {}
         return await streamToUrlForm(body)
-      } else if (contentType === 'multipart') {
+      } else if (parseMode === 'multipart') {
         if (body === null) return {}
         const boundary = headers?.['content-type']?.match(/boundary\="?([^"]*)"?;?.*$/)?.[1] || ''
         return await streamToMultipartForm(body, boundary)
       } else return body === null ? null : rsToAsyncIterator(body)
     } else {
       // Schemas found
-      if (contentType === 'default' && (schema || Object.values(schemas).every(s => s?.[Optional]))) {
-        if (kind === 'byteArray') contentType = 'byteArray'
-        else if (kind === 'string') contentType = 'text'
+      if (parseMode === 'default' && (schema || Object.values(schemas).every(s => s?.[Optional]))) {
+        if (kind === 'byteArray') parseMode = 'byteArray'
+        else if (kind === 'string') parseMode = 'text'
         else return body === null ? null : rsToAsyncIterator(body)
       }
-      if (contentType === 'byteArray') {
+      if (parseMode === 'byteArray') {
         if (kind !== 'byteArray') throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (body === null) {
           return isStream
@@ -99,7 +101,7 @@ export const requestBodyParser = async (
         }
         if (isStream) return rsToAsyncIterator(body)
         return new Uint8Array(await readableStreamToArrayBuffer(body))
-      } else if (contentType === 'text') {
+      } else if (parseMode === 'text') {
         if (!kind || !['string', 'boolean', 'number', 'integer', 'anyOf', 'oneOf', 'literal'].includes(kind))
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (body === null)
@@ -117,7 +119,7 @@ export const requestBodyParser = async (
           return unionize(str, schema as STUnion)
         }
         return await streamToString(body, schema as STBodyValue)
-      } else if (contentType === 'json') {
+      } else if (parseMode === 'json') {
         if (
           !kind ||
           !['object', 'json', 'boolean', 'number', 'integer', 'string', 'array', 'anyOf', 'oneOf', 'intersection'].includes(kind)
@@ -144,7 +146,7 @@ export const requestBodyParser = async (
           })
         }
         return validate(json, schema as STSchema, { parse: true })
-      } else if (contentType === 'urlForm') {
+      } else if (parseMode === 'urlForm') {
         if (!kind || !['object', 'anyOf', 'oneOf'].includes(kind))
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (body === null)
@@ -170,7 +172,7 @@ export const requestBodyParser = async (
         }
         if (isStream) return $streamToUrlForm(body, schema as STStream<STObject>)
         else return await streamToUrlForm(body, schema as STObject)
-      } else if (contentType === 'multipart') {
+      } else if (parseMode === 'multipart') {
         if (kind !== 'multipartForm' && kind !== 'anyOf' && kind !== 'oneOf')
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (body === null)
@@ -189,7 +191,7 @@ export const requestBodyParser = async (
         }
         if (isStream) return $streamToMultipartForm(body, boundary, schema as STStream<STMultipartForm>)
         return streamToMultipartForm(body, boundary, schema as STMultipartForm)
-      } else if (contentType === 'default') {
+      } else if (parseMode === 'default') {
         throw new RequestError({ status: 400, payload: { body: `Not a valid content-type` } })
       }
     }
@@ -715,7 +717,7 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
       const statusEntry: any = schema?.[details.status]
       const isJson = statusEntry?.[Kind]
         ? statusEntry[Kind] === 'json'
-        : statusEntry?.json && !statusEntry?.text
+        : statusEntry?.['application/json'] && !statusEntry?.['text/plain']
       if (isJson) {
         details?.headers?.set('content-type', 'application/json')
         response = `"${response}"`

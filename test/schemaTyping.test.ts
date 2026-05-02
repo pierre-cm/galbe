@@ -37,21 +37,26 @@ describe('schema typing', () => {
     expect(s.format).toBe('email')
   })
 
-  test('STBodyType covers all body content variants', () => {
-    // Each variant must be a valid STBodyType. Without the dropped index
-    // signature, `keyof STBody` collapsed to just `'default'` (because
-    // STBody is `STNull | Partial<STBodyContent>` and `keyof (A | B)` is
-    // the intersection of keys). STBodyType is now `keyof STBodyContent`.
-    type _ba = Extract<STBodyType, 'byteArray'>
-    type _txt = Extract<STBodyType, 'text'>
-    type _json = Extract<STBodyType, 'json'>
-    type _form = Extract<STBodyType, 'urlForm'>
-    type _mp = Extract<STBodyType, 'multipart'>
-    type _def = Extract<STBodyType, 'default'>
-    const all: STBodyType[] = ['byteArray', 'text', 'json', 'urlForm', 'multipart', 'default']
+  test('STBodyType is MediaType and STBodyContent uses full media type keys', () => {
+    // STBodyType is now `\`${string}/${string}\`` (MediaType).
+    // Full media type strings are valid STBodyType values.
+    type _json = Extract<STBodyType, 'application/json'>
+    type _text = Extract<STBodyType, 'text/plain'>
+    type _ba = Extract<STBodyType, 'application/octet-stream'>
+    type _form = Extract<STBodyType, 'application/x-www-form-urlencoded'>
+    type _mp = Extract<STBodyType, 'multipart/form-data'>
+    type _def = Extract<STBodyType, '*/*'>
+    const all: STBodyType[] = [
+      'application/json',
+      'text/plain',
+      'application/octet-stream',
+      'application/x-www-form-urlencoded',
+      'multipart/form-data',
+      '*/*',
+    ]
     expect(all.length).toBe(6)
     type _content = Expect<Equal<keyof STBodyContent, STBodyType>>
-    void (null as unknown as _ba | _txt | _json | _form | _mp | _def)
+    void (null as unknown as _json | _text | _ba | _form | _mp | _def)
   })
 
   test('Options.deprecated is part of every schema', () => {
@@ -111,7 +116,7 @@ describe('schema typing', () => {
         '/inter',
         {
           body: {
-            json: $T.intersection([
+            'application/json': $T.intersection([
               $T.object({ a: $T.string() }),
               $T.object({ b: $T.number() }),
             ]),

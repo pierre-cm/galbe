@@ -2,7 +2,6 @@ import { semver } from 'bun'
 import { transformSync } from '@swc/core'
 import { resolve, relative, dirname } from 'path'
 import { OpenAPIV3 } from 'openapi-types'
-import { inferBodyType } from '../../../../src/util'
 
 type SchemaEntry = {
   key: string
@@ -269,7 +268,7 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
         }
         const keyGroups: Record<string, string[]> = {}
         for (const [media, v] of entries) {
-          const galbeKey = inferBodyType(media) || 'default'
+          const galbeKey = media
           const schemaStr = parseOapiSchema(v.schema, {}, { media })
           if (!keyGroups[galbeKey]) keyGroups[galbeKey] = []
           keyGroups[galbeKey].push(schemaStr)
@@ -282,7 +281,7 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
         } else {
           const parts = Object.entries(keyGroups).map(([k, schemas]) => {
             const unique = [...new Set(schemas)]
-            return `${k}: ${unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`}`
+            return `"${k}": ${unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`}`
           })
           schema = `{${parts.join(',')}}`
         }
@@ -428,7 +427,7 @@ const parseEndpointDef = (
           ])
         ),
       ]
-      body = bs.length ? `  body: {${bs.map(([k, v]) => `"${inferBodyType(k)}":${o(v)}`).join(',')}}` : ''
+      body = bs.length ? `  body: {${bs.map(([k, v]) => `"${k}":${o(v)}`).join(',')}}` : ''
     }
   }
 
@@ -479,7 +478,7 @@ const parseEndpointDef = (
       const exampleParts: string[] = []
       let singleExample: any = undefined
       for (const [mediaType, tv] of Object.entries(content)) {
-        const galbeKey = inferBodyType(mediaType) || 'default'
+        const galbeKey = mediaType
         if ((tv as any).example !== undefined && singleExample === undefined) singleExample = (tv as any).example
         if (tv.examples && Object.keys(tv.examples).length) {
           for (const [k, ex] of Object.entries(tv.examples)) exampleParts.push(`${JSON.stringify(k)}:${JSON.stringify(ex)}`)
@@ -500,7 +499,7 @@ const parseEndpointDef = (
         const parts: string[] = []
         for (const [key, schemas] of Object.entries(keyGroups)) {
           const unique = [...new Set(schemas)]
-          parts.push(`${key}: ${unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`}`)
+          parts.push(`"${key}": ${unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`}`)
         }
         if (description) parts.push(`description: ${JSON.stringify(description)}`)
         if (headerEntries.length) parts.push(`responseHeaders: {${headerEntries.join(',')}}`)
@@ -508,17 +507,21 @@ const parseEndpointDef = (
         if (singleExample !== undefined) parts.push(`example: ${JSON.stringify(singleExample)}`)
         return [s, `{${parts.join(',')}}`]
       } else {
-        // Single body key → single schema or union + extras
+        // Single body key → STResponseContent object (preserves exact media type key)
         const [key] = uniqueKeys
         const unique = [...new Set(keyGroups[key] || [])]
-        let schema = unique.length === 0 ? `$T.null()` : unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`
-        const extras: string[] = []
-        if (headerEntries.length) extras.push(`responseHeaders:{${headerEntries.join(',')}}`)
-        if (exampleParts.length) extras.push(`examples:{${exampleParts.join(',')}}`)
-        if (singleExample !== undefined) extras.push(`example:${JSON.stringify(singleExample)}`)
-        if (description) extras.push(`description:${JSON.stringify(description)}`)
-        if (extras.length) schema = `({...${schema}, ${extras.join(',')}})`
-        return [s, schema]
+        let schemaStr = unique.length === 0 ? `$T.null()` : unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`
+        // Embed per-media-type example/examples inside the schema spread so the
+        // content-map serializer can read them from the per-key body schema.
+        const perKeyExtras: string[] = []
+        if (exampleParts.length) perKeyExtras.push(`examples:{${exampleParts.join(',')}}`)
+        if (singleExample !== undefined) perKeyExtras.push(`example:${JSON.stringify(singleExample)}`)
+        if (perKeyExtras.length) schemaStr = `({...${schemaStr},${perKeyExtras.join(',')}})`
+        const parts: string[] = []
+        if (key) parts.push(`"${key}":${schemaStr}`)
+        if (description) parts.push(`description:${JSON.stringify(description)}`)
+        if (headerEntries.length) parts.push(`responseHeaders:{${headerEntries.join(',')}}`)
+        return [s, `{${parts.join(',')}}`]
       }
     })
   )

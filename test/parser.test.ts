@@ -83,13 +83,13 @@ describe('parser', () => {
       }
     )
 
-    galbe.post('/obj/schema/base', { body: { json: $T.object(schema_object) } }, handleBody)
+    galbe.post('/obj/schema/base', { body: { 'application/json': $T.object(schema_object) } }, handleBody)
 
     galbe.post(
       '/form/schema/base',
       {
         body: {
-          urlForm: $T.object({
+          'application/x-www-form-urlencoded': $T.object({
             ...schema_objectBase,
             object: $T.optional($T.object({ nested: $T.object({ foo: $T.literal('bar') }), baz: $T.number() })),
             union: $T.optional($T.union([$T.number(), $T.boolean()])),
@@ -104,7 +104,7 @@ describe('parser', () => {
       '/form/stream/schema/base',
       {
         body: {
-          urlForm: $T.stream(
+          'application/x-www-form-urlencoded': $T.stream(
             $T.object({
               ...schema_objectBase,
               union: $T.optional($T.union([$T.number(), $T.boolean()])),
@@ -121,7 +121,7 @@ describe('parser', () => {
       '/mp/schema/base',
       {
         body: {
-          multipart: $T.multipartForm({
+          'multipart/form-data': $T.multipartForm({
             ...schema_objectBase,
             union: $T.optional($T.union([$T.number(), $T.boolean()])),
             literal: $T.optional($T.literal('x')),
@@ -135,7 +135,7 @@ describe('parser', () => {
       '/mp/schema/file',
       {
         body: {
-          multipart: $T.multipartForm({
+          'multipart/form-data': $T.multipartForm({
             foo: $T.byteArray(),
           }),
         },
@@ -146,7 +146,7 @@ describe('parser', () => {
       '/mp/stream/schema/base',
       {
         body: {
-          multipart: $T.stream(
+          'multipart/form-data': $T.stream(
             $T.multipartForm({
               ...schema_objectBase,
               union: $T.optional($T.union([$T.number(), $T.boolean()])),
@@ -170,14 +170,14 @@ describe('parser', () => {
 
     galbe.post(
       '/mp/file',
-      { body: { multipart: $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }) } },
+      { body: { 'multipart/form-data': $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }) } },
       handleBody
     )
     galbe.post(
       '/mp/stream/file',
       {
         body: {
-          multipart: $T.stream($T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })),
+          'multipart/form-data': $T.stream($T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })),
         },
       },
       async ctx => {
@@ -194,14 +194,14 @@ describe('parser', () => {
         }
       }
     )
-    galbe.post('/ba/file', { body: { byteArray: $T.byteArray() } }, async ctx => {
+    galbe.post('/ba/file', { body: { 'application/octet-stream': $T.byteArray() } }, async ctx => {
       if (ctx?.body instanceof Uint8Array) {
         return { type: 'byteArray', content: await fileHash(ctx.body) }
       } else {
         return { type: null, content: 'error' }
       }
     })
-    galbe.post('/ba/stream/file', { body: { byteArray: $T.stream($T.byteArray()) } }, async ctx => {
+    galbe.post('/ba/stream/file', { body: { 'application/octet-stream': $T.stream($T.byteArray()) } }, async ctx => {
       if (isAsyncIterator(ctx.body)) {
         let bytes = new Uint8Array()
         for await (const b of ctx.body) {

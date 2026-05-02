@@ -63,15 +63,15 @@ describe('STJson', () => {
     const port = 7365
     const g = new Galbe()
 
-    g.post('/json/str', { body: { json: $T.json($T.string()) } }, ctx => {
+    g.post('/json/str', { body: { 'application/json': $T.json($T.string()) } }, ctx => {
       return { body: ctx.body }
     })
-    g.post('/json/num', { body: { json: $T.json($T.number()) } }, ctx => {
+    g.post('/json/num', { body: { 'application/json': $T.json($T.number()) } }, ctx => {
       return { body: ctx.body }
     })
     g.post(
       '/json/obj',
-      { body: { json: $T.json($T.object({ a: $T.string(), b: $T.number() })) } },
+      { body: { 'application/json': $T.json($T.object({ a: $T.string(), b: $T.number() })) } },
       ctx => {
         return { body: ctx.body }
       }
@@ -152,7 +152,7 @@ describe('STJson', () => {
       const g = new Galbe()
       g.post(
         '/json',
-        { body: { json: $T.json($T.object({ a: $T.string(), b: $T.number() })) } },
+        { body: { 'application/json': $T.json($T.object({ a: $T.string(), b: $T.number() })) } },
         () => 'ok'
       )
 
@@ -171,9 +171,9 @@ describe('STJson', () => {
 
     test('emits primitive type for primitive json wrappers', async () => {
       const g = new Galbe()
-      g.post('/jstr', { body: { json: $T.json($T.string()) } }, () => 'ok')
-      g.post('/jnum', { body: { json: $T.json($T.number()) } }, () => 'ok')
-      g.post('/jbool', { body: { json: $T.json($T.boolean()) } }, () => 'ok')
+      g.post('/jstr', { body: { 'application/json': $T.json($T.string()) } }, () => 'ok')
+      g.post('/jnum', { body: { 'application/json': $T.json($T.number()) } }, () => 'ok')
+      g.post('/jbool', { body: { 'application/json': $T.json($T.boolean()) } }, () => 'ok')
 
       const spec = await OpenAPISerializer(g)
       expect(

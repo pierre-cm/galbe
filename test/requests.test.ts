@@ -81,22 +81,22 @@ describe('requests', () => {
 
     galbe.post('/none', handleBody)
     galbe.post('/null', { body: $T.null() }, handleBody)
-    galbe.post('/ba', { body: { byteArray: $T.byteArray() } }, handleBody)
-    galbe.post('/bool', { body: { json: $T.boolean() } }, handleBody)
-    galbe.post('/num', { body: { json: $T.number() } }, handleBody)
-    galbe.post('/jsonStr', { body: { json: $T.string() } }, handleBody)
-    galbe.post('/str', { body: { text: $T.string() } }, handleBody)
-    galbe.post('/txtBool', { body: { text: $T.boolean() } }, handleBody)
-    galbe.post('/txtNum', { body: { text: $T.number() } }, handleBody)
-    galbe.post('/arr', { body: { json: $T.array() } }, handleBody)
-    galbe.post('/obj', { body: { json: $T.object() } }, handleBody)
+    galbe.post('/ba', { body: { 'application/octet-stream': $T.byteArray() } }, handleBody)
+    galbe.post('/bool', { body: { 'application/json': $T.boolean() } }, handleBody)
+    galbe.post('/num', { body: { 'application/json': $T.number() } }, handleBody)
+    galbe.post('/jsonStr', { body: { 'application/json': $T.string() } }, handleBody)
+    galbe.post('/str', { body: { 'text/plain': $T.string() } }, handleBody)
+    galbe.post('/txtBool', { body: { 'text/plain': $T.boolean() } }, handleBody)
+    galbe.post('/txtNum', { body: { 'text/plain': $T.number() } }, handleBody)
+    galbe.post('/arr', { body: { 'application/json': $T.array() } }, handleBody)
+    galbe.post('/obj', { body: { 'application/json': $T.object() } }, handleBody)
 
-    galbe.post('/form', { body: { urlForm: $T.object() } }, handleBody)
-    galbe.post('/mp', { body: { multipart: $T.multipartForm() } }, handleBody)
+    galbe.post('/form', { body: { 'application/x-www-form-urlencoded': $T.object() } }, handleBody)
+    galbe.post('/mp', { body: { 'multipart/form-data': $T.multipartForm() } }, handleBody)
 
-    galbe.post('/stream/ba', { body: { byteArray: $T.stream($T.byteArray()) } }, handleBody)
-    galbe.post('/stream/str', { body: { text: $T.stream($T.string()) } }, handleBody)
-    galbe.post('/stream/form', { body: { urlForm: $T.stream($T.object()) } }, async ctx => {
+    galbe.post('/stream/ba', { body: { 'application/octet-stream': $T.stream($T.byteArray()) } }, handleBody)
+    galbe.post('/stream/str', { body: { 'text/plain': $T.stream($T.string()) } }, handleBody)
+    galbe.post('/stream/form', { body: { 'application/x-www-form-urlencoded': $T.stream($T.object()) } }, async ctx => {
       let resp: Record<string, any> = {}
       for await (const [k, v] of ctx.body) {
         if (k in resp) {
@@ -105,7 +105,7 @@ describe('requests', () => {
       }
       return { type: 'object', content: resp }
     })
-    galbe.post('/stream/mp', { body: { multipart: $T.stream($T.multipartForm()) } }, async ctx => {
+    galbe.post('/stream/mp', { body: { 'multipart/form-data': $T.stream($T.multipartForm()) } }, async ctx => {
       let resp: Record<string, any> = {}
       for await (const field of ctx.body) {
         let k = field?.headers.name
@@ -129,14 +129,14 @@ describe('requests', () => {
 
     galbe.post(
       '/mp/file',
-      { body: { multipart: $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }) } },
+      { body: { 'multipart/form-data': $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }) } },
       handleBody
     )
     galbe.post(
       '/mp/stream/file',
       {
         body: {
-          multipart: $T.stream($T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })),
+          'multipart/form-data': $T.stream($T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })),
         },
       },
       async ctx => {
@@ -153,14 +153,14 @@ describe('requests', () => {
         }
       }
     )
-    galbe.post('/ba/file', { body: { byteArray: $T.byteArray() } }, async ctx => {
+    galbe.post('/ba/file', { body: { 'application/octet-stream': $T.byteArray() } }, async ctx => {
       if (ctx?.body instanceof Uint8Array) {
         return { type: 'byteArray', content: await fileHash(ctx.body) }
       } else {
         return { type: null, content: 'error' }
       }
     })
-    galbe.post('/ba/stream/file', { body: { byteArray: $T.stream($T.byteArray()) } }, async ctx => {
+    galbe.post('/ba/stream/file', { body: { 'application/octet-stream': $T.stream($T.byteArray()) } }, async ctx => {
       if (isAsyncIterator(ctx.body)) {
         let bytes = new Uint8Array()
         for await (const b of ctx.body) {

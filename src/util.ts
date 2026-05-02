@@ -1,4 +1,4 @@
-import type { Method, Route, RouteNode, STBodyType } from '.'
+import type { Method, Route, RouteNode } from '.'
 import type { RouteFileMeta, RouteMeta } from './routes'
 
 const METHOD_COLOR: Record<string, string> = {
@@ -144,22 +144,14 @@ const TXT_HEADER_RX = /^text\//
 const FORM_HEADER_RX = /^application\/x-www-form-urlencoded\b/
 const MP_HEADER_RX = /^multipart\/form-data\b/
 
-export const inferBodyType = (contentType?: string | null): STBodyType | undefined => {
+export type ParseMode = 'json' | 'text' | 'byteArray' | 'urlForm' | 'multipart' | 'default'
+
+export const inferBodyType = (contentType?: string | null): ParseMode => {
   if (!contentType) return 'default'
   if (JSON_HEADER_RX.test(contentType)) return 'json'
   if (TXT_HEADER_RX.test(contentType)) return 'text'
   if (FORM_HEADER_RX.test(contentType)) return 'urlForm'
   if (MP_HEADER_RX.test(contentType)) return 'multipart'
   if (BA_HEADER_RX.test(contentType)) return 'byteArray'
-  return 'default'
-}
-
-export const inferContentType = (bodyType?: string | undefined): string => {
-  if (!bodyType) return 'default'
-  if (bodyType === 'json') return 'application/json'
-  if (bodyType === 'text') return 'text/plain'
-  if (bodyType === 'urlForm') return 'application/x-www-form-urlencoded'
-  if (bodyType === 'multipart') return 'multipart/form-data'
-  if (bodyType === 'byteArray') return 'application/octet-stream'
   return 'default'
 }
