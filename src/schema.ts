@@ -20,6 +20,11 @@ export interface Options {
   headers?: Record<string, any>
   /** Marks the schema as deprecated. Surfaced by spec generators (e.g. OpenAPI). */
   deprecated?: boolean
+  /**
+   * Response-only: declares response headers emitted in the OpenAPI `responses` object.
+   * Distinct from the request-level `headers` field.
+   */
+  responseHeaders?: Record<string, any>
 }
 export interface ByteArrayOptions extends Options {
   minLength?: number
@@ -57,7 +62,8 @@ export interface STSchema extends Options {
     | 'urlForm'
     | 'multipartForm'
     | 'any'
-    | 'union'
+    | 'anyOf'
+    | 'oneOf'
     | 'intersection'
   [Optional]?: boolean
   [Stream]?: boolean
@@ -190,7 +196,6 @@ export function _Literal<T extends STLiteralValue>(value: T, options: Options = 
 export interface STAny extends STSchema, Options {
   [Kind]: 'any'
   static: any
-  [key: string]: any
 }
 export function _Any(options: Options = {}): STAny {
   return {
@@ -294,15 +299,19 @@ type UnionStatic<T extends STSchema[], P extends unknown[]> = {
   [K in keyof T]: T[K] extends STSchema ? Static<T[K], P> : never
 }[number]
 export interface STUnion<T extends NonEmptyArray<STSchema> = NonEmptyArray<STSchema>> extends STSchema {
-  [Kind]: 'union'
+  [Kind]: 'anyOf' | 'oneOf'
   static: UnionStatic<T, this['params']>
-  anyOf: T
+  members: T
 }
-export function _Union<T extends NonEmptyArray<STSchema>>(schemas: [...T], options: Options): STUnion<T> {
+export function _Union<T extends NonEmptyArray<STSchema>>(
+  kind: 'anyOf' | 'oneOf',
+  schemas: [...T],
+  options: Options
+): STUnion<T> {
   const s = {
     ...options,
-    [Kind]: 'union',
-    anyOf: schemas as T,
+    [Kind]: kind,
+    members: schemas as T,
     optional: () => ({ ...s, [Optional]: true }),
   }
   return s as unknown as STUnion<T>
@@ -347,7 +356,7 @@ export function _Stream<T extends STStreamable>(schema: T): STStream<T> {
 // Nullable
 type STNullable<T extends STSchema> = STUnion<[T, STNull]>
 // Nullish
-type STNullish<T extends STSchema> = (T | STNull) & { [Kind]: 'union'; anyOf: [T, STNull]; [Optional]: true }
+type STNullish<T extends STSchema> = (T | STNull) & { [Kind]: 'anyOf'; members: [T, STNull]; [Optional]: true }
 export class SchemaType {
   /** Creates an Optional Schema Type Wrapper */
   public optional<T extends STSchema>(schema: T): STOptional<T> {
@@ -355,7 +364,7 @@ export class SchemaType {
   }
   /** Creates an Nullable Schema Type Wrapper */
   public nullable<T extends STSchema>(schema: T): STNullable<T> {
-    return { ..._Union([schema, _Null()], {}) }
+    return { ..._Union('anyOf', [schema, _Null()], {}) }
   }
   /** Creates an Nullish Schema Type Wrapper */
   public nullish<T extends STSchema>(schema: T): STOptional<STNullable<T>> {
@@ -412,9 +421,17 @@ export class SchemaType {
   public array<T extends STSchema>(schema?: T, options: ArrayOptions = {}): STArray<T> {
     return _Array(schema, options)
   }
-  /** Creates an Union Schema Type */
+  /** Creates an anyOf Schema Type (alias: `union`) */
+  public anyOf<T extends NonEmptyArray<STSchema>>(schemas: [...T], options: Options = {}): STUnion<T> {
+    return _Union('anyOf', schemas, options)
+  }
+  /** Creates a oneOf Schema Type */
+  public oneOf<T extends NonEmptyArray<STSchema>>(schemas: [...T], options: Options = {}): STUnion<T> {
+    return _Union('oneOf', schemas, options)
+  }
+  /** @deprecated Use `anyOf` instead */
   public union<T extends NonEmptyArray<STSchema>>(schemas: [...T], options: Options = {}): STUnion<T> {
-    return _Union(schemas, options)
+    return _Union('anyOf', schemas, options)
   }
   /** Creates an Intersection Schema Type */
   public intersection<T extends NonEmptyArray<STObject | STUnion | STIntersection<any>>>(
@@ -441,12 +458,12 @@ export class SchemaType {
   ): Omit<STStream<T>, 'static'> & {
     static: AsyncGenerator<
       Entries<{
-        [P in KeysOfUnion<MemberProps<T['anyOf'][number]>> as ValueAt<
-          MemberProps<T['anyOf'][number]>,
+        [P in KeysOfUnion<MemberProps<T['members'][number]>> as ValueAt<
+          MemberProps<T['members'][number]>,
           P
         > extends STSchema
           ? P
-          : never]: Static<ValueAt<MemberProps<T['anyOf'][number]>, P>>
+          : never]: Static<ValueAt<MemberProps<T['members'][number]>, P>>
       }>
     >
     params: unknown[]
@@ -525,9 +542,9 @@ export const schemaToTypeStr = (schema: STSchema): string => {
       .join(';')}}`
   } else if (kind === 'json') {
     type = `Json<${schemaToTypeStr((schema as STJson).value)}>`
-  } else if (kind === 'union') {
-    let anyOf = (schema as STUnion).anyOf
-    type = anyOf.map(s => schemaToTypeStr(s)).join('|')
+  } else if (kind === 'anyOf' || kind === 'oneOf') {
+    let members = (schema as STUnion).members
+    type = members.map(s => schemaToTypeStr(s)).join('|')
   } else if (kind === 'intersection') {
     let allOf = (schema as STIntersection<any>).allOf
     type = allOf.map((s: STSchema) => schemaToTypeStr(s)).join('&')

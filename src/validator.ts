@@ -55,7 +55,7 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
     if (typeof elt !== 'object') throw `Not a valid object`
     if (Array.isArray(elt)) throw `Expected an object, not an array`
     const err: ValidationError = {}
-    Object.entries((schema as STObject).props as STProps).forEach(([k, s]) => {
+    Object.entries((schema as STObject).props ?? {}).forEach(([k, s]) => {
       if (elt === null || !(k in elt)) {
         if (!s?.[Optional]) err[k] = 'Required'
         return
@@ -84,8 +84,8 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
     if (opt?.parse && typeof elt === 'string') elt = Uint8Array.from(elt, c => c.charCodeAt(0))
     else if (opt?.parse && Array.isArray(elt)) elt = new Uint8Array(elt)
     if (!(elt instanceof Uint8Array)) throw 'Not a valid byteArray'
-  } else if (schema[Kind] === 'union') {
-    const union = Object.values((schema as STUnion).anyOf)
+  } else if (schema[Kind] === 'anyOf' || schema[Kind] === 'oneOf') {
+    const union = Object.values((schema as STUnion).members)
     let valid = false
     for (const s of union) {
       try {
@@ -113,7 +113,18 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
 }
 
 export const validateResponse = (response: any, schema: STResponse, status: number) => {
-  const s = schema?.[status] ?? schema?.['default']
+  const entry = schema?.[status] ?? schema?.['default']
+  if (!entry) return
+  let s: STSchema | undefined
+  if ((entry as STSchema)[Kind]) {
+    s = entry as STSchema
+  } else {
+    const c = entry as any
+    if (response instanceof Uint8Array) s = c.byteArray
+    else if (typeof response === 'string') s = c.text ?? c.json
+    else if (response !== null && typeof response === 'object') s = c.json ?? c.default
+    else s = c.default
+  }
   if (!s) return
   if (response instanceof ReadableStream) {
     if (!s[Stream]) throw new InternalServerError(`Expected ${s[Kind]} response, but got ReadableStream`)

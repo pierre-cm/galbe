@@ -89,7 +89,7 @@ describe('requests', () => {
     galbe.post('/txtBool', { body: { text: $T.boolean() } }, handleBody)
     galbe.post('/txtNum', { body: { text: $T.number() } }, handleBody)
     galbe.post('/arr', { body: { json: $T.array() } }, handleBody)
-    galbe.post('/obj', { body: { json: $T.object($T.any()) } }, handleBody)
+    galbe.post('/obj', { body: { json: $T.object() } }, handleBody)
 
     galbe.post('/form', { body: { urlForm: $T.object() } }, handleBody)
     galbe.post('/mp', { body: { multipart: $T.multipartForm() } }, handleBody)

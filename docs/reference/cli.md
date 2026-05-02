@@ -106,12 +106,12 @@ Generate a client for your Galbe application.
 
 #### Options
 
-| Short | Long     | Description                | Default                              |
-| ----- | -------- | -------------------------- | ------------------------------------ |
-| -o    | --out    | output file                | dist/(client.ts \| client.js \| cli) |
-| -t    | --target | build target [ts, js, cli] | ts                                   |
+| Short | Long     | Description              | Default                            |
+| ----- | -------- | ------------------------ | ---------------------------------- |
+| -o    | --out    | output file              | dist/(client.ts \| client.js)      |
+| -t    | --target | build target [ts, js]    | ts                                 |
 
-#### Examples
+#### Example
 
 Let's first setup a new Galbe project:
 
@@ -120,8 +120,6 @@ $ bun create galbe galbe-example --template hello --lang ts
 $ cd galbe-example
 $ bun install
 ```
-
-##### JS or TS client
 
 To generate a JS or TS client of that application, you can run the following command:
 
@@ -147,56 +145,150 @@ if (response.ok) console.log(await response.body())
 // Hello Bob! You're 42 y.o.
 ```
 
-##### CLI client
+### cli
 
-To generate a CLI of that application, you can run the following command:
+Generate a CLI for your Galbe application. Commands are derived from your routes and grouped by their tags.
+
+#### Arguments
+
+| Name  | Description                                               |
+| ----- | --------------------------------------------------------- |
+| index | The js or ts file that exports your Galbe server instance. |
+
+#### Options
+
+| Short | Long     | Description                           | Default                              |
+| ----- | -------- | ------------------------------------- | ------------------------------------ |
+| -o    | --out    | output file                           | dist/cli (standalone) \| dist/cli.ts (module) |
+| -t    | --target | CLI target [cac]                      | cac                                  |
+| -m    | --mode   | output mode [standalone, module]      | standalone                           |
+| -c    | --config | config file (.ts or .js)              |                                      |
+
+#### Standalone mode
+
+Compiles a self-contained binary. Routes with the same tag are grouped under a sub-command; untagged routes appear at the root level.
 
 ```bash
-$ galbe generate client index.ts -t cli
+$ galbe generate cli index.ts
 ```
 
-This will generate a `cli` binary file under `dist` directory by default.
+This generates a `dist/cli` binary. Given a route tagged `users`:
 
 ```bash
 $ ./dist/cli --help
-Usage: galbe-example [options] [command]
+galbe-example/0.1.0
 
-Options:
-  -V, --version    output the version number
-  -h, --help       display help for command
+Usage:
+  $ galbe-example <command> [options]
 
 Commands:
-  hello [options]  Greeting endpoint
-  help [command]   display help for command
-```
-
-```bash
-$ ./dist/cli hello --help
-Usage: galbe-example hello [options] <name>
-
-Greeting endpoint
-
-Arguments:
-  name                        name argument
+  users   users commands
 
 Options:
-  -%f, --%format [string]     response format ['s','h','b','t','p'] (default: ["s","b","p"])
-  -%h, --%header <string...>  request header formatted as headerName=headerValue (default: [])
-  -%q, --%query <string...>   query param formatted as paramName=paramValue (default: [])
-  -%b, --%body <string>       request body (default: "")
-  -%bf, --%bodyFile <path>    request body file (default: "")
-  -a, --age <number>
-  -h, --help                  display help for command
+  -h, --help     Display this message
+  -v, --version  Display version number
 ```
 
 ```bash
-$ ./dist/cli hello Pierre -a 29
+$ ./dist/cli users --help
+galbe-example/0.1.0
+
+Usage:
+  $ galbe-example users <command> [options]
+
+Commands:
+  list          List all users
+  get <id>      Get user by ID
+
+Options:
+  -h, --help    Display this message
+```
+
+```bash
+$ ./dist/cli users get abc123
 200
-Hello Pierre! You're 29 y.o.
+{"id":"abc123","name":"Alice"}
 ```
 
 > [!IMPORTANT]
-> A `GCLI_SERVER_URL` environment variable must be defined. It should point to the URL of the Galbe server you want to target — in that specific case, `http://localhost:3000`.
+> A `GCLI_SERVER_URL` environment variable must be defined. It should point to the URL of the Galbe server you want to target.
+
+Each command exposes the following built-in options for controlling the request and response:
+
+| Short | Long        | Description                                       | Default |
+| ----- | ----------- | ------------------------------------------------- | ------- |
+| -H    | --header    | extra request header as `name=value` (repeatable) | []      |
+| -Q    | --query     | extra query param as `name=value` (repeatable)    | []      |
+| -b    | --body      | request body string                               |         |
+| -B    | --body-file | path to a file used as request body               |         |
+
+The default response output shows status, body, and pretty-prints JSON. To customise this behaviour, use `responseFormatter` in your [config file](#config-file).
+
+#### Module mode
+
+Generates a `.ts` (or `.js`) module that exports a `register` function. The caller owns the `cac` instance and calls `.parse()` themselves.
+
+```bash
+$ galbe generate cli index.ts --mode module --out src/api-cli.ts
+```
+
+src/api-cli.ts is generated. You use it like this:
+
+```ts
+import cac from 'cac'
+import { register } from './src/api-cli'
+
+const cli = cac('myapp')
+register(cli)
+cli.help()
+cli.parse()
+```
+
+You can also override runtime options:
+
+```ts
+register(cli, {
+  baseUrl: () => process.env.API_URL ?? 'http://localhost:3000',
+  headers: { 'x-api-key': 'secret' },
+  responseFormatter: async res => `[${res.status}] ${await res.text()}\n`,
+})
+```
+
+#### Config file
+
+Pass `--config <file>` to customise commands and set baked-in defaults. The file can export two named values:
+
+- **`transform`** — a function that receives the generated `GalbeCLICommand[]` and returns the modified array. Runs after plugin hooks.
+- **`options`** — an object with request/response defaults baked into the generated output.
+
+```ts
+// cli.config.ts
+import type { GalbeCLICommand, GalbeCLIOptions } from 'galbe/extras'
+
+export const transform = (commands: GalbeCLICommand[]): GalbeCLICommand[] =>
+  commands
+    .filter(c => !c.tags.includes('internal'))
+    .map(c => ({ ...c, name: c.name.replace(/^get-/, '') }))
+
+export const options: GalbeCLIOptions = {
+  baseUrl: () => process.env.API_URL ?? 'http://localhost:3000',
+  headers: { 'x-api-key': process.env.API_KEY ?? '' },
+  requestInterceptor: async req => {
+    req.headers.set('x-request-id', crypto.randomUUID())
+    return req
+  },
+  responseFormatter: async res => {
+    const body = res.headers.get('content-type')?.includes('application/json')
+      ? JSON.stringify(await res.json(), null, 2)
+      : await res.text()
+    return `${res.status}\n${body}\n`
+  },
+}
+```
+
+```bash
+$ galbe generate cli index.ts --config cli.config.ts
+```
 
 ### spec
 

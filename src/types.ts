@@ -50,7 +50,17 @@ export type STBody = STNull | Partial<STBodyContent>
 export type STBodyType = keyof STBodyContent
 export type STBodyValue = STBodyContent[STBodyType]
 
-export type STResponse = Partial<Record<number | 'default', STResponseValue>>
+export type STResponseContent = {
+  json?: STJson | STObject | STBoolean | STInteger | STNumber | STString | STArray | STUnion | STIntersection<any>
+  text?: STString | STLiteral | STBoolean | STNumber | STInteger | STUnion | STStream
+  byteArray?: STByteArray | STStream
+  default?: STString | STByteArray | STStream | STAny
+  description?: string
+  responseHeaders?: Record<string, STSchema>
+}
+export type STResponseBodyKey = keyof Omit<STResponseContent, 'description' | 'responseHeaders'>
+export type STResponseEntry = STResponseValue | STResponseContent
+export type STResponse = Partial<Record<number | 'default', STResponseEntry>>
 
 export type MaybeArray<T> = T | T[]
 export type MaybeSTArray<T extends STSchema> = T | STArray<T>
@@ -403,7 +413,15 @@ export type GalbeCLICommand = {
   tags: string[]
   description?: string
   route: Route
+  pathT: string
   arguments?: { name: string; type: string; description: string }[]
   options?: { name: string; short: string; type: string; description: string; default: any }[]
   action?: (props: any) => MaybePromise<void>
+}
+
+export type GalbeCLIOptions = {
+  baseUrl?: string | (() => string)
+  headers?: Record<string, string>
+  requestInterceptor?: (req: Request) => MaybePromise<Request>
+  responseFormatter?: (res: Response) => MaybePromise<string>
 }

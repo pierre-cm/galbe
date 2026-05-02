@@ -38,7 +38,7 @@ describe('openapi roundtrip', () => {
 
     original = Bun.YAML.parse(await Bun.file(FIXTURE).text()) as any
     generated = Bun.YAML.parse(await Bun.file(join(dir, 'generated.yaml')).text()) as any
-  }, 60_000)
+  })
 
   afterAll(async () => {
     if (dir) await rm(dir, { recursive: true, force: true })
@@ -215,9 +215,7 @@ describe('openapi roundtrip', () => {
   })
 
   test('component-level response descriptions survive', () => {
-    expect(generated.components.responses.NotFound.description).toBe(
-      'Module, version, or other resource not found.'
-    )
+    expect(generated.components.responses.NotFound.description).toBe('Module, version, or other resource not found.')
     expect(generated.components.responses.BadRequest.description).toBe('Malformed request.')
     expect(generated.components.responses.Unauthorized.description).toBe('Missing or invalid bearer token.')
     expect(generated.components.responses.Forbidden.description).toBe(

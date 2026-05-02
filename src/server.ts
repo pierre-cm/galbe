@@ -182,8 +182,9 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
           customError = responseParser(eh(error, context as Context), context as Context, cookies)
         if (customError) return customError
         if (error instanceof InternalServerError) {
-          console.log(`Internal Error`, error?.payload || '')
-          return new Response('Internal Server Error', {
+          let internalPayload = 'Internal Server Error'
+          try { internalPayload = JSON.stringify(error?.payload || internalPayload) } catch {}
+          return new Response(internalPayload, {
             status: error.status,
             headers: { 'content-type': 'application/json' },
           })

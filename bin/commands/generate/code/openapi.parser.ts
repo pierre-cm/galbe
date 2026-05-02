@@ -17,8 +17,6 @@ type SchemaEntry = {
   responseExample?: any
   /** Response-only: content-level multi-key examples. */
   responseExamples?: Record<string, any>
-  /** Response-only: explicit media-type list. */
-  responseMedia?: string[]
 }
 type EndpointEntry = {
   version?: string
@@ -157,10 +155,8 @@ const parseOapiSchema = (
   } else if (anyOf?.length) {
     if (anyOf.length === 1) resp = parseOapiSchema(anyOf[0] as OpenAPIV3.SchemaObject, details, extra)
     else {
-      const unionOpts = { ...options, ...(os.oneOf ? { _oneOf: true } : {}) }
-      resp = `$T.union([${anyOf.map(s => parseOapiSchema(s as OpenAPIV3.SchemaObject)).join(',')}], ${serialize(
-        unionOpts
-      )})`
+      const builder = os.oneOf ? '$T.oneOf' : '$T.anyOf'
+      resp = `${builder}([${anyOf.map(s => parseOapiSchema(s as OpenAPIV3.SchemaObject)).join(',')}]${optArg ? `, ${optArg}` : ''})`
     }
   } else if (allOf?.length) {
     if (allOf.length === 1) resp = parseOapiSchema(allOf[0] as OpenAPIV3.SchemaObject, details, extra)
@@ -251,32 +247,46 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
     let dependsOn = new Set<string>()
     let responseExample: any = undefined
     let responseExamples: Record<string, any> | undefined = undefined
-    let responseMedia: string[] | undefined = undefined
     if (kind === 'schemas') schema = parseOapiSchema(s, { id: k })
-    else if (kind === 'requestBodies' || kind === 'responses') {
+    else if (kind === 'requestBodies') {
       let schemas = [] as string[]
       if (!!s.content) {
         const contentMap = (s as OpenAPIV3.RequestBodyObject)?.content || { null: {} }
-        if (kind === 'responses') responseMedia = Object.keys(contentMap)
-        schemas = [
-          ...new Set(
-            Object.entries(contentMap).map(([media, v]) => {
-              if (kind === 'responses') {
-                if ((v as any).example !== undefined && responseExample === undefined) {
-                  responseExample = (v as any).example
-                }
-                if ((v as any).examples && Object.keys((v as any).examples).length) {
-                  responseExamples = { ...(responseExamples || {}), ...(v as any).examples }
-                }
-              }
-              return parseOapiSchema(v.schema, { id: k }, { media })
-            })
-          ),
-        ]
+        schemas = [...new Set(Object.entries(contentMap).map(([media, v]) => parseOapiSchema(v.schema, { id: k }, { media })))]
       } else {
         schemas = [parseOapiSchema(undefined, { id: k, ...s })]
       }
       schema = schemas.length <= 0 ? '' : schemas.length === 1 ? schemas[0] : `$T.union([${schemas.join(',')}])`
+    } else if (kind === 'responses') {
+      if (!s.content) {
+        schema = parseOapiSchema(undefined, { id: k, ...s })
+      } else {
+        const contentMap = s.content as Record<string, { schema?: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject; example?: any; examples?: any }>
+        const entries = Object.entries(contentMap)
+        for (const [, v] of entries) {
+          if (v.example !== undefined && responseExample === undefined) responseExample = v.example
+          if (v.examples && Object.keys(v.examples).length) responseExamples = { ...(responseExamples || {}), ...v.examples }
+        }
+        const keyGroups: Record<string, string[]> = {}
+        for (const [media, v] of entries) {
+          const galbeKey = inferBodyType(media) || 'default'
+          const schemaStr = parseOapiSchema(v.schema, {}, { media })
+          if (!keyGroups[galbeKey]) keyGroups[galbeKey] = []
+          keyGroups[galbeKey].push(schemaStr)
+        }
+        const uniqueKeys = Object.keys(keyGroups)
+        if (uniqueKeys.length <= 1) {
+          const [key] = uniqueKeys
+          const uniqueSchemas = [...new Set(keyGroups[key] || [])]
+          schema = uniqueSchemas.length === 0 ? '' : uniqueSchemas.length === 1 ? uniqueSchemas[0] : `$T.union([${uniqueSchemas.join(',')}])`
+        } else {
+          const parts = Object.entries(keyGroups).map(([k, schemas]) => {
+            const unique = [...new Set(schemas)]
+            return `${k}: ${unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`}`
+          })
+          schema = `{${parts.join(',')}}`
+        }
+      }
     }
     schema = unref(schema, m => {
       let l = m.split('/')
@@ -294,7 +304,6 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
         : {}),
       ...(kind === 'responses' && responseExample !== undefined ? { responseExample } : {}),
       ...(kind === 'responses' && responseExamples ? { responseExamples } : {}),
-      ...(kind === 'responses' && responseMedia && responseMedia.length ? { responseMedia } : {}),
     }
   }
   for (let [k, v] of Object.entries(def.components?.schemas || {})) initSchema(k, v, 'schemas')
@@ -427,7 +436,6 @@ const parseEndpointDef = (
   let r = def?.responses
   let rs = Object.fromEntries(
     Object.entries(r || {}).map(([status, sv]) => {
-      let entries: string[] = []
       let s: string = Number.isInteger(Number(status)) ? status : 'default'
 
       //@ts-ignore
@@ -438,78 +446,87 @@ const parseEndpointDef = (
             return l[l.length - 1]
           })
         : null
-      if (rootRef) {
-        return [s, [rootRef]]
-      }
+      if (rootRef) return [s, rootRef]
 
       const respObj = sv as OpenAPIV3.ResponseObject
       const content = respObj?.content || {}
-      const mediaTypes = Object.keys(content)
-      const exampleParts: string[] = []
-      let singleExample: any = undefined
-      for (let [_type, tv] of Object.entries(content)) {
-        entries.push(
-          unref(parseOapiSchema(tv.schema), m => {
-            let l = m.split('/')
-            imports[l[l.length - 1]] = m
-            return l[l.length - 1]
-          })
-        )
-        if (tv.examples && Object.keys(tv.examples).length) {
-          for (const [k, ex] of Object.entries(tv.examples)) {
-            exampleParts.push(`${JSON.stringify(k)}:${JSON.stringify(ex)}`)
-          }
-        }
-        if ((tv as any).example !== undefined && singleExample === undefined) {
-          singleExample = (tv as any).example
-        }
-      }
-      if (entries.length === 0) {
-        const desc = respObj?.description
-        const opts = desc ? `{_noContent:true,description:${JSON.stringify(desc)}}` : `{_noContent:true}`
-        entries.push(`$T.any(${opts})`)
-      }
-      let unique = [...new Set(entries)]
 
-      // Build extra props to attach (media types, headers, examples) on the response wrapper.
-      const extras: string[] = []
-      if (mediaTypes.length > 0) extras.push(`_media:${JSON.stringify(mediaTypes)}`)
-      const headersObj = respObj?.headers || {}
+      // Collect response-level headers
       const headerEntries: string[] = []
-      for (const [hName, hVal] of Object.entries(headersObj)) {
+      for (const [hName, hVal] of Object.entries(respObj?.headers || {})) {
         if ('$ref' in (hVal as any)) continue
         const h = hVal as OpenAPIV3.HeaderObject
         const headerSchema = unref(
-          parseOapiSchema(h.schema || ({ type: 'string' } as any), {
-            description: h.description,
-          }),
+          parseOapiSchema(h.schema || ({ type: 'string' } as any), { description: h.description }),
           m => {
             let l = m.split('/')
             imports[l[l.length - 1]] = m
             return l[l.length - 1]
           }
         )
-        const wrapped = h.required ? headerSchema : `$T.optional(${headerSchema})`
-        headerEntries.push(`${JSON.stringify(hName)}:${wrapped}`)
+        headerEntries.push(`${JSON.stringify(hName)}:${h.required ? headerSchema : `$T.optional(${headerSchema})`}`)
       }
-      if (headerEntries.length) extras.push(`_headers:{${headerEntries.join(',')}}`)
-      if (exampleParts.length) extras.push(`_examples:{${exampleParts.join(',')}}`)
-      if (singleExample !== undefined) extras.push(`_example:${JSON.stringify(singleExample)}`)
-      if (typeof respObj?.description === 'string' && respObj.description) {
-        extras.push(`_description:${JSON.stringify(respObj.description)}`)
+      const description = typeof respObj?.description === 'string' && respObj.description ? respObj.description : undefined
+
+      if (Object.keys(content).length === 0) {
+        let nullSchema = description ? `$T.null({description:${JSON.stringify(description)}})` : `$T.null()`
+        if (headerEntries.length) nullSchema = `({...${nullSchema}, responseHeaders:{${headerEntries.join(',')}}})`
+        return [s, nullSchema]
       }
-      if (extras.length) {
-        const extrasLit = `{${extras.join(',')}}`
-        unique = unique.map(e => `Object.assign({}, ${e}, ${extrasLit})`)
+
+      // Group schemas by galbe body key, collect examples
+      const keyGroups: Record<string, string[]> = {}
+      const exampleParts: string[] = []
+      let singleExample: any = undefined
+      for (const [mediaType, tv] of Object.entries(content)) {
+        const galbeKey = inferBodyType(mediaType) || 'default'
+        if ((tv as any).example !== undefined && singleExample === undefined) singleExample = (tv as any).example
+        if (tv.examples && Object.keys(tv.examples).length) {
+          for (const [k, ex] of Object.entries(tv.examples)) exampleParts.push(`${JSON.stringify(k)}:${JSON.stringify(ex)}`)
+        }
+        const schemaStr = unref(parseOapiSchema(tv.schema), m => {
+          let l = m.split('/')
+          imports[l[l.length - 1]] = m
+          return l[l.length - 1]
+        })
+        if (!keyGroups[galbeKey]) keyGroups[galbeKey] = []
+        keyGroups[galbeKey].push(schemaStr)
       }
-      return [s, unique]
+
+      const uniqueKeys = Object.keys(keyGroups)
+
+      if (uniqueKeys.length > 1) {
+        // Multiple body keys → STResponseContent object
+        const parts: string[] = []
+        for (const [key, schemas] of Object.entries(keyGroups)) {
+          const unique = [...new Set(schemas)]
+          parts.push(`${key}: ${unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`}`)
+        }
+        if (description) parts.push(`description: ${JSON.stringify(description)}`)
+        if (headerEntries.length) parts.push(`responseHeaders: {${headerEntries.join(',')}}`)
+        if (exampleParts.length) parts.push(`examples: {${exampleParts.join(',')}}`)
+        if (singleExample !== undefined) parts.push(`example: ${JSON.stringify(singleExample)}`)
+        return [s, `{${parts.join(',')}}`]
+      } else {
+        // Single body key → single schema or union + extras
+        const [key] = uniqueKeys
+        const unique = [...new Set(keyGroups[key] || [])]
+        let schema = unique.length === 0 ? `$T.null()` : unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`
+        const extras: string[] = []
+        if (headerEntries.length) extras.push(`responseHeaders:{${headerEntries.join(',')}}`)
+        if (exampleParts.length) extras.push(`examples:{${exampleParts.join(',')}}`)
+        if (singleExample !== undefined) extras.push(`example:${JSON.stringify(singleExample)}`)
+        if (description) extras.push(`description:${JSON.stringify(description)}`)
+        if (extras.length) schema = `({...${schema}, ${extras.join(',')}})`
+        return [s, schema]
+      }
     })
   )
 
   if (Object.keys(rs).length) {
     resp = `  response: {${Object.entries(rs)
-      .filter(([_, v]) => v.length)
-      .map(([s, v]) => `${s}: ${v.length === 1 ? v[0] : v.length > 1 ? `$T.union([${v.join(',')}])` : ''}`)
+      .filter(([_, v]) => v)
+      .map(([s, v]) => `${s}: ${v}`)
       .join(',')}}`
   } else resp = ''
 
@@ -613,10 +630,9 @@ const renderComponentSchemaFile = (
       s.schema.trim() === [...s.dependsOn][0].split('/').pop()
     const responseExtras: string[] = []
     if (type === 'responses') {
-      if (s.responseDescription) responseExtras.push(`_description: ${JSON.stringify(s.responseDescription)}`)
-      if (s.responseExample !== undefined) responseExtras.push(`_example: ${JSON.stringify(s.responseExample)}`)
-      if (s.responseExamples) responseExtras.push(`_examples: ${JSON.stringify(s.responseExamples)}`)
-      if (s.responseMedia && s.responseMedia.length) responseExtras.push(`_media: ${JSON.stringify(s.responseMedia)}`)
+      if (s.responseDescription) responseExtras.push(`description: ${JSON.stringify(s.responseDescription)}`)
+      if (s.responseExample !== undefined) responseExtras.push(`example: ${JSON.stringify(s.responseExample)}`)
+      if (s.responseExamples) responseExtras.push(`examples: ${JSON.stringify(s.responseExamples)}`)
     }
     if (isSingleAlias) {
       const tagKey = type === 'responses' ? '_responseId' : '_requestBodyId'
@@ -626,7 +642,7 @@ const renderComponentSchemaFile = (
       )
     } else if (type === 'responses' && responseExtras.length) {
       decl.push(
-        `export const ${s.key} = Object.assign({}, ${s.schema}, { ${responseExtras.join(', ')} })\nexport type ${s.key} = Static<typeof ${s.key}>\n`
+        `export const ${s.key} = {...${s.schema}, ${responseExtras.join(', ')}}\nexport type ${s.key} = Static<typeof ${s.key}>\n`
       )
     } else {
       decl.push(`export const ${s.key} = ${s.schema}\nexport type ${s.key} = Static<typeof ${s.key}>\n`)

@@ -105,6 +105,7 @@ const galbeMethod = <
 export const $T = new SchemaType()
 
 export { RequestError } from './types'
+export type { STResponseContent, STResponseBodyKey, STResponseEntry } from './types'
 
 export const config = (config: GalbeConfig) => config
 

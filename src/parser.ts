@@ -100,7 +100,7 @@ export const requestBodyParser = async (
         if (isStream) return rsToAsyncIterator(body)
         return new Uint8Array(await readableStreamToArrayBuffer(body))
       } else if (contentType === 'text') {
-        if (!kind || !['string', 'boolean', 'number', 'integer', 'union', 'literal'].includes(kind))
+        if (!kind || !['string', 'boolean', 'number', 'integer', 'anyOf', 'oneOf', 'literal'].includes(kind))
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (body === null)
           return isStream
@@ -112,7 +112,7 @@ export const requestBodyParser = async (
               })
             : validate('', schema as STSchema, { parse: true })
         if (isStream) return $streamToString(body)
-        if (kind === 'union') {
+        if (kind === 'anyOf' || kind === 'oneOf') {
           let str = await streamToString(body)
           return unionize(str, schema as STUnion)
         }
@@ -120,10 +120,10 @@ export const requestBodyParser = async (
       } else if (contentType === 'json') {
         if (
           !kind ||
-          !['object', 'json', 'boolean', 'number', 'integer', 'string', 'array', 'union', 'intersection'].includes(kind)
+          !['object', 'json', 'boolean', 'number', 'integer', 'string', 'array', 'anyOf', 'oneOf', 'intersection'].includes(kind)
         )
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
-        if (kind === 'union') {
+        if (kind === 'anyOf' || kind === 'oneOf') {
           let str = body === null ? 'null' : await streamToString(body)
           let json = JSON.parse(str)
           return unionize(json, schema as STUnion)
@@ -145,7 +145,7 @@ export const requestBodyParser = async (
         }
         return validate(json, schema as STSchema, { parse: true })
       } else if (contentType === 'urlForm') {
-        if (!kind || !['object', 'union'].includes(kind))
+        if (!kind || !['object', 'anyOf', 'oneOf'].includes(kind))
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (body === null)
           return isStream
@@ -164,14 +164,14 @@ export const requestBodyParser = async (
                 }),
                 schema as STObject
               )
-        if (kind === 'union') {
+        if (kind === 'anyOf' || kind === 'oneOf') {
           const b = await streamToUrlForm(body)
           return unionize(b, schema as STUnion)
         }
         if (isStream) return $streamToUrlForm(body, schema as STStream<STObject>)
         else return await streamToUrlForm(body, schema as STObject)
       } else if (contentType === 'multipart') {
-        if (kind !== 'multipartForm' && kind !== 'union')
+        if (kind !== 'multipartForm' && kind !== 'anyOf' && kind !== 'oneOf')
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         if (body === null)
           return isStream
@@ -183,7 +183,7 @@ export const requestBodyParser = async (
               })
             : {}
         const boundary = headers?.['content-type']?.match(/boundary\="?([^"]*)"?;?.*$/)?.[1] || ''
-        if (kind === 'union') {
+        if (kind === 'anyOf' || kind === 'oneOf') {
           let mp = await streamToMultipartForm(body, boundary)
           return unionize(mp, schema as STUnion)
         }
@@ -609,8 +609,8 @@ const paramParser = (
       return [paramParser(value, (type as STArray).items as STMultipartFormValues) as Static<STPropsValue>]
     } else if (type[Kind] === 'byteArray') {
       return Uint8Array.from(value, c => c.charCodeAt(0))
-    } else if (type[Kind] === 'union') {
-      const union = Object.values((type as STUnion).anyOf)
+    } else if (type[Kind] === 'anyOf' || type[Kind] === 'oneOf') {
+      const union = Object.values((type as STUnion).members)
       for (const elt of union) {
         try {
           return paramParser(value, elt as STMultipartFormValues)
@@ -712,7 +712,11 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
   if (response instanceof Response) return response
   else if (typeof response === 'string') {
     if (!details?.headers?.has('content-type')) {
-      if (schema?.[details.status]?.[Kind] === 'json') {
+      const statusEntry: any = schema?.[details.status]
+      const isJson = statusEntry?.[Kind]
+        ? statusEntry[Kind] === 'json'
+        : statusEntry?.json && !statusEntry?.text
+      if (isJson) {
         details?.headers?.set('content-type', 'application/json')
         response = `"${response}"`
       } else details?.headers?.set('content-type', 'text/plain')
@@ -762,11 +766,11 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
 const unionize = (b: any, schema: STUnion) => {
   let res
   let error
-  const discriminants = schema.anyOf.reduce((acc, obj) => {
+  const discriminants = schema.members.reduce((acc, obj) => {
     const props = (obj as STObject).props
     return acc.filter(k => props && k in props && props[k]?.[Kind] === 'literal' && !props[k]?.[Optional])
-  }, Object.keys((schema.anyOf[0] as STObject)?.props || {}))
-  for (let s of schema.anyOf) {
+  }, Object.keys((schema.members[0] as STObject)?.props || {}))
+  for (let s of schema.members) {
     try {
       res = validate(b, s, { parse: true })
       if (res !== undefined) break

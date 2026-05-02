@@ -76,12 +76,12 @@ describe('schema typing', () => {
   })
 
   describe('STUnion / STIntersection have no `props` field', () => {
-    test('STUnion only exposes anyOf at the type and runtime levels', () => {
+    test('STUnion only exposes members at the type and runtime levels', () => {
       const u: STUnion = $T.union([$T.string(), $T.number()])
-      // Runtime: `.anyOf` is the schema array; `.props` was a phantom field
+      // Runtime: `.members` is the schema array; `.props` was a phantom field
       // and is no longer claimed at the type level.
-      expect(Array.isArray(u.anyOf)).toBe(true)
-      expect(u.anyOf.length).toBe(2)
+      expect(Array.isArray(u.members)).toBe(true)
+      expect(u.members.length).toBe(2)
       // @ts-expect-error — STUnion no longer declares a `props` field.
       void u.props
       // Reading at runtime should be undefined (the constructor never set it).

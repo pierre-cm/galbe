@@ -31,7 +31,7 @@ export const schema_objectBase = {
 }
 export const schema_object = {
   ...schema_objectBase,
-  object: $T.object($T.any()),
+  object: $T.object(),
   array: $T.array(),
   null: $T.null(),
   nullable: $T.nullable($T.string()),

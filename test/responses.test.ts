@@ -30,7 +30,7 @@ describe('responses', () => {
     galbe.post(
       '/none',
       {
-        body: { json: $T.optional($T.object($T.any())) },
+        body: { json: $T.optional($T.object()) },
         query: { text: $T.optional($T.string()), stream: $T.optional($T.string()) },
       },
       ctx => {
@@ -55,7 +55,7 @@ describe('responses', () => {
     galbe.post('/json/str', { response: { 200: $T.json($T.string()) } }, handleResp)
     galbe.post('/json/obj', { response: { 200: $T.json($T.object()) } }, handleResp)
     galbe.post('/arr', { response: { 200: $T.array() } }, handleResp)
-    galbe.post('/obj', { response: { 200: $T.object($T.any()) } }, handleResp)
+    galbe.post('/obj', { response: { 200: $T.object() } }, handleResp)
     galbe.post('/stream/ba', { response: { 200: $T.stream($T.byteArray()) } }, ctx =>
       ctx.body ? genTxt(ctx.body) : ''
     )

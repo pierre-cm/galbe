@@ -105,23 +105,23 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       const inner = (schema as STJson).value as STSchema | undefined
       isJson = true
       s = inner ? schemaToOpenapi(inner).schema : { type: 'object' }
-    } else if (kind === 'union') {
-      let anyOf: STSchema[] = (schema as STUnion).anyOf
-      let nullable = anyOf.some(s => s[Kind] === 'null')
-      anyOf = anyOf.filter(s => s[Kind] !== 'null')
+    } else if (kind === 'anyOf' || kind === 'oneOf') {
+      let members: STSchema[] = (schema as STUnion).members
+      let nullable = members.some(s => s[Kind] === 'null')
+      members = members.filter(s => s[Kind] !== 'null')
 
       const allStringLiterals =
-        anyOf.length > 0 && anyOf.every(e => e[Kind] === 'literal' && typeof (e as STLiteral).value === 'string')
-      const useOneOf = (schema as any)?._oneOf === true
+        members.length > 0 && members.every(e => e[Kind] === 'literal' && typeof (e as STLiteral).value === 'string')
+      const useOneOf = kind === 'oneOf'
 
-      if (anyOf.length === 0) {
+      if (members.length === 0) {
         s = {}
-      } else if (anyOf.length === 1) {
-        s = schemaToOpenapi(anyOf[0]).schema
+      } else if (members.length === 1) {
+        s = schemaToOpenapi(members[0]).schema
       } else if (allStringLiterals && !useOneOf) {
-        s = { type: 'string', enum: anyOf.map(e => (e as STLiteral).value) }
-      } else if (anyOf.length > 1) {
-        const variants = anyOf.map(e => schemaToOpenapi(e).schema)
+        s = { type: 'string', enum: members.map(e => (e as STLiteral).value) }
+      } else if (members.length > 1) {
+        const variants = members.map(e => schemaToOpenapi(e).schema)
         s = useOneOf ? { oneOf: variants } : { anyOf: variants }
       }
 
@@ -281,51 +281,59 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
         Object.entries(r.schema.response).map(([status, v]) => {
           if (!v) return []
           let s = status as keyof typeof HttpStatus | 'default'
-          const noContent = (v as any)?._noContent === true
-          const explicitHeaders = (v as any)?._headers as Record<string, STSchema> | undefined
+          const isContentMap = !(v as any)[Kind]
+          const explicitHeaders = (v as any)?.responseHeaders as Record<string, STSchema> | undefined
           let response: OpenAPIV3.ResponseObject
-          if (noContent) {
-            response = {
-              description:
-                (v as any)?._description ||
-                v.description ||
-                HttpStatus[s as keyof typeof HttpStatus] ||
-                'Response',
+
+          if (isContentMap) {
+            // STResponseContent — iterate body-type keys
+            const cm = v as any
+            const desc = cm.description || HttpStatus[s as keyof typeof HttpStatus] || 'Response'
+            const content: Record<string, { schema: any; example?: any; examples?: Record<string, any> }> = {}
+            for (const [key, bodySchema] of Object.entries(cm)) {
+              if (key === 'description' || key === 'responseHeaders') continue
+              const { schema: oaSchema } = schemaToOpenapi(bodySchema as STSchema)
+              const mediaType = inferContentType(key)
+              content[mediaType] = { schema: oaSchema }
+              const ex = (bodySchema as any)?.examples
+              const exSingle = (bodySchema as any)?.example
+              if (ex && Object.keys(ex).length) content[mediaType].examples = ex
+              if (exSingle !== undefined) content[mediaType].example = exSingle
             }
+            response = { description: desc, ...(Object.keys(content).length ? { content } : {}) }
           } else {
-            let { schema, isJson } = schemaToOpenapi(v)
-            let resolved = resolveRef(schema)
-            let { type, format } = resolved
-            let hasComposite = !!(resolved as any)?.allOf || !!(resolved as any)?.anyOf || !!(resolved as any)?.oneOf
-            const explicitMedia = (v as any)?._media as string[] | undefined
-            const mediaList =
-              explicitMedia && explicitMedia.length
-                ? explicitMedia
-                : [schemaToMedia({ type, format, isJson } as SchemaType, hasComposite)]
-            const explicitExamples = (v as any)?._examples as Record<string, any> | undefined
-            const explicitExample = (v as any)?._example
-            const content: Record<
-              string,
-              { schema: typeof schema; example?: any; examples?: Record<string, any> }
-            > = {}
-            for (const m of mediaList) {
-              content[m] = { schema: { ...schema } }
-              if (explicitExamples && Object.keys(explicitExamples).length) {
-                content[m].examples = explicitExamples
+            const noContent = (v as any)[Kind] === 'null'
+            if (noContent) {
+              response = {
+                description: (v as any).description || HttpStatus[s as keyof typeof HttpStatus] || 'Response',
               }
-              if (explicitExample !== undefined) {
-                content[m].example = explicitExample
+            } else {
+              let { schema, isJson } = schemaToOpenapi(v as STSchema)
+              let resolved = resolveRef(schema)
+              let { type, format } = resolved
+              let hasComposite = !!(resolved as any)?.allOf || !!(resolved as any)?.anyOf || !!(resolved as any)?.oneOf
+              const mediaType = schemaToMedia({ type, format, isJson } as SchemaType, hasComposite)
+              const explicitExamples = (v as any)?.examples as Record<string, any> | undefined
+              const explicitExample = (v as any)?.example
+              const content: Record<string, { schema: typeof schema; example?: any; examples?: Record<string, any> }> = {
+                [mediaType]: { schema: { ...schema } },
+              }
+              if (explicitExamples && Object.keys(explicitExamples).length) content[mediaType].examples = explicitExamples
+              if (explicitExample !== undefined) content[mediaType].example = explicitExample
+              response = {
+                description: (v as any).description || HttpStatus[s as keyof typeof HttpStatus] || 'Response',
+                content,
               }
             }
-            response = {
-              description:
-                (v as any)?._description ||
-                v.description ||
-                HttpStatus[s as keyof typeof HttpStatus] ||
-                'Response',
-              content,
+            const respSchema = r.schema.response?.[s] as any
+            const respId = respSchema?._responseId
+            if (components.responses && respId) {
+              components.responses[respId as string] = response
+              //@ts-ignore
+              response = { $ref: `#/components/responses/${respId}` }
             }
           }
+
           if (explicitHeaders && Object.keys(explicitHeaders).length) {
             response.headers = {}
             for (const [hName, hSchema] of Object.entries(explicitHeaders)) {
@@ -337,17 +345,9 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
                 ...(isRequired ? { required: true } : {}),
                 schema: hSer,
               }
-              // header schema's own description is duplicated above; remove from inner schema for cleanliness
               if ((hSer as any)?.description) delete (hSer as any).description
               response.headers[hName] = headerObj
             }
-          }
-          const respSchema = r.schema.response?.[s] as any
-          const respId = respSchema?._responseId
-          if (components.responses && respId) {
-            components.responses[respId as string] = response
-            //@ts-ignore
-            response = { $ref: `#/components/responses/${respId}` }
           }
           return [s, response]
         })
