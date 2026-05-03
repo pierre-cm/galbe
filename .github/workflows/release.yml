@@ -37,3 +37,5 @@ jobs:
       - name: Release
         run: |
           bun run release --increment $RELEASE_SCOPE --ci --no-git.requireCleanWorkingDir
+      - name: Publish to npm
+        run: npm publish --provenance
