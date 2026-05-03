@@ -16,7 +16,6 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
       RELEASE_SCOPE: ${{ github.event.inputs.scope }}
-      NPM_CONFIG_PROVENANCE: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,7 +23,6 @@ jobs:
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
-          registry-url: https://registry.npmjs.org
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.8.0
         with:
