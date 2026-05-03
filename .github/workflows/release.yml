@@ -4,16 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: 'Version bump scope (patch, minor, major)'
+        description: "Version bump scope (patch, minor, major)"
         required: true
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     env:
       GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
       RELEASE_SCOPE: ${{ github.event.inputs.scope }}
+      NPM_CONFIG_PROVENANCE: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,5 +38,4 @@ jobs:
           bun install
       - name: Release
         run: |
-          npm config set //registry.npmjs.org/:_authToken $NPM_TOKEN
           bun run release --increment $RELEASE_SCOPE --ci --no-git.requireCleanWorkingDir
