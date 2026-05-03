@@ -207,27 +207,63 @@ export type Context<
   M extends Method = Method,
   Path extends string = string,
   S extends RequestSchema = RequestSchema,
-> = {
-  [K in keyof Exclude<S['body'], undefined | STNull>]: {
-    headers: Static<STObject<Exclude<S['headers'], undefined>>>
-    params: {
-      [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
-    }
-    query: Static<STObject<Exclude<S['query'], undefined>>>
-    contentType: M extends 'get' | 'options' | 'head' ? undefined : K
-    body: M extends 'get' | 'options' | 'head'
-      ? null
-      : Exclude<S['body'], undefined> extends STNull
-        ? null
-        : StaticBody<Extract<Exclude<Exclude<S['body'], undefined | STNull>[K], undefined>, STSchema>>
-    request: Request
-    remoteAddress: SocketAddress | null
-    route?: Route
-    state: Record<string, any>
-    set: ContextSet
-    cookies: Record<string, string>
-  }
-}[keyof Exclude<S['body'], undefined | STNull>]
+> = 0 extends 1 & Exclude<S['body'], undefined | STNull>
+  ? {
+      [K in keyof Exclude<S['body'], undefined | STNull>]: {
+        headers: Static<STObject<Exclude<S['headers'], undefined>>>
+        params: {
+          [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
+        }
+        query: Static<STObject<Exclude<S['query'], undefined>>>
+        contentType: M extends 'get' | 'options' | 'head' ? undefined : K
+        body: M extends 'get' | 'options' | 'head'
+          ? null
+          : Exclude<S['body'], undefined> extends STNull
+            ? null
+            : StaticBody<Extract<Exclude<Exclude<S['body'], undefined | STNull>[K], undefined>, STSchema>>
+        request: Request
+        remoteAddress: SocketAddress | null
+        route?: Route
+        state: Record<string, any>
+        set: ContextSet
+        cookies: Record<string, string>
+      }
+    }[keyof Exclude<S['body'], undefined | STNull>]
+  : [Exclude<S['body'], undefined | STNull>] extends [never]
+    ? {
+        headers: Static<STObject<Exclude<S['headers'], undefined>>>
+        params: {
+          [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
+        }
+        query: Static<STObject<Exclude<S['query'], undefined>>>
+        contentType: undefined
+        body: null
+        request: Request
+        remoteAddress: SocketAddress | null
+        route?: Route
+        state: Record<string, any>
+        set: ContextSet
+        cookies: Record<string, string>
+      }
+    : {
+        [K in keyof Exclude<S['body'], undefined | STNull>]: {
+          headers: Static<STObject<Exclude<S['headers'], undefined>>>
+          params: {
+            [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
+          }
+          query: Static<STObject<Exclude<S['query'], undefined>>>
+          contentType: M extends 'get' | 'options' | 'head' ? undefined : K
+          body: M extends 'get' | 'options' | 'head'
+            ? null
+            : StaticBody<Extract<Exclude<Exclude<S['body'], undefined | STNull>[K], undefined>, STSchema>>
+          request: Request
+          remoteAddress: SocketAddress | null
+          route?: Route
+          state: Record<string, any>
+          set: ContextSet
+          cookies: Record<string, string>
+        }
+      }[keyof Exclude<S['body'], undefined | STNull>]
 export type Next = () => void | Promise<any>
 export type Hook<M extends Method = Method, Path extends string = string, S extends RequestSchema = RequestSchema> = (
   ctx: Context<M, Path, S>,
@@ -436,11 +472,17 @@ export type GalbeCLICommand = {
   arguments?: { name: string; type: string; description: string }[]
   options?: { name: string; short: string; type: string; description: string; default: any }[]
   action?: (props: any) => MaybePromise<void>
+  hideOptions?: ('header' | 'query' | 'body' | 'body-file')[]
 }
 
 export type GalbeCLIOptions = {
   baseUrl?: string | (() => string)
   headers?: Record<string, string>
-  requestInterceptor?: (req: Request) => MaybePromise<Request>
+  requestInterceptor?: (
+    req: Request,
+    command: GalbeCLICommand,
+    args: Record<string, string>,
+    options: Record<string, any>
+  ) => MaybePromise<Request>
   responseFormatter?: (res: Response) => MaybePromise<string>
 }

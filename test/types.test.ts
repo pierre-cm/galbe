@@ -35,7 +35,7 @@ type _str_pattern = Expect<Extends<typeof str_with_pattern.pattern, RegExp | und
 type _str_format = Expect<Extends<typeof str_with_pattern.format, string | undefined>>
 type _str_minLen = Expect<Extends<typeof str_with_pattern.minLength, number | undefined>>
 type _str_maxLen = Expect<Extends<typeof str_with_pattern.maxLength, number | undefined>>
-type _ba = Expect<Extends<Static<typeof ba>, Uint8Array<ArrayBufferLike>>>
+type _ba = Expect<Extends<Static<typeof ba>, Uint8Array>>
 type _obj = Expect<Extends<Static<typeof obj>, Record<string | number, any>>>
 
 // Basic schema wrappers
@@ -100,7 +100,7 @@ type _obj_1 = Expect<
       num: number
       int: number
       str: string
-      ba: Uint8Array<ArrayBufferLike>
+      ba: Uint8Array
       arr: string[]
       obj: {
         foo: string
@@ -161,7 +161,7 @@ const stream_intersection = $T.stream(
   $T.intersection([$T.object({ foo: $T.string() }), $T.object({ bar: $T.boolean() })])
 )
 
-type _stream_ba = Expect<Extends<Static<typeof stream_ba>, AsyncGenerator<Uint8Array<ArrayBufferLike>>>>
+type _stream_ba = Expect<Extends<Static<typeof stream_ba>, AsyncGenerator<Uint8Array>>>
 type _stream_str = Expect<Extends<Static<typeof stream_str>, AsyncGenerator<string>>>
 type _stream_obj = Expect<
   Extends<
@@ -291,7 +291,7 @@ g.get('/body', ctx => {
   type _ep_body = Expect<Equal<typeof body, null>>
   ctx.set.status = body === null ? 200 : 500
 })
-g.get('/body/schema', { body: $T.string() }, ctx => {
+g.get('/body/schema', { body: { 'application/json': $T.string() } }, ctx => {
   const { body } = ctx
   type _ep_body = Expect<Equal<typeof body, null>>
   ctx.set.status = body === null ? 200 : 500
@@ -301,7 +301,7 @@ g.options('/body', ctx => {
   type _ep_body = Expect<Equal<typeof body, null>>
   ctx.set.status = body === null ? 200 : 500
 })
-g.options('/body/schema', { body: $T.string() }, ctx => {
+g.options('/body/schema', { body: { 'application/json': $T.string() } }, ctx => {
   const { body } = ctx
   type _ep_body = Expect<Equal<typeof body, null>>
   ctx.set.status = body === null ? 200 : 500
@@ -311,7 +311,7 @@ g.head('/body', ctx => {
   type _ep_body = Expect<Equal<typeof body, null>>
   ctx.set.status = body === null ? 200 : 500
 })
-g.head('/body/schema', { body: $T.string() }, ctx => {
+g.head('/body/schema', { body: { 'application/json': $T.string() } }, ctx => {
   const { body } = ctx
   type _ep_body = Expect<Equal<typeof body, null>>
   ctx.set.status = body === null ? 200 : 500
@@ -341,14 +341,14 @@ g.patch('/body/patch', { body: $T.null() }, ctx => {
 
 g.post('/body/ba', { body: { 'application/octet-stream': $T.byteArray() } }, ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Equal<typeof body, Uint8Array<ArrayBufferLike>>>
+  type _ep_body = Expect<Equal<typeof body, Uint8Array>>
   type _ep_contentType = Expect<Extends<typeof contentType, 'application/octet-stream'>>
   ctx.set.status = body instanceof Uint8Array ? 200 : 500
 })
 
 g.post('/body/ba/stream', { body: { 'application/octet-stream': $T.stream($T.byteArray()) } }, async ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Extends<typeof body, AsyncGenerator<Uint8Array<ArrayBufferLike>>>>
+  type _ep_body = Expect<Extends<typeof body, AsyncGenerator<Uint8Array>>>
   type _ep_contentType = Expect<Extends<typeof contentType, 'application/octet-stream'>>
   for await (const bp of body) {
     if (body instanceof Uint8Array) ctx.set.status = 500
@@ -646,7 +646,7 @@ g.post('/body/default', { body: { '*/*': $T.any() } }, ctx => {
 
 g.post('/body/default/ba', { body: { '*/*': $T.byteArray() } }, ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Equal<typeof body, Uint8Array<ArrayBufferLike>>>
+  type _ep_body = Expect<Equal<typeof body, Uint8Array>>
   type _ep_contentType = Expect<Extends<typeof contentType, '*/*'>>
 })
 
@@ -658,7 +658,7 @@ g.post('/body/default/str', { body: { '*/*': $T.string() } }, ctx => {
 
 g.post('/body/default/stream/ba', { body: { '*/*': $T.stream($T.byteArray()) } }, ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Equal<typeof body, AsyncGenerator<Uint8Array<ArrayBufferLike>>>>
+  type _ep_body = Expect<Equal<typeof body, AsyncGenerator<Uint8Array>>>
   type _ep_contentType = Expect<Extends<typeof contentType, '*/*'>>
 })
 

@@ -54,7 +54,7 @@ const renderFreshRouteFile = (scope: ScopePlan): string => {
   const rDecl = scope.routes.map(r => `  ${r.meta}\ng.${r.call}`)
   return (
     `import { NotImplementedError, type Galbe } from 'galbe'\n` +
-    `import { ${scope.routeSchemaImports.join(', ')} } from '${importPath}'\n\n` +
+    `import { ${[...scope.routeSchemaImports].sort().join(', ')} } from '${importPath}'\n\n` +
     `export default (g: Galbe) => {\n` +
     rDecl.map(d => d.replaceAll('\n', '\n  ')).join('\n\n') +
     `\n}\n`

@@ -91,7 +91,12 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         }
         let inParams = requestPathParser(url.pathname, route.path)
 
-        context.body = await requestBodyParser(req.body, inHeaders, schema.body, context.contentType)
+        context.body = await requestBodyParser(
+          req.body,
+          inHeaders,
+          EMPTY_BODY_METHODS.includes(req.method) ? undefined : schema.body,
+          context.contentType
+        )
         context.headers = inHeaders
         context.query = inQuery
         context.params = inParams

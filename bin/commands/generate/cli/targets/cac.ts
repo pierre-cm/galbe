@@ -63,9 +63,10 @@ function sanitizeOptionName(name: string): string {
 
 function generateSingleCommand(c: GalbeCLICommand, cliVar: string, includeTag: boolean): string {
   const builtinShorts = new Set(['H', 'Q', 'b', 'B'])
-  const tag = c.tags[0]?.toLowerCase() || ''
+  const hide = new Set(c.hideOptions ?? [])
+  const tagPrefix = includeTag && c.tags.length > 0 ? c.tags.map(t => t.toLowerCase()).join(' ') + ' ' : ''
   const pathArgs = (c.arguments || []).map(a => ` <${a.name}>`).join('')
-  const cmdStr = includeTag ? `${tag ? tag + ' ' : ''}${c.name}${pathArgs}` : `${c.name}${pathArgs}`
+  const cmdStr = `${tagPrefix}${c.name}${pathArgs}`
   const desc = JSON.stringify(c.description || '')
 
   const routeOptsLines = (c.options || [])
@@ -90,87 +91,194 @@ function generateSingleCommand(c: GalbeCLICommand, cliVar: string, includeTag: b
   const method = c.route.method.toUpperCase()
   const customAction = c.action ? `await (${c.action.toString()})(options as any)\n    ` : ''
 
+  const argsObj = (c.arguments || []).length
+    ? `{ ${(c.arguments || []).map(a => a.name).join(', ')} }`
+    : '{}'
+
+  const commandMeta: Record<string, any> = { name: c.name, tags: c.tags }
+  if (c.description !== undefined) commandMeta.description = c.description
+  commandMeta.pathT = c.pathT
+  if (c.arguments !== undefined) commandMeta.arguments = c.arguments
+  if (c.options !== undefined) commandMeta.options = c.options
+  if (c.hideOptions !== undefined) commandMeta.hideOptions = c.hideOptions
+  const commandLiteral = serializeValue(commandMeta)
+
+  const builtinOptLines = [
+    !hide.has('header') && `  .option('-H, --header [string...]', 'request header as name=value', { default: [] })`,
+    !hide.has('query') && `  .option('-Q, --query [string...]', 'query param as name=value', { default: [] })`,
+    !hide.has('body') && `  .option('-b, --body [string]', 'request body')`,
+    !hide.has('body-file') && `  .option('-B, --body-file [string]', 'request body file path')`,
+  ]
+    .filter(Boolean)
+    .join('\n')
+
   return `${cliVar}.command(${JSON.stringify(cmdStr)}, ${desc})
-  .option('-H, --header [string...]', 'request header as name=value', { default: [] })
-  .option('-Q, --query [string...]', 'query param as name=value', { default: [] })
-  .option('-b, --body [string]', 'request body')
-  .option('-B, --body-file [string]', 'request body file path')
+${builtinOptLines}
 ${routeOptsLines}
   .action(async (${actionParams}) => {
     const { header, query, body, bodyFile } = options as any
-    ${customAction}return _fetchApi(${JSON.stringify(method)}, ${pathLiteral}, header ?? [], query ?? [], body ?? '', bodyFile ?? '', ${routeOptsObj})
+    const _args = ${argsObj}
+    ${customAction}return _fetchApi(${JSON.stringify(method)}, ${pathLiteral}, header ?? [], query ?? [], body ?? '', bodyFile ?? '', ${routeOptsObj}, ${commandLiteral}, _args, options as any)
   })`
 }
 
-function generateStandaloneBlock(commands: GalbeCLICommand[], name: string, version: string): string {
-  // Group by first tag (lowercased), untagged go to root
-  const groups = new Map<string, GalbeCLICommand[]>()
-  const untagged: GalbeCLICommand[] = []
-  for (const c of commands) {
-    const tag = c.tags[0]?.toLowerCase()
-    if (tag) {
-      if (!groups.has(tag)) groups.set(tag, [])
-      groups.get(tag)!.push(c)
-    } else {
-      untagged.push(c)
-    }
-  }
+type CommandNode = {
+  subgroups: Map<string, CommandNode>
+  commands: GalbeCLICommand[]
+}
 
-  const groupBlocks = [...groups.entries()].map(([tag, cmds], i) => {
-    const subVar = `_sub`
-    const subCmds = cmds.map(c => generateSingleCommand(c, subVar, false)).join('\n\n')
-    return `${i === 0 ? 'if' : 'else if'} (_rootCmd === ${JSON.stringify(tag)}) {
-  const ${subVar} = cac(${JSON.stringify(name + ' ' + tag)})
-${subCmds
-  .split('\n')
-  .map(l => '  ' + l)
-  .join('\n')}
-  ${subVar}.help()
-  const _known = new Set(${subVar}.commands.map((c: any) => c.name))
-  const _subArg = _argv[1]
-  if (!_subArg || (!_subArg.startsWith('-') && !_known.has(_subArg))) {
-    ${subVar}.outputHelp()
-    process.exit(_subArg ? 1 : 0)
+function buildCommandTree(commands: GalbeCLICommand[]): CommandNode {
+  const root: CommandNode = { subgroups: new Map(), commands: [] }
+  for (const cmd of commands) {
+    let node = root
+    for (const tag of cmd.tags) {
+      const t = tag.toLowerCase()
+      if (!node.subgroups.has(t)) node.subgroups.set(t, { subgroups: new Map(), commands: [] })
+      node = node.subgroups.get(t)!
+    }
+    node.commands.push(cmd)
   }
-  ${subVar}.parse(['', '', ..._argv.slice(1)])
-}`
+  return root
+}
+
+function nodeToBlock(node: CommandNode, tagPath: string[], appName: string, version: string): string {
+  const depth = tagPath.length
+  const safeId = (t: string) => t.replace(/[^a-zA-Z0-9]/g, '_')
+  const cliVar = depth === 0 ? '_cli' : `_sub_${tagPath.map(safeId).join('_')}`
+  const knownVar = depth === 0 ? '_known' : `_known_${tagPath.map(safeId).join('_')}`
+  const cliName = [appName, ...tagPath].join(' ')
+  const argvExpr = `_argv[${depth}]`
+
+  const subGroupEntries = [...node.subgroups.entries()]
+
+  const subBlocks = subGroupEntries.map(([tag, subNode], i) => {
+    const sub = nodeToBlock(subNode, [...tagPath, tag], appName, version)
+    const indented = sub.split('\n').map(l => '  ' + l).join('\n')
+    return `${i === 0 ? 'if' : 'else if'} (${argvExpr} === ${JSON.stringify(tag)}) {\n${indented}\n}`
   })
 
-  const rootVar = '_cli'
-  const groupListings = [...groups.keys()]
-    .map(tag => `${rootVar}.command(${JSON.stringify(tag)}, ${JSON.stringify(tag + ' commands')})`)
+  const groupListings = subGroupEntries
+    .map(([tag]) => `${cliVar}.command(${JSON.stringify(tag)}, ${JSON.stringify(tag + ' commands')})`)
     .join('\n')
-  const untaggedCmds = untagged.map(c => generateSingleCommand(c, rootVar, false)).join('\n\n')
 
-  const rootBlock = `${groupBlocks.length ? 'else ' : ''}{
-  const ${rootVar} = cac(${JSON.stringify(name)})
-  ${rootVar}.version(${JSON.stringify(version)})
-${groupListings
-  .split('\n')
-  .map(l => '  ' + l)
-  .join('\n')}
-${
-  untaggedCmds
-    ? untaggedCmds
-        .split('\n')
-        .map(l => '  ' + l)
-        .join('\n')
-    : ''
-}
-  ${rootVar}.help()
-  const _known = new Set(${rootVar}.commands.map((c: any) => c.name))
-  if (!_rootCmd || (!_rootCmd.startsWith('-') && !_known.has(_rootCmd))) {
-    ${rootVar}.outputHelp()
-    process.exit(_rootCmd ? 1 : 0)
+  const commandBlocks = node.commands.map(c => generateSingleCommand(c, cliVar, false)).join('\n\n')
+
+  const versionLine = depth === 0 ? `\n${cliVar}.version(${JSON.stringify(version)})` : ''
+  const parseArg = depth > 0 ? `['', '', ..._argv.slice(${depth})]` : ''
+
+  const cliBlockLines = [
+    `const ${cliVar} = cac(${JSON.stringify(cliName)})${versionLine}`,
+    groupListings,
+    commandBlocks,
+    `${cliVar}.help()`,
+    `const ${knownVar} = new Set(${cliVar}.commands.map((c: any) => c.name))`,
+    `if (!${argvExpr} || (!${argvExpr}.startsWith('-') && !${knownVar}.has(${argvExpr}))) {`,
+    `  ${cliVar}.outputHelp()`,
+    `  process.exit(${argvExpr} ? 1 : 0)`,
+    `}`,
+    `try { ${cliVar}.parse(${parseArg}) } catch (e: any) { console.error(\`error: \${e.message ?? e}\`); process.exit(1) }`,
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  if (subBlocks.length > 0) {
+    const indentedCli = cliBlockLines.split('\n').map(l => '  ' + l).join('\n')
+    return `${subBlocks.join('\n')}\nelse {\n${indentedCli}\n}`
   }
-  ${rootVar}.parse()
-}`
-
-  return [...groupBlocks, rootBlock].join('\n')
+  return cliBlockLines
 }
 
-function generateModuleCommands(commands: GalbeCLICommand[]): string {
-  return commands.map(c => generateSingleCommand(c, 'parent', true)).join('\n\n')
+function generateStandaloneBlock(commands: GalbeCLICommand[], name: string, version: string): string {
+  return nodeToBlock(buildCommandTree(commands), [], name, version)
+}
+
+function generateModuleCommands(commands: GalbeCLICommand[], appName: string): string {
+  const tree = buildCommandTree(commands)
+  const safeId = (t: string) => t.replace(/[^a-zA-Z0-9]/g, '_')
+  const lines: string[] = []
+
+  function genSubCacSetup(node: CommandNode, tagPath: string[]): string {
+    const subVar = `_sub_${tagPath.map(safeId).join('_')}`
+    const cliName = [appName, ...tagPath].join(' ')
+    const nodeLines: string[] = []
+
+    nodeLines.push(`const ${subVar} = cac(${JSON.stringify(cliName)})`)
+    for (const cmd of node.commands) nodeLines.push(generateSingleCommand(cmd, subVar, false))
+
+    for (const [tag, subNode] of node.subgroups.entries()) {
+      const subTagPath = [...tagPath, tag]
+      const subSubVar = `_sub_${subTagPath.map(safeId).join('_')}`
+      const grpVar = `_grp_${subTagPath.map(safeId).join('_')}`
+      const knownVar = `_known_${subTagPath.map(safeId).join('_')}`
+      nodeLines.push(genSubCacSetup(subNode, subTagPath))
+      nodeLines.push(
+        `const ${grpVar} = ${subVar}.command(${JSON.stringify(tag + ' [..._sub]')}, ${JSON.stringify(tag + ' commands')})` +
+        `\n  .allowUnknownOptions()` +
+        `\n  .action(() => {` +
+        `\n    const _rawArgv = process.argv.slice(2)` +
+        `\n    const _tagIdx = _rawArgv.findIndex((a: string) => a === ${JSON.stringify(tag)})` +
+        `\n    const _subArgv = _tagIdx >= 0 ? _rawArgv.slice(_tagIdx + 1) : []` +
+        `\n    const ${knownVar} = new Set(${subSubVar}.commands.map((c: any) => c.name))` +
+        `\n    if (!_subArgv[0] || (!_subArgv[0].startsWith('-') && !${knownVar}.has(_subArgv[0]))) {` +
+        `\n      ${subSubVar}.outputHelp()` +
+        `\n      process.exit(_subArgv[0] ? 1 : 0)` +
+        `\n    }` +
+        `\n    try { ${subSubVar}.parse(['', '', ..._subArgv]) } catch (e: any) { console.error(\`error: \${e.message ?? e}\`); process.exit(1) }` +
+        `\n  })` +
+        `\n;(${grpVar} as any).rawName = ${JSON.stringify(tag)}` +
+        `\n;(${grpVar} as any).outputHelp = () => ${subSubVar}.outputHelp()`
+      )
+    }
+
+    nodeLines.push(`${subVar}.help()`)
+    return nodeLines.join('\n')
+  }
+
+  for (const [tag, subNode] of tree.subgroups.entries()) {
+    const subVar = `_sub_${safeId(tag)}`
+    const grpVar = `_grp_${safeId(tag)}`
+    const knownVar = `_known_${safeId(tag)}`
+    lines.push(genSubCacSetup(subNode, [tag]))
+    lines.push(
+      `const ${grpVar} = parent.command(${JSON.stringify(tag + ' [..._sub]')}, ${JSON.stringify(tag + ' commands')})` +
+      `\n  .allowUnknownOptions()` +
+      `\n  .action(() => {` +
+      `\n    const _rawArgv = process.argv.slice(2)` +
+      `\n    const _tagIdx = _rawArgv.findIndex((a: string) => a === ${JSON.stringify(tag)})` +
+      `\n    const _subArgv = _tagIdx >= 0 ? _rawArgv.slice(_tagIdx + 1) : []` +
+      `\n    const ${knownVar} = new Set(${subVar}.commands.map((c: any) => c.name))` +
+      `\n    if (!_subArgv[0] || (!_subArgv[0].startsWith('-') && !${knownVar}.has(_subArgv[0]))) {` +
+      `\n      ${subVar}.outputHelp()` +
+      `\n      process.exit(_subArgv[0] ? 1 : 0)` +
+      `\n    }` +
+      `\n    try { ${subVar}.parse(['', '', ..._subArgv]) } catch (e: any) { console.error(\`error: \${e.message ?? e}\`); process.exit(1) }` +
+      `\n  })` +
+      `\n;(${grpVar} as any).rawName = ${JSON.stringify(tag)}` +
+      `\n;(${grpVar} as any).outputHelp = () => ${subVar}.outputHelp()`
+    )
+  }
+
+  for (const cmd of tree.commands) lines.push(generateSingleCommand(cmd, 'parent', false))
+
+  lines.push(
+    `const _parseOrig = (parent as any).parse.bind(parent)` +
+    `\n;(parent as any).parse = (argv?: string[]) => {` +
+    `\n  const _a: string[] = argv ?? process.argv` +
+    `\n  const _positionals = _a.slice(2).filter((x: string) => !x.startsWith('-'))` +
+    `\n  if (_positionals.length === 0 && !_a.slice(2).includes('--help') && !_a.slice(2).includes('-h')) {` +
+    `\n    parent.outputHelp()` +
+    `\n    process.exit(0)` +
+    `\n  }` +
+    `\n  const _r = _parseOrig(argv)` +
+    `\n  if (!(parent as any).matchedCommand && _positionals.length > 0 && !_a.slice(2).includes('--help') && !_a.slice(2).includes('-h')) {` +
+    `\n    console.error(\`error: Unknown command "\${_positionals[0]}"\`)` +
+    `\n    process.exit(1)` +
+    `\n  }` +
+    `\n  return _r` +
+    `\n}`
+  )
+
+  return lines.filter(Boolean).join('\n\n')
 }
 
 function generateUtilities(): string {
@@ -194,6 +302,12 @@ const _fmtObject = (o: unknown, p = false, idt = 2, iidt = 0): string => {
       .filter(Boolean)
       .join(\`,\${lr}\`)}\${lr}\${_}}\`
   return String(o)
+}
+
+const _headersToObj = (h: Headers): Record<string, string> => {
+  const r: Record<string, string> = {}
+  h.forEach((v, k) => { r[k] = v })
+  return r
 }`
 }
 
@@ -209,7 +323,7 @@ function generateFetchApi(
     ? `
 const _baseUrl: string | (() => string) | undefined = ${bakedBaseUrl}
 const _defaultHeaders: Record<string, string> = ${bakedHeaders}
-const _requestInterceptor: ((req: Request) => Promise<Request> | Request) | undefined = ${bakedRequestInterceptor}
+const _requestInterceptor: ((req: Request, command: any, args: Record<string, string>, options: Record<string, any>) => Promise<Request> | Request) | undefined = ${bakedRequestInterceptor}
 const _responseFormatter: ((res: Response) => Promise<string> | string) | undefined = ${bakedResponseFormatter}
 `
     : ''
@@ -234,7 +348,10 @@ const _getBaseUrl = (_opts: CLIOptions): string => {
   query: string[],
   body: string,
   bodyFile: string,
-  routeOpts: Record<string, unknown>
+  routeOpts: Record<string, unknown>,
+  command: any,
+  cliArgs: Record<string, string>,
+  cliOptions: Record<string, any>
 ): Promise<void> => {`
     : `const _makeFetchApi = (_opts: CLIOptions) => async (
   method: string,
@@ -243,7 +360,10 @@ const _getBaseUrl = (_opts: CLIOptions): string => {
   query: string[],
   body: string,
   bodyFile: string,
-  routeOpts: Record<string, unknown>
+  routeOpts: Record<string, unknown>,
+  command: CommandInfo,
+  cliArgs: Record<string, string>,
+  cliOptions: Record<string, any>
 ): Promise<void> => {`
 
   const baseUrlCall = isStandalone ? '_getBaseUrl()' : '_getBaseUrl(_opts)'
@@ -255,8 +375,9 @@ const _getBaseUrl = (_opts: CLIOptions): string => {
 
 ${fetchApiSignature}
   const fmt = new Set('sbp'.split(''))
-  const extraHeaders = Object.fromEntries(header.map(s => { const i = s.indexOf('='); return [s.slice(0, i), s.slice(i + 1)] }))
-  const queryParams = Object.fromEntries(query.map(s => { const i = s.indexOf('='); return [s.slice(0, i), s.slice(i + 1)] }))
+  const _toArr = (v: any): string[] => Array.isArray(v) ? v : v ? [String(v)] : []
+  const extraHeaders = Object.fromEntries(_toArr(header).map(s => { const i = s.indexOf('='); return [s.slice(0, i), s.slice(i + 1)] }))
+  const queryParams = Object.fromEntries(_toArr(query).map(s => { const i = s.indexOf('='); return [s.slice(0, i), s.slice(i + 1)] }))
   const queryString = Object.entries({ ...queryParams, ...routeOpts })
     .filter(([_, v]) => v !== undefined && v !== '')
     .map(([k, v]) => \`\${encodeURIComponent(k)}=\${encodeURIComponent(String(v))}\`)
@@ -281,7 +402,7 @@ ${fetchApiSignature}
     ...(bodyData !== undefined ? { body: bodyData } : {}),
   })
 
-  if (${interceptorRef}) req = await ${interceptorRef}(req)
+  if (${interceptorRef}) req = await ${interceptorRef}(req, command, cliArgs, cliOptions)
 
   let _res: Response | undefined
   let _resClone: Response | undefined
@@ -295,7 +416,7 @@ ${fetchApiSignature}
       Bun.write(Bun.stdout, await ${formatterRef}(_res))
     } else {
       if (fmt.has('s')) Bun.write(Bun.stdout, \`\${_res.status}\\n\`)
-      if (fmt.has('h')) Bun.write(Bun.stdout, _fmtObject(Object.fromEntries(_res.headers.entries()), fmt.has('p')) + '\\n')
+      if (fmt.has('h')) Bun.write(Bun.stdout, _fmtObject(_headersToObj(_res.headers), fmt.has('p')) + '\\n')
       if (fmt.has('b')) {
         const ct = _res.headers.get('content-type') ?? ''
         if (ct.includes('application/json')) Bun.write(Bun.stdout, _fmtObject(await _res.json(), fmt.has('p')) + '\\n')
@@ -309,7 +430,7 @@ ${fetchApiSignature}
   } catch (e: any) {
     if (process.env.GCLI_DEBUG) {
       console.error(\`\\n[debug] \${req.method} \${req.url}\`)
-      console.error(\`[debug] request headers: \${JSON.stringify(Object.fromEntries(req.headers.entries()), null, 2)}\`)
+      console.error(\`[debug] request headers: \${JSON.stringify(_headersToObj(req.headers), null, 2)}\`)
       if (_resClone) {
         try { console.error(\`[debug] response \${_resClone.status}: \${await _resClone.text()}\`) } catch {}
       }
@@ -361,12 +482,11 @@ ${utils}
 ${fetchApi}
 
 const _argv = process.argv.slice(2)
-const _rootCmd = _argv[0]
 
 ${block}
 `
   } else {
-    const cmds = generateModuleCommands(commands)
+    const cmds = generateModuleCommands(commands, name)
 
     const defaultOptsEntries: string[] = []
     if (options?.baseUrl !== undefined) defaultOptsEntries.push(`  baseUrl: ${serializeValue(options.baseUrl)}`)
@@ -379,12 +499,22 @@ ${block}
 
     return `${header}
 
-import type { CAC } from 'cac'
+import { cac, type CAC } from 'cac'
+
+export type CommandInfo = {
+  name: string
+  tags: string[]
+  description?: string
+  pathT: string
+  arguments?: { name: string; type: string; description: string }[]
+  options?: { name: string; short: string; type: string; description: string; default: any }[]
+  hideOptions?: string[]
+}
 
 export type CLIOptions = {
   baseUrl?: string | (() => string)
   headers?: Record<string, string>
-  requestInterceptor?: (req: Request) => Promise<Request> | Request
+  requestInterceptor?: (req: Request, command: CommandInfo, args: Record<string, string>, options: Record<string, any>) => Promise<Request> | Request
   responseFormatter?: (res: Response) => Promise<string> | string
 }
 ${utils}

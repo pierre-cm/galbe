@@ -28,13 +28,13 @@ export default (g: Galbe) => {
    * @description longer description example
    * @body body descripton
    */
-  g.post('/test', { body: $T.object({ foo: $T.string() }) }, _ => {})
+  g.post('/test', { body: { 'application/json': $T.object({ foo: $T.string() }) } }, _ => {})
 
   /**
    * @tags tag1, tag2
    * @other Hello Mom!
    */
-  g.put('/test', { body: $T.object({ foo: $T.string() }) }, [() => {}], _ => {})
+  g.put('/test', { body: { 'application/json': $T.object({ foo: $T.string() }) } }, [() => {}], _ => {})
 
   /**
    * patch method

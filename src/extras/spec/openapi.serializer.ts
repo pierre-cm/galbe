@@ -301,7 +301,9 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
             }
             response = { description: desc, ...(Object.keys(content).length ? { content } : {}) }
           } else {
-            const noContent = (v as any)[Kind] === 'null'
+            const statusNum = Number(s)
+            const noBodyStatus = statusNum === 204 || statusNum === 304 || (statusNum >= 100 && statusNum < 200)
+            const noContent = noBodyStatus && (v as any)[Kind] === 'null'
             if (noContent) {
               response = {
                 description: (v as any).description || HttpStatus[s as keyof typeof HttpStatus] || 'Response',

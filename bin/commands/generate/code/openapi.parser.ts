@@ -338,8 +338,12 @@ const parseEndpointDef = (
   let imports: Record<string, string> = {}
   let p = path.replaceAll(/\{([^\}]*)\}/g, ':$1')
   // let description = def.summary || def.description
-  let pathName = path.replaceAll(/\/\{[^\}]*\}/g, 'X').replaceAll(/[^$\w\d_]+([$\w\d_])/g, (_, $1) => $1.toUpperCase())
-  let schemaName = `${method}${pathName}`.replace(/^\w/, c => c.toUpperCase())
+  let schemaName = def.operationId
+    ? def.operationId.replace(/^\w/, c => c.toUpperCase())
+    : `${method}${path
+        .replaceAll(/\{([^\}]+)\}/g, (_, p) => `By${p.replace(/^\w/, (c: string) => c.toUpperCase())}`)
+        .replaceAll(/[^$\w\d_]+([$\w\d_])/g, (_, $1) => $1.toUpperCase())
+      }`.replace(/^\w/, c => c.toUpperCase())
 
   let meta = '/**\n'
   if (def.summary) meta += ` * ${def.summary}\n *\n`
