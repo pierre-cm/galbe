@@ -3,6 +3,7 @@ import { Galbe, $T, type Context } from '../src'
 import { decoder } from './test.utils'
 
 const port = 7359
+const portRaw = 7367
 
 const UUID_RGX = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
 
@@ -479,5 +480,76 @@ describe('responses', () => {
     })
 
     expect(resp.status).toBe(500)
+  })
+})
+
+describe('raw Response return parity with ctx.set', () => {
+  beforeAll(async () => {
+    const galbe = new Galbe()
+
+    // Bug case: return new Response(null, {status: 304}) with a matching response schema
+    galbe.get('/raw/null-304', { response: { 304: $T.null() } }, () => new Response(null, { status: 304 }))
+    galbe.get('/ctx/null-304', { response: { 304: $T.null() } }, (ctx: Context) => {
+      ctx.set.status = 304
+      return null
+    })
+
+    // Parity: string body
+    galbe.get('/raw/str-200', { response: { 200: $T.string() } }, () => new Response('hello', { status: 200 }))
+    galbe.get('/ctx/str-200', { response: { 200: $T.string() } }, (ctx: Context) => {
+      ctx.set.status = 200
+      return 'hello'
+    })
+
+    // Parity: JSON object body
+    galbe.get('/raw/json-201', { response: { 201: $T.json($T.object()) } }, () =>
+      new Response(JSON.stringify({ foo: 'bar' }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      })
+    )
+    galbe.get('/ctx/json-201', { response: { 201: $T.json($T.object()) } }, (ctx: Context) => {
+      ctx.set.status = 201
+      return { foo: 'bar' }
+    })
+
+    await galbe.listen(portRaw)
+  })
+
+  // Bug reproduction (was returning 500 before fix)
+  test('return new Response(null, 304) with null/304 schema — should return 304', async () => {
+    const resp = await fetch(`http://localhost:${portRaw}/raw/null-304`)
+    expect(resp.status).toBe(304)
+  })
+
+  test('ctx.set.status=304 + return null with null/304 schema — should return 304', async () => {
+    const resp = await fetch(`http://localhost:${portRaw}/ctx/null-304`)
+    expect(resp.status).toBe(304)
+  })
+
+  // Parity: string body
+  test('return new Response("hello", 200) with string/200 schema — should return 200 with body', async () => {
+    const resp = await fetch(`http://localhost:${portRaw}/raw/str-200`)
+    expect(resp.status).toBe(200)
+    expect(await resp.text()).toBe('hello')
+  })
+
+  test('ctx.set.status=200 + return "hello" with string/200 schema — should return 200 with body', async () => {
+    const resp = await fetch(`http://localhost:${portRaw}/ctx/str-200`)
+    expect(resp.status).toBe(200)
+    expect(await resp.text()).toBe('hello')
+  })
+
+  // Parity: JSON object body
+  test('return new Response(json, 201) with object/201 schema — should return 201 with body', async () => {
+    const resp = await fetch(`http://localhost:${portRaw}/raw/json-201`)
+    expect(resp.status).toBe(201)
+    expect(await resp.json()).toEqual({ foo: 'bar' })
+  })
+
+  test('ctx.set.status=201 + return object with object/201 schema — should return 201 with body', async () => {
+    const resp = await fetch(`http://localhost:${portRaw}/ctx/json-201`)
+    expect(resp.status).toBe(201)
+    expect(await resp.json()).toEqual({ foo: 'bar' })
   })
 })

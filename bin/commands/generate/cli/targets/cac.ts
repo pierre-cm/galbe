@@ -11,6 +11,7 @@ export interface GenerateOptions {
   out: string
   pckg: any
   options?: GalbeCLIOptions
+  configPath?: string
 }
 
 export async function generate(opts: GenerateOptions): Promise<void> {
@@ -19,7 +20,61 @@ export async function generate(opts: GenerateOptions): Promise<void> {
 }
 
 async function buildStandalone(opts: GenerateOptions): Promise<void> {
-  const code = generateSource(opts.commands, 'standalone', opts.pckg, opts.options)
+  // Bundle config as an IIFE to avoid importing the full config module at startup
+  // (a direct import would run all module-level side effects before the CLI is set up).
+  let inlinedConfigCode: string | undefined
+  if (opts.configPath) {
+    const tmpDir = await mkdtemp(resolve(tmpdir(), 'galbe-cli-cfg-'))
+    try {
+      const allExports = [
+        '__galbe_baseUrl',
+        '__galbe_headers',
+        '__galbe_requestInterceptor',
+        '__galbe_responseFormatter',
+      ]
+      const entry = [
+        `import { options as __cfg } from ${JSON.stringify(opts.configPath)}`,
+        `const __galbe_baseUrl = __cfg?.baseUrl`,
+        `const __galbe_headers = __cfg?.headers`,
+        `const __galbe_requestInterceptor = __cfg?.requestInterceptor`,
+        `const __galbe_responseFormatter = __cfg?.responseFormatter`,
+        `export { ${allExports.join(', ')} }`,
+      ].join('\n')
+      const entryPath = resolve(tmpDir, 'entry.ts')
+      const outPath = resolve(tmpDir, 'bundled.js')
+      await Bun.write(entryPath, entry)
+      await $`bun build --bundle --format esm ${entryPath} --outfile ${outPath}`.quiet()
+      const bundled = await Bun.file(outPath).text()
+
+      const exportMatch = bundled.match(/export\s*\{([^}]+)\}/)
+      const codeBody = exportMatch ? bundled.replace(/export\s*\{[^}]+\}\s*;?\s*/g, '').trim() : bundled.trim()
+
+      let returnExpr = `{ ${allExports.join(', ')} }`
+      if (exportMatch) {
+        const entries = exportMatch[1]
+          .split(',')
+          .map(e => {
+            const parts = e.trim().split(/\s+as\s+/)
+            return { local: parts[0].trim(), exported: (parts[1] ?? parts[0]).trim() }
+          })
+          .filter(e => allExports.includes(e.exported))
+        if (entries.length) {
+          const props = entries.map(e => (e.local === e.exported ? e.exported : `${e.exported}: ${e.local}`)).join(', ')
+          returnExpr = `{ ${props} }`
+        }
+      }
+
+      const indented = codeBody
+        .split('\n')
+        .map(l => '  ' + l)
+        .join('\n')
+      inlinedConfigCode = `const { ${allExports.join(', ')} } = (() => {\n${indented}\n  return ${returnExpr}\n})()`
+    } finally {
+      await rm(tmpDir, { recursive: true })
+    }
+  }
+
+  const code = generateSource(opts.commands, 'standalone', opts.pckg, opts.options, undefined, inlinedConfigCode)
   const buildDir = await mkdtemp(resolve(tmpdir(), 'galbe-cli-'))
   try {
     await Bun.write(resolve(buildDir, 'package.json'), JSON.stringify({ dependencies: { cac: 'latest' } }))
@@ -33,7 +88,56 @@ async function buildStandalone(opts: GenerateOptions): Promise<void> {
 }
 
 async function buildModule(opts: GenerateOptions): Promise<void> {
-  const code = generateSource(opts.commands, 'module', opts.pckg, opts.options)
+  // For module mode, the output must be self-contained (only cac as external dep).
+  // Bundle the config and its transitive deps into an IIFE snippet that is embedded
+  // directly in the generated file.
+  let inlinedConfigCode: string | undefined
+  if (opts.configPath) {
+    const tmpDir = await mkdtemp(resolve(tmpdir(), 'galbe-cli-cfg-'))
+    try {
+      const entry = [
+        `import { options as __cfg } from ${JSON.stringify(opts.configPath)}`,
+        `const __galbe_requestInterceptor = __cfg?.requestInterceptor`,
+        `const __galbe_responseFormatter = __cfg?.responseFormatter`,
+        `export { __galbe_requestInterceptor, __galbe_responseFormatter }`,
+      ].join('\n')
+      const entryPath = resolve(tmpDir, 'entry.ts')
+      const outPath = resolve(tmpDir, 'bundled.js')
+      await Bun.write(entryPath, entry)
+      await $`bun build --bundle --format esm ${entryPath} --outfile ${outPath}`.quiet()
+      const bundled = await Bun.file(outPath).text()
+
+      // Parse "export { localA as exportedA, ... }" and transform to a return expression
+      // so that renaming by the bundler doesn't break the IIFE interface.
+      const exportMatch = bundled.match(/export\s*\{([^}]+)\}/)
+      const codeBody = exportMatch ? bundled.replace(/export\s*\{[^}]+\}\s*;?\s*/g, '').trim() : bundled.trim()
+
+      let returnExpr = '{ __galbe_requestInterceptor, __galbe_responseFormatter }'
+      if (exportMatch) {
+        const entries = exportMatch[1]
+          .split(',')
+          .map(e => {
+            const parts = e.trim().split(/\s+as\s+/)
+            return { local: parts[0].trim(), exported: (parts[1] ?? parts[0]).trim() }
+          })
+          .filter(e => e.exported === '__galbe_requestInterceptor' || e.exported === '__galbe_responseFormatter')
+        if (entries.length) {
+          const props = entries.map(e => (e.local === e.exported ? e.exported : `${e.exported}: ${e.local}`)).join(', ')
+          returnExpr = `{ ${props} }`
+        }
+      }
+
+      const indented = codeBody
+        .split('\n')
+        .map(l => '  ' + l)
+        .join('\n')
+      inlinedConfigCode = `const { __galbe_requestInterceptor, __galbe_responseFormatter } = (() => {\n${indented}\n  return ${returnExpr}\n})()`
+    } finally {
+      await rm(tmpDir, { recursive: true })
+    }
+  }
+
+  const code = generateSource(opts.commands, 'module', opts.pckg, opts.options, undefined, inlinedConfigCode)
   await Bun.write(resolve(CWD, opts.out), code)
 }
 
@@ -65,7 +169,7 @@ function generateSingleCommand(c: GalbeCLICommand, cliVar: string, includeTag: b
   const builtinShorts = new Set(['H', 'Q', 'b', 'B'])
   const hide = new Set(c.hideOptions ?? [])
   const tagPrefix = includeTag && c.tags.length > 0 ? c.tags.map(t => t.toLowerCase()).join(' ') + ' ' : ''
-  const pathArgs = (c.arguments || []).map(a => ` <${a.name}>`).join('')
+  const pathArgs = (c.arguments || []).map(a => ` ${a.type.replace(/\w+/, a.name)}`).join('')
   const cmdStr = `${tagPrefix}${c.name}${pathArgs}`
   const desc = JSON.stringify(c.description || '')
 
@@ -91,9 +195,7 @@ function generateSingleCommand(c: GalbeCLICommand, cliVar: string, includeTag: b
   const method = c.route.method.toUpperCase()
   const customAction = c.action ? `await (${c.action.toString()})(options as any)\n    ` : ''
 
-  const argsObj = (c.arguments || []).length
-    ? `{ ${(c.arguments || []).map(a => a.name).join(', ')} }`
-    : '{}'
+  const argsObj = (c.arguments || []).length ? `{ ${(c.arguments || []).map(a => a.name).join(', ')} }` : '{}'
 
   const commandMeta: Record<string, any> = { name: c.name, tags: c.tags }
   if (c.description !== undefined) commandMeta.description = c.description
@@ -153,7 +255,10 @@ function nodeToBlock(node: CommandNode, tagPath: string[], appName: string, vers
 
   const subBlocks = subGroupEntries.map(([tag, subNode], i) => {
     const sub = nodeToBlock(subNode, [...tagPath, tag], appName, version)
-    const indented = sub.split('\n').map(l => '  ' + l).join('\n')
+    const indented = sub
+      .split('\n')
+      .map(l => '  ' + l)
+      .join('\n')
     return `${i === 0 ? 'if' : 'else if'} (${argvExpr} === ${JSON.stringify(tag)}) {\n${indented}\n}`
   })
 
@@ -182,7 +287,10 @@ function nodeToBlock(node: CommandNode, tagPath: string[], appName: string, vers
     .join('\n')
 
   if (subBlocks.length > 0) {
-    const indentedCli = cliBlockLines.split('\n').map(l => '  ' + l).join('\n')
+    const indentedCli = cliBlockLines
+      .split('\n')
+      .map(l => '  ' + l)
+      .join('\n')
     return `${subBlocks.join('\n')}\nelse {\n${indentedCli}\n}`
   }
   return cliBlockLines
@@ -213,20 +321,20 @@ function generateModuleCommands(commands: GalbeCLICommand[], appName: string): s
       nodeLines.push(genSubCacSetup(subNode, subTagPath))
       nodeLines.push(
         `const ${grpVar} = ${subVar}.command(${JSON.stringify(tag + ' [..._sub]')}, ${JSON.stringify(tag + ' commands')})` +
-        `\n  .allowUnknownOptions()` +
-        `\n  .action(() => {` +
-        `\n    const _rawArgv = process.argv.slice(2)` +
-        `\n    const _tagIdx = _rawArgv.findIndex((a: string) => a === ${JSON.stringify(tag)})` +
-        `\n    const _subArgv = _tagIdx >= 0 ? _rawArgv.slice(_tagIdx + 1) : []` +
-        `\n    const ${knownVar} = new Set(${subSubVar}.commands.map((c: any) => c.name))` +
-        `\n    if (!_subArgv[0] || (!_subArgv[0].startsWith('-') && !${knownVar}.has(_subArgv[0]))) {` +
-        `\n      ${subSubVar}.outputHelp()` +
-        `\n      process.exit(_subArgv[0] ? 1 : 0)` +
-        `\n    }` +
-        `\n    try { ${subSubVar}.parse(['', '', ..._subArgv]) } catch (e: any) { console.error(\`error: \${e.message ?? e}\`); process.exit(1) }` +
-        `\n  })` +
-        `\n;(${grpVar} as any).rawName = ${JSON.stringify(tag)}` +
-        `\n;(${grpVar} as any).outputHelp = () => ${subSubVar}.outputHelp()`
+          `\n  .allowUnknownOptions()` +
+          `\n  .action(() => {` +
+          `\n    const _rawArgv = process.argv.slice(2)` +
+          `\n    const _tagIdx = _rawArgv.findIndex((a: string) => a === ${JSON.stringify(tag)})` +
+          `\n    const _subArgv = _tagIdx >= 0 ? _rawArgv.slice(_tagIdx + 1) : []` +
+          `\n    const ${knownVar} = new Set(${subSubVar}.commands.map((c: any) => c.name))` +
+          `\n    if (!_subArgv[0] || (!_subArgv[0].startsWith('-') && !${knownVar}.has(_subArgv[0]))) {` +
+          `\n      ${subSubVar}.outputHelp()` +
+          `\n      process.exit(_subArgv[0] ? 1 : 0)` +
+          `\n    }` +
+          `\n    try { ${subSubVar}.parse(['', '', ..._subArgv]) } catch (e: any) { console.error(\`error: \${e.message ?? e}\`); process.exit(1) }` +
+          `\n  })` +
+          `\n;(${grpVar} as any).rawName = ${JSON.stringify(tag)}` +
+          `\n;(${grpVar} as any).outputHelp = () => ${subSubVar}.outputHelp()`
       )
     }
 
@@ -241,20 +349,20 @@ function generateModuleCommands(commands: GalbeCLICommand[], appName: string): s
     lines.push(genSubCacSetup(subNode, [tag]))
     lines.push(
       `const ${grpVar} = parent.command(${JSON.stringify(tag + ' [..._sub]')}, ${JSON.stringify(tag + ' commands')})` +
-      `\n  .allowUnknownOptions()` +
-      `\n  .action(() => {` +
-      `\n    const _rawArgv = process.argv.slice(2)` +
-      `\n    const _tagIdx = _rawArgv.findIndex((a: string) => a === ${JSON.stringify(tag)})` +
-      `\n    const _subArgv = _tagIdx >= 0 ? _rawArgv.slice(_tagIdx + 1) : []` +
-      `\n    const ${knownVar} = new Set(${subVar}.commands.map((c: any) => c.name))` +
-      `\n    if (!_subArgv[0] || (!_subArgv[0].startsWith('-') && !${knownVar}.has(_subArgv[0]))) {` +
-      `\n      ${subVar}.outputHelp()` +
-      `\n      process.exit(_subArgv[0] ? 1 : 0)` +
-      `\n    }` +
-      `\n    try { ${subVar}.parse(['', '', ..._subArgv]) } catch (e: any) { console.error(\`error: \${e.message ?? e}\`); process.exit(1) }` +
-      `\n  })` +
-      `\n;(${grpVar} as any).rawName = ${JSON.stringify(tag)}` +
-      `\n;(${grpVar} as any).outputHelp = () => ${subVar}.outputHelp()`
+        `\n  .allowUnknownOptions()` +
+        `\n  .action(() => {` +
+        `\n    const _rawArgv = process.argv.slice(2)` +
+        `\n    const _tagIdx = _rawArgv.findIndex((a: string) => a === ${JSON.stringify(tag)})` +
+        `\n    const _subArgv = _tagIdx >= 0 ? _rawArgv.slice(_tagIdx + 1) : []` +
+        `\n    const ${knownVar} = new Set(${subVar}.commands.map((c: any) => c.name))` +
+        `\n    if (!_subArgv[0] || (!_subArgv[0].startsWith('-') && !${knownVar}.has(_subArgv[0]))) {` +
+        `\n      ${subVar}.outputHelp()` +
+        `\n      process.exit(_subArgv[0] ? 1 : 0)` +
+        `\n    }` +
+        `\n    try { ${subVar}.parse(['', '', ..._subArgv]) } catch (e: any) { console.error(\`error: \${e.message ?? e}\`); process.exit(1) }` +
+        `\n  })` +
+        `\n;(${grpVar} as any).rawName = ${JSON.stringify(tag)}` +
+        `\n;(${grpVar} as any).outputHelp = () => ${subVar}.outputHelp()`
     )
   }
 
@@ -262,20 +370,21 @@ function generateModuleCommands(commands: GalbeCLICommand[], appName: string): s
 
   lines.push(
     `const _parseOrig = (parent as any).parse.bind(parent)` +
-    `\n;(parent as any).parse = (argv?: string[]) => {` +
-    `\n  const _a: string[] = argv ?? process.argv` +
-    `\n  const _positionals = _a.slice(2).filter((x: string) => !x.startsWith('-'))` +
-    `\n  if (_positionals.length === 0 && !_a.slice(2).includes('--help') && !_a.slice(2).includes('-h')) {` +
-    `\n    parent.outputHelp()` +
-    `\n    process.exit(0)` +
-    `\n  }` +
-    `\n  const _r = _parseOrig(argv)` +
-    `\n  if (!(parent as any).matchedCommand && _positionals.length > 0 && !_a.slice(2).includes('--help') && !_a.slice(2).includes('-h')) {` +
-    `\n    console.error(\`error: Unknown command "\${_positionals[0]}"\`)` +
-    `\n    process.exit(1)` +
-    `\n  }` +
-    `\n  return _r` +
-    `\n}`
+      `\n;(parent as any).parse = (argv?: string[]) => {` +
+      `\n  const _a: string[] = argv ?? process.argv` +
+      `\n  const _positionals = _a.slice(2).filter((x: string) => !x.startsWith('-'))` +
+      `\n  if (_positionals.length === 0 && !_a.slice(2).includes('--help') && !_a.slice(2).includes('-h')) {` +
+      `\n    parent.outputHelp()` +
+      `\n    process.exit(0)` +
+      `\n  }` +
+      `\n  let _r: any` +
+      `\n  try { _r = _parseOrig(argv) } catch (e: any) { console.error(\`error: \${e.message ?? e}\`); process.exit(1) }` +
+      `\n  if (!(parent as any).matchedCommand && _positionals.length > 0 && !_a.slice(2).includes('--help') && !_a.slice(2).includes('-h')) {` +
+      `\n    console.error(\`error: Unknown command "\${_positionals[0]}"\`)` +
+      `\n    process.exit(1)` +
+      `\n  }` +
+      `\n  return _r` +
+      `\n}`
   )
 
   return lines.filter(Boolean).join('\n\n')
@@ -413,7 +522,7 @@ ${fetchApiSignature}
     const elapsed = (Bun.nanoseconds() - t0) / 1_000_000
 
     if (${formatterRef}) {
-      Bun.write(Bun.stdout, await ${formatterRef}(_res))
+      Bun.write(Bun.stdout, await ${formatterRef}(_res, command, cliArgs, cliOptions))
     } else {
       if (fmt.has('s')) Bun.write(Bun.stdout, \`\${_res.status}\\n\`)
       if (fmt.has('h')) Bun.write(Bun.stdout, _fmtObject(_headersToObj(_res.headers), fmt.has('p')) + '\\n')
@@ -446,16 +555,26 @@ function generateSource(
   commands: GalbeCLICommand[],
   mode: 'standalone' | 'module',
   pckg: any,
-  options?: GalbeCLIOptions
+  options?: GalbeCLIOptions,
+  _unused?: undefined,
+  // pre-bundled IIFE snippet; standalone exports all 4 config values, module exports only functions
+  inlinedConfigCode?: string
 ): string {
   const name = pckg?.name || 'galbe-cli'
   const version = pckg?.version || '0.1.0'
   const nameVersion = `${name}/${version}/cli`
 
-  const bakedBaseUrl = serializeValue(options?.baseUrl)
-  const bakedHeaders = serializeValue(options?.headers ?? {})
-  const bakedRequestInterceptor = serializeValue(options?.requestInterceptor)
-  const bakedResponseFormatter = serializeValue(options?.responseFormatter)
+  // Standalone with config: all values come from the IIFE (avoids module-level side effects).
+  // Module with config: scalars serialized from options; functions come from the IIFE.
+  const standaloneInlined = mode === 'standalone' && !!inlinedConfigCode
+  const bakedBaseUrl = standaloneInlined ? '__galbe_baseUrl' : serializeValue(options?.baseUrl)
+  const bakedHeaders = standaloneInlined ? '__galbe_headers ?? {}' : serializeValue(options?.headers ?? {})
+  const bakedRequestInterceptor = !!inlinedConfigCode
+    ? '__galbe_requestInterceptor'
+    : serializeValue(options?.requestInterceptor)
+  const bakedResponseFormatter = !!inlinedConfigCode
+    ? '__galbe_responseFormatter'
+    : serializeValue(options?.responseFormatter)
 
   const utils = generateUtilities()
   const fetchApi = generateFetchApi(
@@ -478,7 +597,7 @@ function generateSource(
 ${header}
 
 import { cac } from 'cac'
-${utils}
+${inlinedConfigCode ? '\n' + inlinedConfigCode + '\n' : ''}${utils}
 ${fetchApi}
 
 const _argv = process.argv.slice(2)
@@ -491,10 +610,16 @@ ${block}
     const defaultOptsEntries: string[] = []
     if (options?.baseUrl !== undefined) defaultOptsEntries.push(`  baseUrl: ${serializeValue(options.baseUrl)}`)
     if (options?.headers !== undefined) defaultOptsEntries.push(`  headers: ${serializeValue(options.headers)}`)
-    if (options?.requestInterceptor !== undefined)
-      defaultOptsEntries.push(`  requestInterceptor: ${serializeValue(options.requestInterceptor)}`)
-    if (options?.responseFormatter !== undefined)
-      defaultOptsEntries.push(`  responseFormatter: ${serializeValue(options.responseFormatter)}`)
+    if (inlinedConfigCode) {
+      // Functions are defined by the inlined IIFE; always include them (undefined = no-op)
+      defaultOptsEntries.push(`  requestInterceptor: __galbe_requestInterceptor as CLIOptions['requestInterceptor']`)
+      defaultOptsEntries.push(`  responseFormatter: __galbe_responseFormatter as CLIOptions['responseFormatter']`)
+    } else {
+      if (options?.requestInterceptor !== undefined)
+        defaultOptsEntries.push(`  requestInterceptor: ${serializeValue(options.requestInterceptor)}`)
+      if (options?.responseFormatter !== undefined)
+        defaultOptsEntries.push(`  responseFormatter: ${serializeValue(options.responseFormatter)}`)
+    }
     const defaultOpts = defaultOptsEntries.length ? `{\n${defaultOptsEntries.join(',\n')}\n}` : '{}'
 
     return `${header}
@@ -515,9 +640,9 @@ export type CLIOptions = {
   baseUrl?: string | (() => string)
   headers?: Record<string, string>
   requestInterceptor?: (req: Request, command: CommandInfo, args: Record<string, string>, options: Record<string, any>) => Promise<Request> | Request
-  responseFormatter?: (res: Response) => Promise<string> | string
+  responseFormatter?: (res: Response, command: CommandInfo, args: Record<string, string>, options: Record<string, any>) => Promise<string> | string
 }
-${utils}
+${inlinedConfigCode ? '\n' + inlinedConfigCode + '\n' : ''}${utils}
 ${fetchApi}
 
 const _defaultOptions: CLIOptions = ${defaultOpts}

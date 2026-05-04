@@ -484,5 +484,29 @@ export type GalbeCLIOptions = {
     args: Record<string, string>,
     options: Record<string, any>
   ) => MaybePromise<Request>
-  responseFormatter?: (res: Response) => MaybePromise<string>
+  responseFormatter?: (
+    res: Response,
+    command: GalbeCLICommand,
+    args: Record<string, string>,
+    options: Record<string, any>
+  ) => MaybePromise<string>
+}
+
+export type GalbeClientRoute = {
+  method: string
+  path: string
+  operationId: string
+  autoDerived: boolean
+  params: Record<string, { type: string; description?: string }>
+  query: Record<string, { type: string; optional: boolean; description?: string }>
+  headers: Record<string, { type: string; optional: boolean; description?: string }>
+  body: Record<string, STSchema> | null
+  response: STResponse | null
+  summary?: string
+  description?: string
+  tags: string[]
+}
+
+export type GalbeClientOptions = {
+  className?: string
 }

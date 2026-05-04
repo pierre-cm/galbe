@@ -96,20 +96,21 @@ Generate resources around your Galbe application.
 
 ### client
 
-Generate a client for your Galbe application.
+Generate a type-aware HTTP client for your Galbe application.
 
 #### Arguments
 
-| Name  | Description                                               |
-| ----- | --------------------------------------------------------- |
+| Name  | Description                                                |
+| ----- | ---------------------------------------------------------- |
 | index | The js or ts file that exports your Galbe server instance. |
 
 #### Options
 
-| Short | Long     | Description              | Default                            |
-| ----- | -------- | ------------------------ | ---------------------------------- |
-| -o    | --out    | output file              | dist/(client.ts \| client.js)      |
-| -t    | --target | build target [ts, js]    | ts                                 |
+| Short | Long     | Description              | Default                       |
+| ----- | -------- | ------------------------ | ----------------------------- |
+| -o    | --out    | output file              | dist/(client.ts \| client.js) |
+| -t    | --target | build target [ts, js]    | ts                            |
+| -c    | --config | config file (.ts or .js) |                               |
 
 #### Example
 
@@ -121,28 +122,109 @@ $ cd galbe-example
 $ bun install
 ```
 
-To generate a JS or TS client of that application, you can run the following command:
+To generate a JS or TS client of that application, you can run:
 
 ```bash
 $ galbe generate client index.ts
 ```
 
-This will generate a `dist/client.ts` client lib by default.
-You can import it and use it like in the following example:
+This generates `dist/client.ts` by default. The generator prints every method it creates and flags auto-derived names (routes without an explicit `operationId`):
 
-client_example.ts
+```
+💻 Building Galbe client
+
+    + hello        (explicit operationId)
+    ~ get-ping     (auto-derived)
+
+  ! 1 auto-derived operationId(s) — add explicit operationIds to stabilise names
+```
+
+#### API
+
+The generated client exposes three layers:
+
+**Primary (simple, throws on error)**
 
 ```ts
-import HelloClient from './dist/client'
+import { Client } from './dist/client'
 
-const client = new HelloClient({ server: { url: 'http://localhost:3000' } })
+const client = new Client({ server: { url: 'http://localhost:3000' } })
 
-const response = await client.hello('Bob', { query: { age: 42 } })
-// This is equivalent as calling
-// const response = await client.get["/hello/:name"]("Bob", { query: { age: 42 } })
+// Awaiting resolves to the typed body directly.
+// Throws GalbeClientError on non-2xx.
+const users = await client.listUsers({ query: { page: 1 } })
+```
 
-if (response.ok) console.log(await response.body())
-// Hello Bob! You're 42 y.o.
+**`.safe()` (typed errors, no try/catch)**
+
+```ts
+const result = await client.createUser({ name: 'Alice' }).safe()
+
+if (result.ok) {
+  console.log(result.data)         // typed as the 200 schema
+} else if (result.error.status === 400) {
+  console.log(result.error.body)   // typed from the 400 schema
+}
+```
+
+**`$raw` (full response, streaming, headers)**
+
+```ts
+const resp = await client.$raw.getUser('abc')
+
+if (resp.status === 200) {
+  const user = await resp.body.json()   // typed from 200 schema
+  const reqId = resp.headers.get('x-request-id')
+} else {
+  const err = await resp.body.json()    // typed from error schema
+}
+```
+
+**`GalbeClientError`** (thrown by the primary API) carries `.status`, `.headers`, and `.body` (pre-consumed as text).
+
+#### Multiple body content-types
+
+When a route accepts more than one content-type, the generator creates a separate method per content-type:
+
+```ts
+// POST /users accepts both application/json and application/x-www-form-urlencoded
+client.createUserJson({ name: 'Alice' })
+client.createUserUrlForm({ name: 'Alice' })
+```
+
+#### Runtime config
+
+```ts
+new Client({
+  server:  { url: 'http://localhost:3000' },
+  headers: { 'x-api-key': 'secret' },        // default headers on every request
+  fetch:   myCustomFetch,                     // override fetch (interceptors, mocking, retry)
+})
+```
+
+#### Config file
+
+Pass `--config <file>` to customise what is generated. The file can export two named values:
+
+- **`transform`** — receives `GalbeClientRoute[]` (all routes, pre-split by content-type) and returns the modified array. Runs after plugin hooks.
+- **`options`** — generation-time options baked into the generated output.
+
+```ts
+// client.config.ts
+import type { GalbeClientRoute, GalbeClientOptions } from 'galbe/extras'
+
+export const transform = (routes: GalbeClientRoute[]): GalbeClientRoute[] =>
+  routes
+    .filter(r => !r.tags.includes('internal'))
+    .map(r => ({ ...r, operationId: r.operationId.replace(/^get-/, '') }))
+
+export const options: GalbeClientOptions = {
+  className: 'MyAppClient',
+}
+```
+
+```bash
+$ galbe generate client index.ts --config client.config.ts
 ```
 
 ### cli

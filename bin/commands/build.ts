@@ -8,7 +8,7 @@ import { mkdir, rm, exists } from 'fs/promises'
 import { CWD, fmtVal, silentExec } from '../util'
 import { Galbe } from '../../src'
 import { defineRoutes, GalbeProxy } from '../../src/routes'
-import { BuildConfig } from 'bun'
+import type { BuildConfig } from 'bun'
 import { cpSync, existsSync } from 'fs'
 import { softMerge } from '../../src/util'
 
@@ -110,7 +110,7 @@ export default (cmd: Command) => {
         buildIndex = await createBuildIndex(index, g, buildID, outPath)
       } catch (errors) {
         console.log(`\nerror: build errors`)
-        for (let error of errors) console.log(error)
+        for (let error of errors as any[]) console.log(error)
         return process.exit(1)
       }
       if (!buildIndex) {

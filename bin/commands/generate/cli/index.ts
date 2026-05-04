@@ -1,9 +1,9 @@
 import { Command, Option } from 'commander'
 import { resolve } from 'path'
 import { CWD, fmtList, instanciateRoutes, silentExec, abbreviateVar } from '../../../util'
-import { $T, Galbe, GalbeCLICommand, GalbeCLIOptions } from '../../../../src'
+import { $T, Galbe, type GalbeCLICommand, type GalbeCLIOptions } from '../../../../src'
 import { walkRoutes } from '../../../../src/util'
-import { schemaToTypeStr, Optional, STSchema } from '../../../../src/schema'
+import { schemaToTypeStr, Optional, type STSchema } from '../../../../src/schema'
 
 const cliTargets = ['cac']
 const cliModes = ['standalone', 'module']
@@ -82,11 +82,11 @@ export default (cmd: Command) => {
         const params = Object.fromEntries(
           [...r.path.matchAll(/:([^\/]+)/g)]?.map(m => [
             m?.[1],
-            r.schema?.params?.[m?.[1]]
+            (r.schema?.params as Record<string, STSchema>)?.[m[1]]
               ? {
-                  type: schemaToTypeStr(r.schema.params[m[1]]),
-                  ...(r.schema.params[m[1]]?.description
-                    ? { description: r.schema.params[m[1]].description as string }
+                  type: schemaToTypeStr((r.schema.params as Record<string, STSchema>)[m[1]]),
+                  ...((r.schema.params as Record<string, STSchema>)[m[1]]?.description
+                    ? { description: (r.schema.params as Record<string, STSchema>)[m[1]].description as string }
                     : {}),
                 }
               : { type: 'string' },
@@ -99,13 +99,13 @@ export default (cmd: Command) => {
           description: summary || description,
           route: r,
           pathT,
-          arguments: Object.entries(
-            (params || {}) as Record<string, { type: string; description?: string }>
-          ).map(([k, p]) => ({
-            name: k,
-            type: p.type === 'boolean' ? '' : `<${p.type}>`,
-            description: p?.description || '',
-          })),
+          arguments: Object.entries((params || {}) as Record<string, { type: string; description?: string }>).map(
+            ([k, p]) => ({
+              name: k,
+              type: p.type === 'boolean' ? '' : `<${p.type}>`,
+              description: p?.description || '',
+            })
+          ),
           options: Object.entries((r.schema?.query || {}) as Record<string, STSchema>).map(([k, o]) => {
             const type = schemaToTypeStr({ ...o, [Optional]: false })
             return {
@@ -147,7 +147,14 @@ export default (cmd: Command) => {
 
       if (target === 'cac') {
         const { generate } = await import('./targets/cac')
-        await generate({ commands, mode, out, pckg, options: userOptions })
+        await generate({
+          commands,
+          mode,
+          out,
+          pckg,
+          options: userOptions,
+          configPath: config ? resolve(CWD, config) : undefined,
+        })
       }
 
       Bun.write(Bun.stdout, ' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')

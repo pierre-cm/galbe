@@ -110,7 +110,7 @@ export default class GalbeClient {
                 text: 'text/plain',
                 json: 'application/json',
                 urlForm: 'application/x-www-form-urlencoded',
-              }[options.contentType],
+              }[options.contentType as 'byteArray' | 'text' | 'json' | 'urlForm'],
             }
           : {}),
         ...(options?.headers || {}),

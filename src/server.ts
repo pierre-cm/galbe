@@ -171,7 +171,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
 
         const parsedResponse = responseParser(response, context as Context, cookies, schema.response)
 
-        if (galbe.config?.responseValidator?.enabled !== false && schema.response)
+        if (galbe.config?.responseValidator?.enabled !== false && schema.response && !(response instanceof Response))
           validateResponse(response, schema.response, parsedResponse.status || 200)
 
         for (const p of pluginsCb.afterHandle) {

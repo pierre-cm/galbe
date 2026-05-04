@@ -125,7 +125,7 @@ export default (cmd: Command) => {
           FROM information_schema.tables
           WHERE table_schema = '${schema}'
           AND table_type = 'BASE TABLE'`)
-        tables = r.map(r => r.table_name)
+        tables = r.map((r: Record<string, string>) => r.table_name)
       }
 
       for (const tableName of tables) {
@@ -133,7 +133,7 @@ export default (cmd: Command) => {
           FROM information_schema.columns
           WHERE table_schema = '${schema}' AND table_name = '${tableName}'`)
         types[tableName] = `type ${toPascalCase(tableName)} = {\n${t
-          .map(r => `  ${r.column_name}: ${TYPE_MAP?.[r.data_type] ?? 'any'}${r.is_nullable ? ' | null' : ''}`)
+          .map((r: Record<string, string>) => `  ${r.column_name}: ${TYPE_MAP?.[r.data_type] ?? 'any'}${r.is_nullable ? ' | null' : ''}`)
           .join(';\n')}\n}`
       }
 
