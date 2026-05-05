@@ -177,7 +177,7 @@ function generateSingleCommand(c: GalbeCLICommand, cliVar: string, includeTag: b
     .map(o => {
       const cleanName = sanitizeOptionName(o.name)
       const short = o.short && !builtinShorts.has(o.short) ? `-${o.short}, ` : ''
-      const optType = o.type || '[string]'
+      const optType = o.type != null ? o.type : '[string]'
       const defVal = o.default !== undefined ? `, { default: ${serializeValue(o.default)} }` : ''
       return `  .option('${short}--${cleanName} ${optType}', ${JSON.stringify(o.description || o.name)}${defVal})`
     })
