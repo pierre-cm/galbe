@@ -2,7 +2,8 @@ import { $ } from 'bun'
 import { devNull } from 'os'
 import { Command, Option } from 'commander'
 import { resolve, relative, extname } from 'path'
-import { exists, readFile } from 'fs/promises'
+import { readFile } from 'fs/promises'
+import { existsSync } from 'fs'
 
 import { CWD, fmtList, fmtVal } from '../../util'
 import { applyPlan, planFromOapi, type GenerationPlan } from './code/openapi.parser'
@@ -114,10 +115,17 @@ export default (cmd: Command) => {
       const outDir = resolve(CWD, out)
 
       // Compute per-scope merge result.
-      const mergeResults: { scopeKey: string; content: string; added: RouteId[]; updated: RouteId[]; removed: RouteId[]; stale: RouteId[] }[] = []
+      const mergeResults: {
+        scopeKey: string
+        content: string
+        added: RouteId[]
+        updated: RouteId[]
+        removed: RouteId[]
+        stale: RouteId[]
+      }[] = []
       for (const scope of plan.scopes) {
         const routePath = resolve(outDir, `${scope.routeFile}.${target}`)
-        const existing = (await exists(routePath)) ? await readFile(routePath, 'utf-8') : null
+        const existing = existsSync(routePath) ? await readFile(routePath, 'utf-8') : null
         const r = mergeRouteFile(existing, scope, mergeOpts)
         mergeResults.push({ scopeKey: scope.scopeKey, ...r })
       }

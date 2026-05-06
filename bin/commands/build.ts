@@ -3,7 +3,7 @@ import { $ } from 'bun'
 import { Command, Option } from 'commander'
 import { resolve, relative, dirname } from 'path'
 import { tmpdir } from 'os'
-import { mkdir, rm, exists } from 'fs/promises'
+import { mkdir, rm } from 'fs/promises'
 
 import { CWD, fmtVal, silentExec } from '../util'
 import { Galbe } from '../../src'
@@ -20,7 +20,7 @@ const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string, ou
   if (existsSync(`${indexDir}/galbe.config.ts`)) configPath = `${indexDir}/galbe.config.ts`
   else if (existsSync(`${indexDir}/galbe.config.js`)) configPath = `${indexDir}/galbe.config.js`
 
-  const routes = new Map<string, { filepath: string, static?: { path: string, root: string } }>()
+  const routes = new Map<string, { filepath: string; static?: { path: string; root: string } }>()
   let errors: any[] = []
   // Create GalbeProxy here
   // use it to define routes
@@ -45,8 +45,10 @@ const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string, ou
 
   let buildIndex =
     `import galbe from '${relative(buildPath, indexPath)}';\n` +
-    (configPath ? `import config from '${relative(buildPath, configPath)}';\n` : '') + 
-    (configPath ? `import {softMerge} from '${relative(buildPath, `${indexDir}/node_modules/galbe/src/util`)}';\n` : '') +
+    (configPath ? `import config from '${relative(buildPath, configPath)}';\n` : '') +
+    (configPath
+      ? `import {softMerge} from '${relative(buildPath, `${indexDir}/node_modules/galbe/src/util`)}';\n`
+      : '') +
     (configPath ? `let conf = galbe.config;\ngalbe.config = softMerge(config, conf)\n` : '') +
     `${[...routes.values()].map((r, idx) => `import _${idx} from '${relative(buildPath, r.filepath)}'`).join(';\n')}\n` +
     `Bun.env.BUN_ENV = 'production';\n` +
@@ -86,7 +88,7 @@ export default (cmd: Command) => {
 
       const bunfig = config ? (await import(resolve(CWD, config)))?.default || {} : {}
 
-      if(await exists(outPath)) await rm(outPath, { recursive: true })
+      if (existsSync(outPath)) await rm(outPath, { recursive: true })
 
       let error = null
       Bun.write(Bun.stdout, '📦 \x1b[1;30mBuilding \x1b[36mGalbe\x1b[0m\x1b[1;30m app\x1b[0m')
@@ -134,7 +136,7 @@ export default (cmd: Command) => {
         console.log(...bo.logs)
       }
       if (compile) {
-        await $`bun build --compile ${resolve(CWD, out, 'index.js')} --outfile ${outPath}/bin`
+        await $`bun build --compile --minify --sourcemap --bytecode ${resolve(CWD, out, 'index.js')} --outfile ${outPath}/bin`
       }
 
       await rm(dirname(buildIndex), { recursive: true })

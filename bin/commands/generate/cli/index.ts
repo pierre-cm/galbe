@@ -157,7 +157,7 @@ export default (cmd: Command) => {
         })
       }
 
-      Bun.write(Bun.stdout, ' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')
+      Bun.write(Bun.stdout, ` : \x1b[1;30m\x1b[32mdone\x1b[0m\nCLI ${mode} generated at ${out}\n`)
       process.exit(0)
     })
 }

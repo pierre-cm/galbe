@@ -35,7 +35,7 @@ const overloadDiscriminer = <
   P extends Partial<STParams<Path>>,
   Q extends STQuery,
   B extends STBody,
-  R extends STResponse
+  R extends STResponse,
 >(
   galbe: Galbe,
   method: M,
@@ -69,7 +69,7 @@ const galbeMethod = <
   P extends Partial<STParams<Path>>,
   Q extends STQuery,
   B extends STBody,
-  R extends STResponse
+  R extends STResponse,
 >(
   _galbe: Galbe,
   method: M,
@@ -130,7 +130,7 @@ export class Galbe {
   stopCb: (() => void)[] = []
   errorCb: ErrorHandler[] = []
   listening: boolean = false
-  server?: Server
+  server?: Server<any>
   plugins: GalbePlugin[] = []
   constructor(config?: GalbeConfig) {
     this.config = config ?? {}
@@ -186,7 +186,7 @@ export class Galbe {
     H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
-    R extends STResponse
+    R extends STResponse,
   >(
     path: Path,
     arg2:
@@ -205,7 +205,7 @@ export class Galbe {
     H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
-    R extends STResponse
+    R extends STResponse,
   >(
     path: Path,
     arg2:
@@ -223,7 +223,7 @@ export class Galbe {
     H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
-    R extends STResponse
+    R extends STResponse,
   >(
     path: Path,
     arg2:
@@ -241,7 +241,7 @@ export class Galbe {
     H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
-    R extends STResponse
+    R extends STResponse,
   >(
     path: Path,
     arg2:
@@ -259,7 +259,7 @@ export class Galbe {
     H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
-    R extends STResponse
+    R extends STResponse,
   >(
     path: Path,
     arg2:
@@ -277,7 +277,7 @@ export class Galbe {
     H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
-    R extends STResponse
+    R extends STResponse,
   >(
     path: Path,
     arg2:
@@ -295,7 +295,7 @@ export class Galbe {
     H extends STHeaders,
     Q extends STQuery,
     B extends STBody,
-    R extends STResponse
+    R extends STResponse,
   >(
     path: Path,
     arg2:

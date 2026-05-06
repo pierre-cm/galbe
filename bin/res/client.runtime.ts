@@ -1,4 +1,5 @@
 // Inlined into the generated client — no exports
+import type { BodyInit } from 'bun'
 
 type GalbeClientConfig = {
   server?: { url?: string }
@@ -120,9 +121,7 @@ class GalbeRequest<T, E = any> {
     return this.#getMain().then(onfulfilled, onrejected)
   }
 
-  catch<R = never>(
-    onrejected?: ((reason: any) => R | PromiseLike<R>) | null
-  ): Promise<T | R> {
+  catch<R = never>(onrejected?: ((reason: any) => R | PromiseLike<R>) | null): Promise<T | R> {
     return this.#getMain().then(undefined, onrejected)
   }
 

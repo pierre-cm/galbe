@@ -1,4 +1,4 @@
-import type { ServeOptions, SocketAddress, TLSOptions, TLSServeOptions } from 'bun'
+import type { Serve, SocketAddress, TLSOptions } from 'bun'
 import type {
   STAny,
   STArray,
@@ -140,7 +140,7 @@ export type GalbeConfig = {
   basePath?: string
   /** Enable or disable TLS support. */
   tls?: TLSOptions
-  server?: Exclude<ServeOptions, 'port'> | TLSServeOptions
+  server?: Exclude<Serve.Options<any>, 'port'> | TLSOptions
   /** A Glob Pattern or a list of Glob patterns defining the route files to be analyzed by the Automatic Route Analyzer. */
   routes?: boolean | string | string[]
   router?: { cacheEnabled: boolean }
@@ -343,7 +343,7 @@ export class RequestError extends Error {
     const message =
       typeof options.payload === 'string'
         ? options.payload
-        : HttpStatus[status as keyof typeof HttpStatus] ?? 'Request Error'
+        : (HttpStatus[status as keyof typeof HttpStatus] ?? 'Request Error')
     super(message)
     this.name = new.target?.name ?? 'RequestError'
     this.status = status
