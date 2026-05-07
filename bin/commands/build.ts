@@ -55,7 +55,9 @@ const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string, ou
     `Bun.env.GALBE_BUILD = '${buildId}';\n` +
     `galbe.meta = ${JSON.stringify(g.meta)};\n` +
     `${[...routes].map((_, idx) => `_${idx}(galbe)`).join(';\n')};\n` +
-    `galbe.listen();\n`
+    `galbe.listen();\n` +
+    `process.on('SIGTERM', () => galbe.stop());\n` +
+    `process.on('SIGINT', () => galbe.stop());\n`
 
   await Bun.write(resolve(buildPath, 'index.ts'), buildIndex)
 
