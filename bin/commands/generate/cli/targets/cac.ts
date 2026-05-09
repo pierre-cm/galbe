@@ -511,7 +511,12 @@ ${fetchApiSignature}
     ...(bodyData !== undefined ? { body: bodyData } : {}),
   })
 
-  if (${interceptorRef}) req = await ${interceptorRef}(req, command, cliArgs, cliOptions)
+  if (${interceptorRef}) {
+    try { req = await ${interceptorRef}(req, command, cliArgs, cliOptions) } catch (e: any) {
+      console.error(_ansi(true, '31', \`error: \${e?.message ?? e}\`))
+      process.exit(1)
+    }
+  }
 
   let _res: Response | undefined
   let _resClone: Response | undefined
@@ -522,7 +527,10 @@ ${fetchApiSignature}
     const elapsed = (Bun.nanoseconds() - t0) / 1_000_000
 
     if (${formatterRef}) {
-      Bun.write(Bun.stdout, await ${formatterRef}(_res, command, cliArgs, cliOptions))
+      try { Bun.write(Bun.stdout, await ${formatterRef}(_res, command, cliArgs, cliOptions)) } catch (e: any) {
+        console.error(_ansi(true, '31', \`error: \${e?.message ?? e}\`))
+        process.exit(1)
+      }
     } else {
       if (fmt.has('s')) Bun.write(Bun.stdout, \`\${_res.status}\\n\`)
       if (fmt.has('h')) Bun.write(Bun.stdout, _fmtObject(_headersToObj(_res.headers), fmt.has('p')) + '\\n')
