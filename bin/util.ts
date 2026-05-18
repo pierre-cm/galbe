@@ -1,5 +1,5 @@
 import { relative } from 'path'
-import { watch } from 'chokidar'
+import { watch } from 'fs'
 import { Galbe, type Route } from '../src'
 import { logRoute, walkRoutes } from '../src/util'
 import { GalbeProxy, type RouteMeta, defineRoutes } from '../src/routes'
@@ -47,14 +47,11 @@ export const watchDir = async (
   }) => any | Promise<any>,
   options?: { ignore?: RegExp }
 ) => {
-  let watcher = watch(path, {
-    persistent: false,
-    ignored: options?.ignore,
-    ignoreInitial: true,
-  })
-  watcher.on('all', async (eventType, filename) => {
-    if (filename.match(WATCH_IGNORE)) return
-    await callback({ path: filename.toString(), eventType })
+  watch(path, { persistent: false, recursive: true }, async (eventType, filename) => {
+    const filePath = filename?.toString() ?? null
+    if (!filePath || filePath.match(WATCH_IGNORE)) return
+    if (options?.ignore && filePath.match(options.ignore)) return
+    await callback({ path: filePath, eventType: eventType === 'change' ? 'change' : 'add' })
   })
 }
 export const instanciateRoutes = async (g: Galbe) => {
