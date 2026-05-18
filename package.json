@@ -35,12 +35,11 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
-    "release": "release-it"
+    "release": "bun run scripts/release.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "openapi-types": "^12.1.3",
-    "release-it": "^17.1.1"
+    "openapi-types": "^12.1.3"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
@@ -52,17 +51,5 @@
     "acorn-walk": "^8.3.0",
     "chokidar": "^3.6.0",
     "commander": "^11.1.0"
-  },
-  "release-it": {
-    "git": {
-      "pushRepo": "git@github.com:pierre-cm/galbe.git"
-    },
-    "github": {
-      "requireBranch": "main",
-      "release": "true"
-    },
-    "npm": {
-      "publish": false
-    }
   }
 }

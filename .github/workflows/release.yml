@@ -39,6 +39,6 @@ jobs:
       - name: Install dependencies
         run: bun install
       - name: Release
-        run: bun run release --increment $RELEASE_SCOPE --ci --no-git.requireCleanWorkingDir
+        run: bun run release --scope $RELEASE_SCOPE --ci
       - name: Publish to npm
         run: npm publish --provenance
