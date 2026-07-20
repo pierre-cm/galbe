@@ -31,11 +31,19 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
     galbe.config.basePath = `/${galbe?.config?.basePath}`
   let pluginsCb = setupPluginCallbacks(galbe)
 
+  // config.server is passed through to Bun.serve; port/fetch/error are owned by
+  // Galbe and the dedicated config keys (port, hostname, reusePort, tls) win
+  const serverOptions: Record<string, any> = { ...galbe.config?.server }
+  delete serverOptions.port
+  delete serverOptions.fetch
+  delete serverOptions.error
+
   const server = Bun.serve({
+    ...serverOptions,
     port: port || galbe.config?.port || 3000,
-    reusePort: galbe?.config?.reusePort,
-    hostname: hostname || galbe.config?.hostname || 'localhost',
-    tls: galbe.config?.tls,
+    reusePort: galbe?.config?.reusePort ?? serverOptions.reusePort,
+    hostname: hostname || galbe.config?.hostname || serverOptions.hostname || 'localhost',
+    tls: galbe.config?.tls ?? serverOptions.tls,
 
     async fetch(req) {
       if (!METHODS.includes(req.method)) return new Response('', { status: 501 })
@@ -79,9 +87,11 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
 
         // parse request
         const schema = route.schema
-        const inHeaders: Record<string, any> = {}
+        // null-prototype maps: keys are untrusted, a plain {} would collide with
+        // Object.prototype members (constructor, __proto__, toString, …)
+        const inHeaders: Record<string, any> = Object.create(null)
         for (let [k, v] of req.headers) inHeaders[k] = v
-        let inQuery: Record<string, any> = {}
+        let inQuery: Record<string, any> = Object.create(null)
         for (let [k, v] of url.searchParams) {
           if (k in inQuery) {
             const cur = inQuery[k]
@@ -184,8 +194,12 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
       } catch (error) {
         context.set.status = error instanceof RequestError ? error.status : 500
         let customError
-        for (let eh of galbe.errorCb)
-          customError = responseParser(eh(error, context as Context), context as Context, cookies)
+        for (let eh of galbe.errorCb) {
+          const result = await eh(error, context as Context)
+          if (result === undefined) continue
+          customError = responseParser(result, context as Context, cookies)
+          break
+        }
         if (customError) return customError
         if (error instanceof InternalServerError) {
           let internalPayload = 'Internal Server Error'

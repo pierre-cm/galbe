@@ -140,7 +140,8 @@ export type GalbeConfig = {
   basePath?: string
   /** Enable or disable TLS support. */
   tls?: TLSOptions
-  server?: Exclude<Serve.Options<any>, 'port'> | TLSOptions
+  /** Extra options passed through to `Bun.serve` (e.g. `maxRequestBodySize`, `idleTimeout`). `port`, `fetch` and `error` are ignored, and the dedicated `hostname`, `reusePort` and `tls` config keys take precedence. */
+  server?: Partial<Omit<Serve.Options<any>, 'port' | 'fetch' | 'error'>> | TLSOptions
   /** A Glob Pattern or a list of Glob patterns defining the route files to be analyzed by the Automatic Route Analyzer. */
   routes?: boolean | string | string[]
   router?: { cacheEnabled: boolean }

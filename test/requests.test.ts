@@ -94,6 +94,13 @@ describe('requests', () => {
     galbe.post('/form', { body: { 'application/x-www-form-urlencoded': $T.object() } }, handleBody)
     galbe.post('/mp', { body: { 'multipart/form-data': $T.multipartForm() } }, handleBody)
 
+    // schema-less echo routes for the "built-in property keys" tests below
+    galbe.get('/builtins/query', ctx => ctx.query)
+    galbe.post('/builtins/form', ctx => ctx.body)
+    galbe.post('/builtins/mp', ctx =>
+      Object.fromEntries(Object.entries(ctx.body as Record<string, any>).map(([k, v]) => [k, v.content]))
+    )
+
     galbe.post('/stream/ba', { body: { 'application/octet-stream': $T.stream($T.byteArray()) } }, handleBody)
     galbe.post('/stream/str', { body: { 'text/plain': $T.stream($T.string()) } }, handleBody)
     galbe.post('/stream/form', { body: { 'application/x-www-form-urlencoded': $T.stream($T.object()) } }, async ctx => {
@@ -913,5 +920,62 @@ describe('requests', () => {
       else if (expected.resp instanceof RegExp) expect(respBody.content).toMatch(expected.resp)
       else expect(respBody.content).toEqual(expected.resp)
     }
+  })
+
+  // Keys named after Object.prototype members (constructor, __proto__,
+  // toString, …) must behave like any other key and never touch globals.
+  describe('built-in property keys', () => {
+    test('query params', async () => {
+      const resp = await fetch(`http://localhost:${port}/builtins/query?constructor=zz&toString=b&hasOwnProperty=h&__proto__=p`)
+      expect(resp.status).toBe(200)
+      const body: any = await resp.json()
+      expect(body.constructor).toBe('zz')
+      expect(body.toString).toBe('b')
+      expect(body.hasOwnProperty).toBe('h')
+      expect(Object.getOwnPropertyDescriptor(body, '__proto__')?.value).toBe('p')
+    })
+
+    test('headers', async () => {
+      const resp = await fetch(`http://localhost:${port}/headers`, {
+        headers: [
+          ['constructor', 'zz'],
+          ['__proto__', 'pp'],
+        ],
+      })
+      expect(resp.status).toBe(200)
+      const body: any = await resp.json()
+      expect(body.constructor).toBe('zz')
+      expect(Object.getOwnPropertyDescriptor(body, '__proto__')?.value).toBe('pp')
+    })
+
+    test('urlForm fields', async () => {
+      const resp = await fetch(`http://localhost:${port}/builtins/form`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: 'constructor=x&constructor=y&toString=t&__proto__=p',
+      })
+      expect(resp.status).toBe(200)
+      const body: any = await resp.json()
+      expect(body.constructor).toEqual(['x', 'y'])
+      expect(body.toString).toBe('t')
+      expect(Object.getOwnPropertyDescriptor(body, '__proto__')?.value).toBe('p')
+    })
+
+    test('multipart field names', async () => {
+      const form = new FormData()
+      form.append('constructor', 'x')
+      form.append('constructor', 'y')
+      form.append('toString', 't')
+      form.append('__proto__', 'p')
+      const resp = await fetch(`http://localhost:${port}/builtins/mp`, { method: 'POST', body: form })
+      expect(resp.status).toBe(200)
+      const body: any = await resp.json()
+      expect(body.constructor).toEqual(['x', 'y'])
+      expect(body.toString).toBe('t')
+      expect(Object.getOwnPropertyDescriptor(body, '__proto__')?.value).toBe('p')
+      // a field named `constructor` used to mutate the global Object function
+      expect((Object as any).content).toBeUndefined()
+      expect(({} as any).x).toBeUndefined()
+    })
   })
 })

@@ -55,6 +55,7 @@ describe('responses', () => {
     galbe.post('/json/num', { response: { 200: $T.json($T.number()) } }, handleResp)
     galbe.post('/json/str', { response: { 200: $T.json($T.string()) } }, handleResp)
     galbe.post('/json/obj', { response: { 200: $T.json($T.object()) } }, handleResp)
+    galbe.get('/json/str/escape', { response: { 200: $T.json($T.string()) } }, () => 'He said "hi" and \\ ran\noff')
     galbe.post('/arr', { response: { 200: $T.array() } }, handleResp)
     galbe.post('/obj', { response: { 200: $T.object() } }, handleResp)
     galbe.post('/stream/ba', { response: { 200: $T.stream($T.byteArray()) } }, ctx =>
@@ -481,6 +482,17 @@ describe('responses', () => {
 
     expect(resp.status).toBe(500)
   })
+
+  // a string response under a JSON schema must be valid JSON (quotes,
+  // backslashes, newlines escaped — previously wrapped as `"${response}"`)
+  test('response, json string with special chars is valid JSON', async () => {
+    const resp = await fetch(`http://localhost:${port}/json/str/escape`)
+    expect(resp.status).toBe(200)
+    expect(resp.headers.get('content-type')).toBe('application/json')
+    const text = await resp.text()
+    expect(() => JSON.parse(text)).not.toThrow()
+    expect(JSON.parse(text)).toBe('He said "hi" and \\ ran\noff')
+  })
 })
 
 describe('raw Response return parity with ctx.set', () => {
@@ -511,6 +523,13 @@ describe('raw Response return parity with ctx.set', () => {
     galbe.get('/ctx/json-201', { response: { 201: $T.json($T.object()) } }, (ctx: Context) => {
       ctx.set.status = 201
       return { foo: 'bar' }
+    })
+
+    // ctx.set side effects must survive a raw Response return
+    galbe.get('/raw/ctx-set', (ctx: Context) => {
+      ctx.set.cookie('a', 'b')
+      ctx.set.headers['x-custom'] = 'yes'
+      return new Response('ok', { headers: { 'x-kept': '1' } })
     })
 
     await galbe.listen(portRaw)
@@ -551,5 +570,17 @@ describe('raw Response return parity with ctx.set', () => {
     const resp = await fetch(`http://localhost:${portRaw}/ctx/json-201`)
     expect(resp.status).toBe(201)
     expect(await resp.json()).toEqual({ foo: 'bar' })
+  })
+
+  // A raw Response used to bypass ctx.set entirely: cookies and headers queued
+  // on the context were silently dropped.
+  test('return raw Response — ctx.set cookies and headers are merged, existing headers kept', async () => {
+    const resp = await fetch(`http://localhost:${portRaw}/raw/ctx-set`)
+    expect(resp.status).toBe(200)
+    expect(await resp.text()).toBe('ok')
+    expect(resp.headers.get('x-kept')).toBe('1')
+    expect(resp.headers.get('x-custom')).toBe('yes')
+    const cookies = resp.headers.getSetCookie?.() ?? []
+    expect(cookies.some((c: string) => c.startsWith('a=b'))).toBe(true)
   })
 })

@@ -3,6 +3,10 @@ import { MethodNotAllowedError, NotFoundError } from './types'
 
 const ROUTE_REGEX = /^(\/(\*|:?\d+|:?\w+|:?[\w\d.][\w-.]+[\w\d]))*\/?$/
 
+// null-prototype map: segments are looked up with `in`, a plain {} would collide
+// with Object.prototype members (constructor, __proto__, toString, …)
+const newChildren = (): Record<string, RouteNode> => Object.create(null)
+
 const walk = (path: string[], node: RouteNode, index: number = 0): RouteNode => {
   if (index === path.length - 1) {
     if (node.routes && !!Object.keys(node.routes).length) return node
@@ -83,7 +87,7 @@ export class GalbeRouter {
             if (!r.param) r.param = { routes: {} }
             r.param.routes[route.method] = route
           } else {
-            if (!r.children) r.children = {}
+            if (!r.children) r.children = newChildren()
             if (!(p in r.children)) r.children[p] = { routes: {} }
             r.children[p].routes[route.method] = route
           }
@@ -92,7 +96,7 @@ export class GalbeRouter {
             if (!r.param) r.param = { routes: {} }
             r = r.param
           } else {
-            if (!r.children) r.children = {}
+            if (!r.children) r.children = newChildren()
             if (!(p in r.children)) r.children[p] = { routes: {} }
             r = r.children[p]
           }

@@ -302,4 +302,27 @@ describe('router', () => {
     const route2 = router2.find('get', '/a/b/e')
     expect(route2.path).toBe('/:p/b/e')
   })
+
+  // Segments named after Object.prototype members must route like any other
+  // segment and never write onto globals (children maps are null-prototype).
+  test('path segments named after Object.prototype members', async () => {
+    const galbe = new Galbe()
+    const router = galbe.router
+
+    galbe.get('/constructor/x', () => 'cx')
+    galbe.get('/toString/:p', () => 'ts')
+    galbe.get('/__proto__', () => 'proto')
+
+    expect(router.find('get', '/constructor/x').path).toBe('/constructor/x')
+    expect(router.find('get', '/toString/hello').path).toBe('/toString/:p')
+    expect(router.find('get', '/__proto__').path).toBe('/__proto__')
+    expect(() => router.find('get', '/constructor')).toThrow(NotFoundError)
+    expect(() => router.find('get', '/valueOf')).toThrow(NotFoundError)
+    expect(() => router.find('get', '/hasOwnProperty/x')).toThrow(NotFoundError)
+
+    // walking the trie used to set .children/.routes on the global Object function
+    expect((Object as any).children).toBeUndefined()
+    expect((Object as any).routes).toBeUndefined()
+    expect(Object.keys(Object.prototype)).toEqual([])
+  })
 })

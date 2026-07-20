@@ -25,6 +25,11 @@ import { isIterator, inferBodyType, type ParseMode } from './util'
 const textDecoder = new TextDecoder()
 const textEncoder = new TextEncoder()
 
+// own-property schema lookup: field names come from the request and would
+// otherwise hit Object.prototype members (constructor, toString, …)
+const getProp = <T extends Record<string, any>>(props: T | undefined, key: string): T[string] | undefined =>
+  props && Object.hasOwn(props, key) ? props[key] : undefined
+
 async function* rsToAsyncIterator(readableStream: ReadableStream) {
   try {
     for await (const chunk of readableStream) yield chunk
@@ -201,7 +206,12 @@ export const requestBodyParser = async (
   }
 }
 async function* $streamToString(body: ReadableStream) {
-  for await (const chunk of body) yield textDecoder.decode(chunk)
+  // per-call decoder: streaming decode is stateful (multibyte code points can
+  // straddle chunks), so the shared module-level decoder must not be used here
+  const decoder = new TextDecoder()
+  for await (const chunk of body) yield decoder.decode(chunk, { stream: true })
+  const tail = decoder.decode()
+  if (tail) yield tail
 }
 const streamToString = async (body: ReadableStream, schema?: STBodyValue): Promise<any> => {
   let res = ''
@@ -232,7 +242,7 @@ async function* $streamToUrlForm(
           decodeURIComponent(textDecoder.decode(bV)),
         ]
         try {
-          const propSchema = schema?.props?.[key]
+          const propSchema = getProp(schema?.props, key)
           let s = propSchema?.[Kind] === 'array' ? (propSchema as STArray).items : propSchema
           val = s ? paramParser(val, s) : val
         } catch (error) {
@@ -264,7 +274,7 @@ async function* $streamToUrlForm(
     decodeURIComponent(textDecoder.decode(rest)),
   ]
   try {
-    const propSchema = schema?.props?.[key]
+    const propSchema = getProp(schema?.props, key)
     let s = propSchema?.[Kind] === 'array' ? (propSchema as STArray).items : propSchema
     val = s ? paramParser(val, s) : val
   } catch (error) {
@@ -290,20 +300,21 @@ const streamToUrlForm = async (body: ReadableStream<Uint8Array>, schema?: STObje
   const required = Object.fromEntries(
     Object.entries(schema?.props || {}).filter(([_, v]: [string, any]) => !v?.[Optional])
   )
-  let errors: Record<string, any> = {}
+  let errors: Record<string, any> = Object.create(null)
   for await (const chunk of $streamToUrlForm(body)) entries.push(chunk)
-  const object: Record<string, any> = {}
+  const object: Record<string, any> = Object.create(null)
   for (let e of entries.filter(([k]) => k)) {
     if (e[0] in object) {
       if (Array.isArray(object[e[0]])) object[e[0]].push(e[1])
       else object[e[0]] = [object[e[0]], e[1]]
-    } else object[e[0]] = schema?.props?.[e[0]]?.[Kind] === 'array' ? [e[1]] : e[1]
+    } else object[e[0]] = getProp(schema?.props, e[0])?.[Kind] === 'array' ? [e[1]] : e[1]
   }
   if (schema?.props)
     for (let [k, v] of Object.entries(object)) {
       delete required[k]
       try {
-        object[k] = schema?.props && k in schema?.props ? paramParser(v, schema?.props[k]) : v
+        const propSchema = getProp(schema.props, k)
+        object[k] = propSchema ? paramParser(v, propSchema) : v
       } catch (error) {
         errors[k] = k in errors ? [...errors[k], error] : error
       }
@@ -432,7 +443,7 @@ const parseMultipartHeader = (header: string): { name: string; [key: string]: st
     }
     acc[key] = v[2]
     return acc
-  }, {})
+  }, Object.create(null))
   if (disposition !== 'form-data') return null
   //@ts-ignore
   return multipartHeader
@@ -446,10 +457,10 @@ const parseMultipartContent = (
   let result: any = content
   if (type === 'text/plain') {
     const str = textDecoder.decode(content).trim()
-    let s = schema?.props?.[headers.name]
+    let s = getProp(schema?.props, headers.name)
     return s ? paramParser(str, s?.[Kind] === 'array' ? s?.items : s) : str
   } else if (type === 'application/json') {
-    if (!schema?.props || !(headers.name in schema?.props)) {
+    if (!schema?.props || !Object.hasOwn(schema.props, headers.name)) {
       try {
         result = JSON.parse(textDecoder.decode(content).trim())
       } catch (err: any) {
@@ -481,19 +492,21 @@ const parseMultipartContent = (
         })
       }
     }
-  } else if (schema?.props?.[headers.name]) {
-    try {
-      let s = schema?.props[headers.name]
-      validate(result, s?.[Kind] === 'array' ? s?.items : s)
-    } catch (err) {
-      throw new RequestError({ status: 400, payload: { body: { [headers.name]: err } } })
+  } else {
+    const s = getProp(schema?.props, headers.name)
+    if (s) {
+      try {
+        validate(result, s[Kind] === 'array' ? s.items : s)
+      } catch (err) {
+        throw new RequestError({ status: 400, payload: { body: { [headers.name]: err } } })
+      }
     }
   }
   return result
 }
 const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary: string, schema?: STMultipartForm) => {
-  const res: Record<string, MultipartFormData> = {}
-  const errors: Record<string, any> = {}
+  const res: Record<string, MultipartFormData> = Object.create(null)
+  const errors: Record<string, any> = Object.create(null)
   const required = Object.fromEntries(
     Object.entries(schema?.props || {}).filter(([_, v]: [string, any]) => !v?.[Optional])
   )
@@ -503,13 +516,13 @@ const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary:
         res[chunk.headers.name].content = [res[chunk.headers.name].content]
       res[chunk.headers.name].content.push(chunk.content)
     } else {
-      if (schema?.props?.[chunk.headers.name]?.[Kind] === 'array')
+      if (getProp(schema?.props, chunk.headers.name)?.[Kind] === 'array')
         res[chunk.headers.name] = { ...chunk, content: [chunk.content] }
       else res[chunk.headers.name] = chunk
     }
     delete required[chunk.headers.name]
 
-    if (schema?.props && chunk?.headers?.name in schema.props) {
+    if (schema?.props && Object.hasOwn(schema.props, chunk.headers.name)) {
       try {
         if (Array.isArray(res[chunk.headers.name].content) && schema?.props?.[chunk.headers.name]?.[Kind] !== 'array')
           throw `Multiple values found`
@@ -711,7 +724,23 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
       value.forEach(v => details.headers.append(key, v))
     } else details.headers.set(key, value)
   }
-  if (response instanceof Response) return response
+  if (response instanceof Response) {
+    // Merge cookies and ctx.set.headers into the raw Response without
+    // clobbering headers the user already set on it. `set-cookie` is always
+    // appended; other headers are only set when absent on the Response.
+    const existing = response.headers
+    for (const [key, value] of Object.entries(ctx.set.headers)) {
+      if (key.toLowerCase() === 'set-cookie') {
+        if (Array.isArray(value)) value.forEach(v => existing.append('set-cookie', v))
+        else if (value) existing.append('set-cookie', value as string)
+      } else if (!existing.has(key)) {
+        if (Array.isArray(value)) value.forEach(v => existing.append(key, v))
+        else existing.set(key, value as string)
+      }
+    }
+    for (const cookie of cookies) existing.append('set-cookie', cookie)
+    return response
+  }
   else if (typeof response === 'string') {
     if (!details?.headers?.has('content-type')) {
       const statusEntry: any = schema?.[details.status]
@@ -720,7 +749,7 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
         : statusEntry?.['application/json'] && !statusEntry?.['text/plain']
       if (isJson) {
         details?.headers?.set('content-type', 'application/json')
-        response = `"${response}"`
+        response = JSON.stringify(response)
       } else details?.headers?.set('content-type', 'text/plain')
     }
     return new Response(response, details)

@@ -1404,4 +1404,39 @@ describe('parser unit', () => {
     expect(() => parseEntry({ p: '1.5' }, { p: $T.integer() })).toThrow()
     expect(() => parseEntry({ p: '' }, { p: $T.number() })).toThrow()
   })
+
+  // Multibyte code points split across stream chunks must decode intact —
+  // decoding each chunk independently corrupts them into U+FFFD.
+  const chunked = (bytes: Uint8Array, ...cuts: number[]) =>
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        let prev = 0
+        for (const cut of [...cuts, bytes.length]) {
+          controller.enqueue(bytes.slice(prev, cut))
+          prev = cut
+        }
+        controller.close()
+      },
+    })
+
+  test('requestBodyParser: json body split inside a 2-byte code point', async () => {
+    const { requestBodyParser } = await import('../src/parser')
+    const payload = { s: 'héllo €uro' }
+    const bytes = new TextEncoder().encode(JSON.stringify(payload))
+    const splitAt = bytes.indexOf(0xc3) + 1 // é = c3 a9, cut between the two bytes
+    const body = await requestBodyParser(
+      chunked(bytes, splitAt),
+      { 'content-type': 'application/json' },
+      undefined,
+      'application/json'
+    )
+    expect(body).toEqual(payload)
+  })
+
+  test('requestBodyParser: text body split inside a 3-byte code point', async () => {
+    const { requestBodyParser } = await import('../src/parser')
+    const bytes = new TextEncoder().encode('a€b') // € = e2 82 ac
+    const body = await requestBodyParser(chunked(bytes, 2, 3), { 'content-type': 'text/plain' }, undefined, 'text/plain')
+    expect(body).toBe('a€b')
+  })
 })

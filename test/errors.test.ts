@@ -195,4 +195,34 @@ describe('errors', () => {
       await resp.body?.cancel()
     })
   })
+
+  describe('integration: async onError handlers', () => {
+    const port = 7370
+    const g = new Galbe()
+
+    g.get('/boom', () => {
+      throw new Error('boom')
+    })
+    g.onError(async () => {
+      await new Promise(r => setTimeout(r, 5))
+      return new Response('handled', { status: 418 })
+    })
+    // a trailing logging handler that returns undefined must not clobber
+    // the real handler registered earlier
+    g.onError(async () => undefined)
+
+    beforeAll(async () => {
+      await g.listen(port)
+    })
+    afterAll(() => {
+      g.stop()
+    })
+
+    // async handlers must be awaited; the first non-undefined result wins
+    test('async onError result is used', async () => {
+      const resp = await fetch(`http://localhost:${port}/boom`)
+      expect(resp.status).toBe(418)
+      expect(await resp.text()).toBe('handled')
+    })
+  })
 })
