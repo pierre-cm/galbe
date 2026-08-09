@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.6 — 2026-08-09
+
+### Fixes
+- derive server types from Bun.serve
+
 ## 0.15.5 — 2026-08-09
 
 ### Fixes
