@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.5 — 2026-08-09
+
+### Fixes
+- harden types, bound route cache, and validate byteArray length
+
 ## 0.15.4 — 2026-05-18
 
 ### Fixes
