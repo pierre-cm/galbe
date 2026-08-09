@@ -1,4 +1,3 @@
-import type { Server } from 'bun'
 import type { RouteFileMeta } from './routes'
 import type {
   GalbeConfig,
@@ -130,7 +129,7 @@ export class Galbe {
   stopCb: (() => void)[] = []
   errorCb: ErrorHandler[] = []
   listening: boolean = false
-  server?: Server<any>
+  server?: Awaited<ReturnType<typeof server>>
   plugins: GalbePlugin[] = []
   constructor(config?: GalbeConfig) {
     this.config = config ?? {}

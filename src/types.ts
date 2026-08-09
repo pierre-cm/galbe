@@ -1,4 +1,4 @@
-import type { Serve, SocketAddress, TLSOptions } from 'bun'
+import type { SocketAddress, TLSOptions } from 'bun'
 import type {
   STAny,
   STArray,
@@ -141,7 +141,7 @@ export type GalbeConfig = {
   /** Enable or disable TLS support. */
   tls?: TLSOptions
   /** Extra options passed through to `Bun.serve` (e.g. `maxRequestBodySize`, `idleTimeout`). `port`, `fetch` and `error` are ignored, and the dedicated `hostname`, `reusePort` and `tls` config keys take precedence. */
-  server?: Partial<Omit<Serve.Options<any>, 'port' | 'fetch' | 'error'>> | TLSOptions
+  server?: Partial<Omit<Parameters<typeof Bun.serve>[0], 'port' | 'fetch' | 'error'>> | TLSOptions
   /** A Glob Pattern or a list of Glob patterns defining the route files to be analyzed by the Automatic Route Analyzer. */
   routes?: boolean | string | string[]
   router?: { cacheEnabled: boolean; cacheLimit?: number }
