@@ -5,7 +5,7 @@ import { parseEntry, requestBodyParser, requestPathParser, responseParser } from
 import { Galbe } from './index'
 import { validateResponse } from './validator'
 const normalizeContentType = (ct: string | null): string | undefined =>
-  ct ? ct.split(';')[0].trim() || undefined : undefined
+  ct ? (ct.split(';')[0] ?? '').trim() || undefined : undefined
 import { readCookies, stringifyCookie } from './cookies'
 
 type MakeOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
@@ -160,7 +160,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
               if (nextCalled) console.error('Hook already called - ignored')
               else {
                 nextCalled = true
-                return await callChain[idx + 1].call()
+                return await callChain[idx + 1]!.call()
               }
             }
             let r = await hook(context as Context, next)
@@ -174,7 +174,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
             context.set.status = response instanceof Response ? response.status : context.set.status || 200
           },
         })
-        const r = await callChain[0].call()
+        const r = await callChain[0]!.call()
         if (r) response = r
         if (context.set.status === undefined)
           context.set.status = response instanceof Response ? response.status : 200
@@ -210,7 +210,21 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
           })
         } else if (error instanceof RequestError) {
           let payload = error.payload
-          let headers = new Headers({ ...context.set.headers, ...error?.headers })
+          // append semantics: context.set.headers always carries the
+          // 'set-cookie': [] sentinel and may hold array values, which the
+          // Headers constructor would stringify ('set-cookie: ""', 'a,b').
+          // Cookies queued via ctx.set.cookie() are merged like on the
+          // success path.
+          let headers = new Headers()
+          const mergeHeaders = (h?: Record<string, string | string[]>) => {
+            for (const [k, v] of Object.entries(h ?? {})) {
+              if (Array.isArray(v)) v.forEach(x => headers.append(k, x))
+              else if (v) headers.set(k, v)
+            }
+          }
+          mergeHeaders(context.set.headers)
+          mergeHeaders(error?.headers)
+          for (const cookie of cookies) headers.append('set-cookie', cookie)
           if (!headers.has('content-type')) {
             if (typeof error.payload === 'string') headers.set('content-type', 'text/plain')
             else {

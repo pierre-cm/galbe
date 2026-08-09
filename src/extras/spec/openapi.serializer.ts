@@ -117,7 +117,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       if (members.length === 0) {
         s = {}
       } else if (members.length === 1) {
-        s = schemaToOpenapi(members[0]).schema
+        s = schemaToOpenapi(members[0]!).schema
       } else if (allStringLiterals && !useOneOf) {
         s = { type: 'string', enum: members.map(e => (e as STLiteral).value) }
       } else if (members.length > 1) {
@@ -132,7 +132,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       if (allOf.length === 0) {
         s = {}
       } else if (allOf.length === 1) {
-        s = schemaToOpenapi(allOf[0]).schema
+        s = schemaToOpenapi(allOf[0]!).schema
       } else if (allOf.length > 1) {
         s = {
           allOf: allOf.map(s => schemaToOpenapi(s).schema),
@@ -209,7 +209,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
           securityExplicitlyEmpty = true
         } else {
           const [name, ...scopes] = trimmed.split(/\s+/)
-          security.push({ [name]: scopes })
+          security.push({ [name!]: scopes })
           if (name === 'bearerAuth' && components.securitySchemes && !components.securitySchemes.bearerAuth) {
             components.securitySchemes.bearerAuth = { type: 'http', scheme: 'bearer' }
           }
@@ -296,8 +296,8 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
               content[key] = { schema: oaSchema }
               const ex = (bodySchema as any)?.examples
               const exSingle = (bodySchema as any)?.example
-              if (ex && Object.keys(ex).length) content[key].examples = ex
-              if (exSingle !== undefined) content[key].example = exSingle
+              if (ex && Object.keys(ex).length) content[key]!.examples = ex
+              if (exSingle !== undefined) content[key]!.example = exSingle
             }
             response = { description: desc, ...(Object.keys(content).length ? { content } : {}) }
           } else {
@@ -319,8 +319,8 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
               const content: Record<string, { schema: typeof schema; example?: any; examples?: Record<string, any> }> = {
                 [mediaType]: { schema: { ...schema } },
               }
-              if (explicitExamples && Object.keys(explicitExamples).length) content[mediaType].examples = explicitExamples
-              if (explicitExample !== undefined) content[mediaType].example = explicitExample
+              if (explicitExamples && Object.keys(explicitExamples).length) content[mediaType]!.examples = explicitExamples
+              if (explicitExample !== undefined) content[mediaType]!.example = explicitExample
               response = {
                 description: (v as any).description || HttpStatus[s as keyof typeof HttpStatus] || 'Response',
                 content,
@@ -407,7 +407,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       }
     }
   }
-  const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s)
+  const cap = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s)
   const promoted = new Map<string, string>() // hash -> component name
   const usedNames = new Set<string>(Object.keys(components.parameters || {}))
   for (const [hash, { count, param }] of paramHashes) {

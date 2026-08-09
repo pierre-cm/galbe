@@ -132,14 +132,16 @@ const parseComment = (comment: string): Record<string, string | string[]> => {
     ...(head ? { head } : {}),
     ...[...tagsSrc.matchAll(new RegExp(`^\\s*\\*\\s*@([a-zA-Z_][0-9a-zA-Z_]*)(?:$|\\s+([^\\n]*)\\s*$)`, 'gm'))].reduce(
       (acc, n) => {
+        const tag = n[1]!
+        const val = n[2] ?? true
         return {
           ...acc,
-          [n[1]]:
-            n[1] in acc ? [...(typeof acc[n[1]] === 'string' ? [acc[n[1]]] : acc[n[1]]), n[2] ?? true] : n[2] ?? true
+          [tag]:
+            tag in acc ? [...(typeof acc[tag] === 'string' ? [acc[tag]] : acc[tag]), val] : val
         }
       },
       {} as Record<string, any>
-    )
+    ),
   }
   return refs
 }
@@ -188,7 +190,7 @@ export const metaAnalysis = async (filePath: string): Promise<RoutesMeta> => {
         else if (HIDE_COMMENT_RGX.test(text)) {
           hideLines.add(locEnd.line + 1)
         }
-        else comments[locEnd.line][locEnd.column] = text
+        else comments[locEnd.line]![locEnd.column] = text
       }
     }
   })
@@ -196,7 +198,7 @@ export const metaAnalysis = async (filePath: string): Promise<RoutesMeta> => {
     ExportDefaultDeclaration(node) {
       const headerLine = node.loc?.start.line || -1
       const headerCol = node.loc?.start.column || -1
-      const headerCom = comments?.[headerLine]?.[headerCol - 1] ? comments[headerLine][headerCol - 1] : ''
+      const headerCom = comments?.[headerLine]?.[headerCol - 1] ?? ''
       const hide = hideLines.has(headerLine)
       if (hide) meta.hide = true
       if (ignoredLines.has(headerLine)) {
@@ -222,10 +224,10 @@ export const metaAnalysis = async (filePath: string): Promise<RoutesMeta> => {
             const method = node.callee.property.name as Method
             const line = node.loc?.start.line || -1
             const col = node.loc?.start.column || -1
-            const com = comments?.[line]?.[col - 1] ? comments[line][col - 1] : ''
+            const com = comments?.[line]?.[col - 1] ?? ''
             const routeRefs = ignoredLines.has(line) ? { ignore: true } : { ...parseComment(com), ...(hide || hideLines.has(line) ? { hide: true } : {}) }
             if (!(path in meta.routes)) meta.routes[path] = {}
-            if (!(method in meta.routes[path])) meta.routes[path][method] = routeRefs as RouteMeta
+            if (!(method in meta.routes[path]!)) meta.routes[path]![method] = routeRefs as RouteMeta
           }
         }
       })

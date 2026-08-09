@@ -228,7 +228,7 @@ function _Object<T extends STProps>(properties?: T, options: Options = {}): STOb
   const propertyKeys = globalThis.Object.getOwnPropertyNames(properties)
   const optionalKeys = propertyKeys.filter(key => properties[key]?.[Optional])
   const requiredKeys = propertyKeys.filter(name => !optionalKeys.includes(name))
-  const clonedProperties = propertyKeys.reduce((acc, key) => ({ ...acc, [key]: { ...properties[key] } }), {} as STProps)
+  const clonedProperties = propertyKeys.reduce<STProps>((acc, key) => ({ ...acc, [key]: { ...properties[key]! } }), {})
   return (requiredKeys.length > 0
     ? { ...options, [Kind]: 'object', props: clonedProperties, required: requiredKeys }
     : { ...options, [Kind]: 'object', props: clonedProperties }) as unknown as STObject<T>
@@ -273,7 +273,7 @@ function _MultipartForm<T extends STProps>(properties?: T, options: Options = {}
   const propertyKeys = globalThis.Object.getOwnPropertyNames(properties)
   const optionalKeys = propertyKeys.filter(key => properties[key]?.[Optional])
   const requiredKeys = propertyKeys.filter(name => !optionalKeys.includes(name))
-  const clonedProperties = propertyKeys.reduce((acc, key) => ({ ...acc, [key]: { ...properties[key] } }), {} as STProps)
+  const clonedProperties = propertyKeys.reduce<STProps>((acc, key) => ({ ...acc, [key]: { ...properties[key]! } }), {})
   return (requiredKeys.length > 0
     ? { ...options, [Kind]: 'multipartForm', props: clonedProperties, required: requiredKeys }
     : { ...options, [Kind]: 'multipartForm', props: clonedProperties }) as unknown as STMultipartForm<T>

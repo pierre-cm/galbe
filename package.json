@@ -34,7 +34,7 @@
   "license": "MIT",
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc --noEmit --emitDeclarationOnly false",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false -p tsconfig.json && tsc --noEmit --emitDeclarationOnly false -p tsconfig.test.json",
     "release": "bun run scripts/release.ts"
   },
   "devDependencies": {

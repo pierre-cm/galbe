@@ -18,15 +18,15 @@ export const parseCookie = (str: string) => {
     for (const [idx, entry] of entries.entries()) {
       const [_, key, val] = [...(entry.match(/([^=]+)(?:=(.*))?/) || [])]
       if (idx === 0) {
-        cookie.name = key
-        cookie.value = val
+        cookie.name = key ?? ''
+        cookie.value = val ?? ''
       } else {
         switch (key) {
           case 'Path':
             cookie.path = val
             break
           case 'Max-Age':
-            cookie.maxAge = parseInt(val)
+            if (val !== undefined) cookie.maxAge = parseInt(val)
             break
           case 'HttpOnly':
             cookie.httpOnly = true
@@ -44,7 +44,7 @@ export const parseCookie = (str: string) => {
             cookie.domain = val
             break
           case 'Expires':
-            cookie.expires = new Date(val)
+            if (val !== undefined) cookie.expires = new Date(val)
             break
         }
       }
@@ -81,7 +81,7 @@ export const readCookies = (cookies?: string | null) => {
   return Object.fromEntries(
     cookies.split(';').map(c => {
       const [name, ...value] = c.split('=')
-      return [name.trim(), value.join('=').trim()]
+      return [(name ?? '').trim(), value.join('=').trim()]
     })
   )
 }

@@ -85,6 +85,10 @@ Enables _response_ schema validation (see [response](../concepts/schemas.md#resp
 
 Enables route caching for dynamic routes (see [Router Caching](../concepts/router.md#caching)). Default: `false`.
 
+### router.cacheLimit
+
+Maximum number of entries kept in the route cache. The cache is a bounded LRU: once the limit is reached, the least recently used entries are evicted. Default: `1024`.
+
 ## Config Type Safety
 
 To enforce type safety in your configuration file, use the `config` helper, which leverages your IDE's IntelliSense:

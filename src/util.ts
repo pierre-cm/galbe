@@ -12,6 +12,11 @@ const METHOD_COLOR: Record<string, string> = {
 }
 const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g
 
+/**
+ * Deep-merges `override` into `base` **in place** — `base` is mutated and
+ * returned, so treat config merging as destructive. Plain objects merge
+ * recursively; arrays, `null` and primitives replace the base value wholesale.
+ */
 export const softMerge = <T>(base: T, override: T): T => {
   for (const key in override) {
     if (override[key] instanceof Object && !(override[key] instanceof Array)) {

@@ -137,6 +137,7 @@ export class Galbe {
     this.router = new GalbeRouter({
       prefix: this.config?.basePath || '',
       cacheEnabled: this.config?.router?.cacheEnabled,
+      cacheLimit: this.config?.router?.cacheLimit,
     })
   }
   private add(route: any) {

@@ -229,6 +229,58 @@ describe('router', () => {
     expect(r.handler).toBe(handler)
   })
 
+  test('trailing slash requests match slash-less routes', async () => {
+    // symmetric with the case above: a route declared without a trailing
+    // slash must also match a request sent with one
+    const galbe = new Galbe()
+    const router = galbe.router
+
+    const handler = () => { }
+    galbe.get('/tail', handler)
+    galbe.get('/user/:id', () => 'param')
+
+    const r = router.find('get', '/tail/')
+    expect(r.path).toBe('/tail')
+    expect(r.handler).toBe(handler)
+
+    expect(router.find('get', '/user/42/').path).toBe('/user/:id')
+
+    // root is unaffected
+    galbe.get('/', () => 'root')
+    expect(router.find('get', '/').path).toBe('/')
+
+    // still a 404 for unknown paths
+    expect(() => router.find('get', '/unknown/')).toThrow(NotFoundError)
+  })
+
+  test('route cache is a bounded LRU', async () => {
+    // a flood of distinct lookups — hits or misses — must not grow the cache
+    // past cacheLimit (memory-exhaustion DoS otherwise)
+    const galbe = new Galbe({ router: { cacheEnabled: true, cacheLimit: 8 } })
+    const router = galbe.router
+
+    galbe.get('/static', () => 's')
+    galbe.get('/user/:id', () => 'u')
+
+    for (let i = 0; i < 100; i++) {
+      try {
+        router.find('get', `/miss/${i}`)
+        expect.unreachable()
+      } catch (err) {
+        expect(err).toBeInstanceOf(NotFoundError)
+      }
+    }
+    expect((router as any).cachedRoutes.size).toBeLessThanOrEqual(8)
+
+    for (let i = 0; i < 100; i++) router.find('get', `/user/${i}`)
+    expect((router as any).cachedRoutes.size).toBeLessThanOrEqual(8)
+
+    // routing still works after evictions
+    expect(router.find('get', '/user/42').path).toBe('/user/:id')
+    expect(router.find('get', '/static').path).toBe('/static')
+    expect(() => router.find('get', '/nope')).toThrow(NotFoundError)
+  })
+
   test('backtracking with multiple alternatives', async () => {
     const galbe = new Galbe()
     const router = galbe.router

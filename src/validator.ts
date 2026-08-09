@@ -7,6 +7,7 @@ import type {
   STJson,
   STLiteral,
   STArray,
+  STByteArray,
   STNumber,
   STInteger,
   STString,
@@ -84,6 +85,7 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
     if (opt?.parse && typeof elt === 'string') elt = Uint8Array.from(elt, c => c.charCodeAt(0))
     else if (opt?.parse && Array.isArray(elt)) elt = new Uint8Array(elt)
     if (!(elt instanceof Uint8Array)) throw 'Not a valid byteArray'
+    schemaValidation(elt, schema)
   } else if (schema[Kind] === 'anyOf' || schema[Kind] === 'oneOf') {
     const union = Object.values((schema as STUnion).members)
     let valid = false
@@ -161,6 +163,12 @@ const schemaValidation = (value: any, schema: STSchema) => {
       errors.push(`Length is too large (${str.maxLength} char max)`)
     if (str.pattern !== undefined && !(value as string).match(str.pattern))
       errors.push(`Does not match pattern ${str.pattern}`)
+  } else if (schema[Kind] === 'byteArray') {
+    const ba = schema as STByteArray
+    if (ba.minLength !== undefined && (value as Uint8Array).length < ba.minLength)
+      errors.push(`Length is too small (${ba.minLength} bytes min)`)
+    if (ba.maxLength !== undefined && (value as Uint8Array).length > ba.maxLength)
+      errors.push(`Length is too large (${ba.maxLength} bytes max)`)
   } else if (schema[Kind] === 'array') {
     const arr = schema as STArray
     if (arr.minLength !== undefined && (value as any[]).length < arr.minLength)

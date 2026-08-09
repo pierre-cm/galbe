@@ -144,7 +144,7 @@ export type GalbeConfig = {
   server?: Partial<Omit<Serve.Options<any>, 'port' | 'fetch' | 'error'>> | TLSOptions
   /** A Glob Pattern or a list of Glob patterns defining the route files to be analyzed by the Automatic Route Analyzer. */
   routes?: boolean | string | string[]
-  router?: { cacheEnabled: boolean }
+  router?: { cacheEnabled: boolean; cacheLimit?: number }
   /** A property that can be used by plugins to add plugin's specific configuration. */
   plugin?: Record<string, any>
   /** Enable or disable the request schema validation.*/

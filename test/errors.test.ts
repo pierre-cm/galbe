@@ -225,4 +225,37 @@ describe('errors', () => {
       expect(await resp.text()).toBe('handled')
     })
   })
+
+  describe('integration: RequestError responses merge headers and cookies', () => {
+    const port = 7371
+    const g = new Galbe()
+
+    g.get('/fail', ctx => {
+      ctx.set.cookie('session', 'abc')
+      ctx.set.headers['x-multi'] = ['1', '2']
+      ctx.set.headers['x-single'] = 'one'
+      throw new RequestError({ status: 400, payload: 'bad', headers: { 'x-error': 'err' } })
+    })
+
+    beforeAll(async () => {
+      await g.listen(port)
+    })
+    afterAll(() => {
+      g.stop()
+    })
+
+    test('no bogus empty set-cookie, no comma-joined arrays, cookies merged', async () => {
+      const resp = await fetch(`http://localhost:${port}/fail`)
+      expect(resp.status).toBe(400)
+      // context.set.headers always carries a 'set-cookie': [] sentinel — it
+      // must not surface as an empty header
+      expect(resp.headers.getSetCookie()).toEqual(['session=abc; path=/;'])
+      // array-valued headers use append semantics (joined with ', ' by get),
+      // not the Headers-constructor stringification ('1,2')
+      expect(resp.headers.get('x-multi')).toBe('1, 2')
+      expect(resp.headers.get('x-single')).toBe('one')
+      expect(resp.headers.get('x-error')).toBe('err')
+      await resp.body?.cancel()
+    })
+  })
 })

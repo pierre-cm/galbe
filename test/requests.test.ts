@@ -93,6 +93,19 @@ describe('requests', () => {
 
     galbe.post('/form', { body: { 'application/x-www-form-urlencoded': $T.object() } }, handleBody)
     galbe.post('/mp', { body: { 'multipart/form-data': $T.multipartForm() } }, handleBody)
+    galbe.post(
+      '/mp/ba/length',
+      { body: { 'multipart/form-data': $T.multipartForm({ file: $T.byteArray({ minLength: 2, maxLength: 4 }) }) } },
+      handleBody
+    )
+    galbe.post(
+      '/stream/mp/ba/length',
+      { body: { 'multipart/form-data': $T.stream($T.multipartForm({ file: $T.byteArray({ minLength: 2, maxLength: 4 }) })) } },
+      async ctx => {
+        for await (const _ of ctx.body) void _
+        return { type: 'object', content: 'ok' }
+      }
+    )
 
     // schema-less echo routes for the "built-in property keys" tests below
     galbe.get('/builtins/query', ctx => ctx.query)
@@ -858,6 +871,49 @@ describe('requests', () => {
       if (respBody.type === 'object' && expected.resp === null) expect(respBody.content).toBeNull
       else expect(respBody.content).toEqual(expected.resp)
     }
+  })
+
+  test('body, application/x-www-form-urlencoded, + decodes as space', async () => {
+    // the urlForm spec encodes spaces as `+`; a literal plus arrives as %2B
+    const resp = await fetch(`http://localhost:${port}/form`, {
+      method: 'POST',
+      body: 'name=hello+world&plus=a%2Bb&key+with+space=v',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    })
+    expect(resp.status).toBe(200)
+    const respBody = (await resp.json()) as { type: string; content: any }
+    expect(respBody.content).toEqual({ name: 'hello world', plus: 'a+b', 'key with space': 'v' })
+
+    const streamResp = await fetch(`http://localhost:${port}/stream/form`, {
+      method: 'POST',
+      body: 'name=hello+world',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    })
+    expect(streamResp.status).toBe(200)
+    const streamRespBody = (await streamResp.json()) as { type: string; content: any }
+    expect(streamRespBody.content).toEqual({ name: 'hello world' })
+  })
+
+  test('body, multipart byteArray minLength/maxLength are enforced', async () => {
+    const post = (path: string, blob: Blob) =>
+      fetch(`http://localhost:${port}${path}`, { method: 'POST', body: formdata({ file: blob }) })
+
+    // buffered multipart: validated against the schema after parsing
+    let resp = await post('/mp/ba/length', new Blob(['abc']))
+    expect(resp.status).toBe(200)
+    resp = await post('/mp/ba/length', new Blob(['a']))
+    expect(resp.status).toBe(400)
+    resp = await post('/mp/ba/length', new Blob(['toolong']))
+    expect(resp.status).toBe(400)
+
+    // streaming multipart: validated per part during parsing — a json-typed
+    // part with a byteArray schema used to bypass length validation entirely
+    resp = await post('/stream/mp/ba/length', new Blob(['abc'], { type: 'application/json' }))
+    expect(resp.status).toBe(200)
+    resp = await post('/stream/mp/ba/length', new Blob(['a'], { type: 'application/json' }))
+    expect(resp.status).toBe(400)
+    resp = await post('/stream/mp/ba/length', new Blob(['toolong'], { type: 'application/json' }))
+    expect(resp.status).toBe(400)
   })
 
   test('body, multipart/form-data', async () => {

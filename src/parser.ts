@@ -30,6 +30,11 @@ const textEncoder = new TextEncoder()
 const getProp = <T extends Record<string, any>>(props: T | undefined, key: string): T[string] | undefined =>
   props && Object.hasOwn(props, key) ? props[key] : undefined
 
+// application/x-www-form-urlencoded encodes spaces as `+`, which
+// decodeURIComponent leaves untouched — translate first (a literal plus
+// arrives percent-encoded as %2B)
+const decodeFormComponent = (raw: string) => decodeURIComponent(raw.replace(/\+/g, ' '))
+
 async function* rsToAsyncIterator(readableStream: ReadableStream) {
   try {
     for await (const chunk of readableStream) yield chunk
@@ -238,8 +243,8 @@ async function* $streamToUrlForm(
         bV.set(rest)
         bV.set(chunk.slice(start, i), rest.length)
         let [key, val]: [string, any] = [
-          decodeURIComponent(textDecoder.decode(bK)),
-          decodeURIComponent(textDecoder.decode(bV)),
+          decodeFormComponent(textDecoder.decode(bK)),
+          decodeFormComponent(textDecoder.decode(bV)),
         ]
         try {
           const propSchema = getProp(schema?.props, key)
@@ -270,8 +275,8 @@ async function* $streamToUrlForm(
     }
   }
   let [key, val]: [string, any] = [
-    decodeURIComponent(textDecoder.decode(bK)),
-    decodeURIComponent(textDecoder.decode(rest)),
+    decodeFormComponent(textDecoder.decode(bK)),
+    decodeFormComponent(textDecoder.decode(rest)),
   ]
   try {
     const propSchema = getProp(schema?.props, key)
@@ -436,12 +441,12 @@ const parseMultipartHeader = (header: string): { name: string; [key: string]: st
     ...header.matchAll(/\s*([\w-]+)\s*:\s*([^;]*);?/g),
     ...header.matchAll(/;?\s*(\w+)\s*=\s*\"([^"]*)\";?/g),
   ].reduce((acc: Record<string, string>, v: string[]) => {
-    const key = v[1].toLowerCase().replace(/^content-/, '')
+    const key = (v[1] ?? '').toLowerCase().replace(/^content-/, '')
     if (key === 'disposition') {
-      disposition = v[2]
+      disposition = v[2] ?? 'form-data'
       return acc
     }
-    acc[key] = v[2]
+    acc[key] = v[2] ?? ''
     return acc
   }, Object.create(null))
   if (disposition !== 'form-data') return null
@@ -467,7 +472,8 @@ const parseMultipartContent = (
         throw new RequestError({ status: 400, payload: { body: { [headers.name]: err?.message || 'Parsing error' } } })
       }
     } else if (schema?.props) {
-      if (schema?.props[headers.name][Kind] === 'object') {
+      const prop = schema.props[headers.name]!
+      if (prop[Kind] === 'object') {
         try {
           result = JSON.parse(textDecoder.decode(content).trim())
         } catch (err: any) {
@@ -477,18 +483,22 @@ const parseMultipartContent = (
           })
         }
         try {
-          validate(result, schema?.props[headers.name])
+          validate(result, prop)
         } catch (err) {
           throw new RequestError({ status: 400, payload: { body: { [headers.name]: err } } })
         }
-      } else if (schema?.props[headers.name][Kind] === 'byteArray') {
-        return content
-      } else if (schema?.props[headers.name][Kind] === 'string') {
+      } else if (prop[Kind] === 'byteArray') {
+        try {
+          return validate(content, prop)
+        } catch (err) {
+          throw new RequestError({ status: 400, payload: { body: { [headers.name]: err } } })
+        }
+      } else if (prop[Kind] === 'string') {
         result = textDecoder.decode(content).trim()
       } else {
         throw new RequestError({
           status: 400,
-          payload: { body: { [headers.name]: `Expected ${schema?.props[headers.name][Kind]} found json` } },
+          payload: { body: { [headers.name]: `Expected ${prop[Kind]} found json` } },
         })
       }
     }
@@ -511,35 +521,38 @@ const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary:
     Object.entries(schema?.props || {}).filter(([_, v]: [string, any]) => !v?.[Optional])
   )
   for await (const chunk of $streamToMultipartForm(data, boundary)) {
-    if (chunk.headers.name in res) {
-      if (!Array.isArray(res[chunk.headers.name].content))
-        res[chunk.headers.name].content = [res[chunk.headers.name].content]
-      res[chunk.headers.name].content.push(chunk.content)
+    const name = chunk.headers.name
+    if (name in res) {
+      const existing = res[name]!
+      if (!Array.isArray(existing.content)) existing.content = [existing.content]
+      existing.content.push(chunk.content)
     } else {
-      if (getProp(schema?.props, chunk.headers.name)?.[Kind] === 'array')
-        res[chunk.headers.name] = { ...chunk, content: [chunk.content] }
-      else res[chunk.headers.name] = chunk
+      if (getProp(schema?.props, name)?.[Kind] === 'array')
+        res[name] = { ...chunk, content: [chunk.content] }
+      else res[name] = chunk
     }
-    delete required[chunk.headers.name]
+    delete required[name]
 
-    if (schema?.props && Object.hasOwn(schema.props, chunk.headers.name)) {
+    if (schema?.props && Object.hasOwn(schema.props, name)) {
       try {
-        if (Array.isArray(res[chunk.headers.name].content) && schema?.props?.[chunk.headers.name]?.[Kind] !== 'array')
+        const prop = schema.props[name]!
+        const entry = res[name]!
+        if (Array.isArray(entry.content) && prop[Kind] !== 'array')
           throw `Multiple values found`
-        res[chunk.headers.name].content = validate(res[chunk.headers.name].content, schema?.props[chunk.headers.name], {
+        entry.content = validate(entry.content, prop, {
           parse: true,
         })
-        if (schema.props[chunk.headers.name][Kind] === 'array')
-          for (let [k, v] of Object.entries(res[chunk.headers.name].content)) {
+        if (prop[Kind] === 'array')
+          for (let [k, v] of Object.entries(entry.content)) {
             try {
               //@ts-ignore
-              res[chunk.headers.name].content[k] = paramParser(v, schema.props[chunk.headers.name].items)
+              entry.content[k] = paramParser(v, prop.items)
             } catch (error) {
-              errors[chunk.headers.name] = chunk.headers.name in errors ? [...errors[chunk.headers.name], error] : error
+              errors[name] = name in errors ? [...errors[name], error] : error
             }
           }
       } catch (err) {
-        errors[chunk.headers.name] = err
+        errors[name] = err
       }
     }
   }
