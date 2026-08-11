@@ -53,11 +53,11 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
         throw `Not a valid object`
       }
     }
-    if (typeof elt !== 'object') throw `Not a valid object`
+    if (elt === null || typeof elt !== 'object') throw `Not a valid object`
     if (Array.isArray(elt)) throw `Expected an object, not an array`
     const err: ValidationError = {}
     Object.entries((schema as STObject).props ?? {}).forEach(([k, s]) => {
-      if (elt === null || !(k in elt)) {
+      if (!(k in elt)) {
         if (!s?.[Optional]) err[k] = 'Required'
         return
       }

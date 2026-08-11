@@ -374,7 +374,8 @@ describe('requests', () => {
       { body: null, type: contentType, schema: 'num', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'str', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'arr', expected: { status: 400 } },
-      { body: null, type: contentType, schema: 'obj', expected: { status: 200, resp: null } },
+      // an empty JSON body parses as null, which is not a valid object
+      { body: null, type: contentType, schema: 'obj', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'form', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'mp', expected: { status: 400 } },
       { body: null, type: contentType, schema: 'stream/ba', expected: { status: 400 } },

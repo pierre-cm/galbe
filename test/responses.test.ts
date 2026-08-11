@@ -31,7 +31,8 @@ describe('responses', () => {
     galbe.post(
       '/none',
       {
-        body: { 'application/json': $T.optional($T.object()) },
+        // nullish: the body may be omitted or null, but is an object when present
+        body: { 'application/json': $T.nullish($T.object()) },
         query: { text: $T.optional($T.string()), stream: $T.optional($T.string()) },
       },
       ctx => {

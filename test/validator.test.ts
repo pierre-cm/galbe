@@ -26,9 +26,9 @@ describe('validator: array length constraints', () => {
 })
 
 describe('validator: object schema with non-object input', () => {
-  // Previously `validate(null, $T.object(...))` threw a TypeError from
-  // `k in null`. Validation should produce a clean error instead.
-  test('throws a clean error for null input on object with required props', () => {
+  // `typeof null === 'object'`, so null needs an explicit rejection — a JSON
+  // null body must never reach a handler typed as an object.
+  test('rejects null input on object with required props', () => {
     const schema = $T.object({ a: $T.string() })
     let err: any
     try {
@@ -38,12 +38,28 @@ describe('validator: object schema with non-object input', () => {
     }
     expect(err).toBeDefined()
     expect(err).not.toBeInstanceOf(TypeError)
-    expect(err).toEqual({ a: 'Required' })
+    expect(err).toBe('Not a valid object')
   })
 
-  test('accepts null input on object with no required props', () => {
+  test('rejects null input on object with no required props', () => {
     const schema = $T.object({ a: $T.optional($T.string()) })
-    expect(() => validate(null, schema)).not.toThrow()
+    let err: any
+    try {
+      validate(null, schema)
+    } catch (e) {
+      err = e
+    }
+    expect(err).toBe('Not a valid object')
+  })
+
+  test('rejects null input on prop-less object schema', () => {
+    let err: any
+    try {
+      validate(null, $T.object())
+    } catch (e) {
+      err = e
+    }
+    expect(err).toBe('Not a valid object')
   })
 
   test('throws a clean error for primitive input on object schema', () => {

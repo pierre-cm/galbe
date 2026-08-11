@@ -429,6 +429,16 @@ describe('parser', () => {
         },
       },
       {
+        // JSON null must be rejected as 400, not reach the handler as an object
+        body: 'null',
+        type,
+        schema,
+        expected: {
+          status: 400,
+          resp: { body: 'Not a valid object' },
+        },
+      },
+      {
         body: JSON.stringify({
           ba: false,
           string: 42,
