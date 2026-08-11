@@ -196,6 +196,16 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
           if (r) return r
         }
 
+        // HEAD falls back to the GET route in the router (RFC 9110 §9.3.3):
+        // run the normal lifecycle, then strip the body while preserving the
+        // status and headers (incl. content-length) the GET would have sent.
+        if (req.method === 'HEAD')
+          return new Response(null, {
+            status: parsedResponse.status,
+            statusText: parsedResponse.statusText,
+            headers: parsedResponse.headers,
+          })
+
         return parsedResponse
       } catch (error) {
         context.set.status = error instanceof RequestError ? error.status : 500

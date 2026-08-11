@@ -19,6 +19,15 @@ describe('requests', () => {
     galbe.options('/test', () => {})
     galbe.head('/test', () => {})
 
+    galbe.get('/get-only', () => 'hello')
+    galbe.get('/head-explicit', ctx => {
+      ctx.set.headers['x-handler'] = 'get'
+      return 'hello'
+    })
+    galbe.head('/head-explicit', ctx => {
+      ctx.set.headers['x-handler'] = 'head'
+    })
+
     galbe.get('/headers', ctx => {
       return ctx.headers
     })
@@ -249,6 +258,37 @@ describe('requests', () => {
       let resp = await fetch(`http://localhost:${port}/does/not/exist`, { method: method.toUpperCase() })
       expect(resp.status).toBe(404)
     }
+  })
+
+  test('405 includes an Allow header listing the registered methods', async () => {
+    const resp = await fetch(`http://localhost:${port}/get-only`, { method: 'POST' })
+    expect(resp.status).toBe(405)
+    expect(resp.headers.get('allow')).toBe('GET, HEAD')
+  })
+
+  test('404 has no Allow header', async () => {
+    const resp = await fetch(`http://localhost:${port}/does/not/exist`, { method: 'POST' })
+    expect(resp.status).toBe(404)
+    expect(resp.headers.get('allow')).toBeNull()
+  })
+
+  test('HEAD falls back to the GET route with an empty body', async () => {
+    const get = await fetch(`http://localhost:${port}/get-only`)
+    expect(get.status).toBe(200)
+    expect(await get.text()).toBe('hello')
+    const head = await fetch(`http://localhost:${port}/get-only`, { method: 'HEAD' })
+    expect(head.status).toBe(get.status)
+    expect(head.headers.get('content-type')).toBe(get.headers.get('content-type'))
+    expect(await head.text()).toBe('')
+  })
+
+  test('explicit HEAD route takes precedence over the GET fallback', async () => {
+    const get = await fetch(`http://localhost:${port}/head-explicit`)
+    expect(get.headers.get('x-handler')).toBe('get')
+    const head = await fetch(`http://localhost:${port}/head-explicit`, { method: 'HEAD' })
+    expect(head.status).toBe(200)
+    expect(head.headers.get('x-handler')).toBe('head')
+    expect(await head.text()).toBe('')
   })
 
   test('headers', async () => {

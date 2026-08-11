@@ -138,8 +138,17 @@ export class GalbeRouter {
     if (!r || !Object.keys(r.routes).length) {
       if (this.cacheEnabled) this.cacheSet(`[${method}]${path}`, null)
       throw new NotFoundError()
-    } else if (!(method in r.routes)) throw new MethodNotAllowedError()
-    const route = r.routes[method] as Route
+    }
+    // RFC 9110 §9.3.3: HEAD is GET without a body. An explicit head route wins;
+    // otherwise fall back to the get route (the server strips the response body).
+    const route = (r.routes[method] ?? (method === 'head' ? r.routes.get : undefined)) as Route | undefined
+    if (!route) {
+      // RFC 9110 §15.5.6: a 405 must carry an Allow header listing the methods
+      // the resource supports; HEAD is implicitly allowed whenever GET is.
+      const allow = Object.keys(r.routes).map(m => m.toUpperCase())
+      if ('get' in r.routes && !('head' in r.routes)) allow.push('HEAD')
+      throw new MethodNotAllowedError(undefined, { allow: allow.join(', ') })
+    }
     if (this.cacheEnabled) this.cacheSet(`[${method}]${path}`, route)
     return route
   }

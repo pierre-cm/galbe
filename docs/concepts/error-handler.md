@@ -29,7 +29,7 @@ galbe.onError((error, ctx) => {
 
 The `error` argument can be any type of error thrown by your application. If the error originates from the Galbe framework, it will be an instance of [RequestError](#request-error).
 
-For example, the [Router](router.md) throws a `RequestError` with a `404` status if no route matches the incoming request path, or `405` if the path matches but the method is not allowed. Similarly, the parser and validator throw a `RequestError` with a `400` status in case of invalid input.
+For example, the [Router](router.md) throws a `RequestError` with a `404` status if no route matches the incoming request path, or `405` if the path matches but the method is not allowed. A `405` response carries an `Allow` header listing the methods registered for that path (per RFC 9110 §15.5.6); `HEAD` is included whenever `GET` is registered, since a GET route implicitly answers `HEAD` requests with the same status and headers but an empty body (an explicitly registered `head` route takes precedence). Similarly, the parser and validator throw a `RequestError` with a `400` status in case of invalid input.
 
 ## Request Error
 
