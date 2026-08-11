@@ -1439,4 +1439,116 @@ describe('parser unit', () => {
     const body = await requestBodyParser(chunked(bytes, 2, 3), { 'content-type': 'text/plain' }, undefined, 'text/plain')
     expect(body).toBe('a€b')
   })
+
+  // Multipart boundary and header delimiter matches straddling two chunks must
+  // still be detected — real networks fragment streams arbitrarily.
+  const chunkedEvery = (bytes: Uint8Array, size: number) => {
+    const cuts: number[] = []
+    for (let c = size; c < bytes.length; c += size) cuts.push(c)
+    return chunked(bytes, ...cuts)
+  }
+  const mpBoundary = 'X-BOUNDARY'
+  const mpHeaders = { 'content-type': `multipart/form-data; boundary=${mpBoundary}` }
+  const mpProps = { name: $T.string(), n: $T.number(), f: $T.byteArray() }
+  const mpBody = new TextEncoder().encode(
+    [
+      `--${mpBoundary}`,
+      'Content-Disposition: form-data; name="name"',
+      '',
+      'hello world',
+      `--${mpBoundary}`,
+      'Content-Disposition: form-data; name="n"',
+      '',
+      '42',
+      `--${mpBoundary}`,
+      'Content-Disposition: form-data; name="f"; filename="f.txt"',
+      'Content-Type: application/octet-stream',
+      '',
+      'file content here',
+      `--${mpBoundary}--`,
+      '',
+    ].join('\r\n')
+  )
+  const ufHeaders = { 'content-type': 'application/x-www-form-urlencoded' }
+  const ufProps = { name: $T.string(), n: $T.number(), arr: $T.array($T.string()) }
+  const ufBody = new TextEncoder().encode('name=John+Doe&n=42&arr=x&arr=y')
+
+  test('requestBodyParser: multipart body parsed identically across chunkings', async () => {
+    const { requestBodyParser } = await import('../src/parser')
+    const parse = (body: ReadableStream<Uint8Array>) =>
+      requestBodyParser(body, mpHeaders, { 'multipart/form-data': $T.multipartForm(mpProps) }, 'multipart/form-data')
+    const control: any = await parse(chunked(mpBody))
+    expect(control.name.content).toBe('hello world')
+    expect(control.n.content).toBe(42)
+    expect(control.f.content).toEqual(new TextEncoder().encode('file content here'))
+    for (const size of [7, 1]) expect(await parse(chunkedEvery(mpBody, size))).toEqual(control)
+  })
+
+  test('requestBodyParser: multipart body split inside boundary token and header delimiter', async () => {
+    const { requestBodyParser } = await import('../src/parser')
+    const parse = (body: ReadableStream<Uint8Array>) =>
+      requestBodyParser(body, mpHeaders, { 'multipart/form-data': $T.multipartForm(mpProps) }, 'multipart/form-data')
+    const control: any = await parse(chunked(mpBody))
+    const str = new TextDecoder().decode(mpBody) // ASCII-only: string offsets are byte offsets
+    const cuts = [
+      str.indexOf('\r\n\r\n') + 2, // inside the header delimiter
+      str.indexOf(mpBoundary) + 5, // inside the first boundary token
+      str.lastIndexOf(mpBoundary) + 3, // inside the closing boundary token
+    ]
+    for (const cut of cuts) expect(await parse(chunked(mpBody, cut))).toEqual(control)
+  })
+
+  test('requestBodyParser: multipart stream parsed identically across chunkings', async () => {
+    const { requestBodyParser } = await import('../src/parser')
+    const parse = async (body: ReadableStream<Uint8Array>) => {
+      const stream: any = await requestBodyParser(
+        body,
+        mpHeaders,
+        { 'multipart/form-data': $T.stream($T.multipartForm(mpProps)) },
+        'multipart/form-data'
+      )
+      const parts = []
+      for await (const part of stream) parts.push(part)
+      return parts
+    }
+    const control = await parse(chunked(mpBody))
+    expect(control.map((p: any) => [p.headers.name, p.content])).toEqual([
+      ['name', 'hello world'],
+      ['n', 42],
+      ['f', new TextEncoder().encode('file content here')],
+    ])
+    for (const size of [7, 1]) expect(await parse(chunkedEvery(mpBody, size))).toEqual(control)
+  })
+
+  test('requestBodyParser: urlencoded body parsed identically across chunkings', async () => {
+    const { requestBodyParser } = await import('../src/parser')
+    const parse = (body: ReadableStream<Uint8Array>) =>
+      requestBodyParser(body, ufHeaders, { 'application/x-www-form-urlencoded': $T.object(ufProps) }, ufHeaders['content-type'])
+    const control = await parse(chunked(ufBody))
+    expect(control).toEqual({ name: 'John Doe', n: 42, arr: ['x', 'y'] })
+    for (const size of [7, 1]) expect(await parse(chunkedEvery(ufBody, size))).toEqual(control)
+  })
+
+  test('requestBodyParser: urlencoded stream parsed identically across chunkings', async () => {
+    const { requestBodyParser } = await import('../src/parser')
+    const parse = async (body: ReadableStream<Uint8Array>) => {
+      const stream: any = await requestBodyParser(
+        body,
+        ufHeaders,
+        { 'application/x-www-form-urlencoded': $T.stream($T.object(ufProps)) },
+        ufHeaders['content-type']
+      )
+      const pairs = []
+      for await (const pair of stream) pairs.push(pair)
+      return pairs
+    }
+    const control = await parse(chunked(ufBody))
+    expect(control).toEqual([
+      ['name', 'John Doe'],
+      ['n', 42],
+      ['arr', 'x'],
+      ['arr', 'y'],
+    ])
+    for (const size of [7, 1]) expect(await parse(chunkedEvery(ufBody, size))).toEqual(control)
+  })
 })

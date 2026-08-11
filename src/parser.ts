@@ -342,6 +342,10 @@ const streamToUrlForm = async (body: ReadableStream<Uint8Array>, schema?: STObje
 async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundary: string, schema?: STMultipartForm) {
   const bound = textEncoder.encode(boundary)
   const delimiter = textEncoder.encode('\r\n\r\n')
+  // A match straddling two chunks is undetectable within a single chunk: carry
+  // the tail of the unprocessed bytes into each chunk's scan window so the
+  // lookahead never stops at the chunk seam.
+  const lookahead = Math.max(bound.length, delimiter.length) - 1
   let rest = new Uint8Array()
   let bK: Uint8Array = new Uint8Array()
   let bV: Uint8Array = new Uint8Array()
@@ -350,12 +354,17 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
     Object.entries(schema?.props || {}).filter(([_, v]: [string, any]) => !v?.[Optional])
   )
   for await (const chunk of data) {
+    const carry = rest.subarray(Math.max(0, rest.length - lookahead))
+    const scan = new Uint8Array(carry.length + chunk.length)
+    scan.set(carry)
+    scan.set(chunk, carry.length)
+    rest = rest.slice(0, rest.length - carry.length)
     start = 0
-    for (let i = 0; i < chunk.length; i++) {
-      let matchBound = true
+    for (let i = 0; i < scan.length; i++) {
+      let matchBound = bound.length > 0
       let matchDelimiter = true
       for (let b = 0; b < bound.length; b++) {
-        if (chunk[i + b] === bound[b]) continue
+        if (scan[i + b] === bound[b]) continue
         else {
           matchBound = false
           break
@@ -363,7 +372,7 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
       }
       if (!matchBound) {
         for (let b = 0; b < delimiter.length; b++) {
-          if (chunk[i + b] === delimiter[b]) continue
+          if (scan[i + b] === delimiter[b]) continue
           else {
             matchDelimiter = false
             break
@@ -373,7 +382,7 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
       if (matchBound) {
         bV = new Uint8Array(rest.length + i - start)
         bV.set(rest)
-        bV.set(chunk.slice(start, i), rest.length)
+        bV.set(scan.slice(start, i), rest.length)
         bV = bV.slice(1, bV.length - 4)
         const headers = parseMultipartHeader(textDecoder.decode(bK))
         if (headers) {
@@ -392,19 +401,19 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
         bV = new Uint8Array()
         start = i + bound.length
         rest = new Uint8Array()
-        i = start
+        i = start - 1
       } else if (matchDelimiter) {
         bK = new Uint8Array(rest.length + i - start)
         bK.set(rest)
-        bK.set(chunk.slice(start, i), rest.length)
+        bK.set(scan.slice(start, i), rest.length)
         start = i + 3
         rest = new Uint8Array()
-        i = start
+        i = start - 1
       }
-      if (i === chunk.length - 1) {
+      if (i === scan.length - 1) {
         const newRest = new Uint8Array(rest.length + i - start + 1)
         newRest.set(rest)
-        newRest.set(chunk.slice(start, i + 1), rest.length)
+        newRest.set(scan.slice(start, i + 1), rest.length)
         rest = newRest
       }
     }
