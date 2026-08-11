@@ -1474,6 +1474,8 @@ describe('parser unit', () => {
         controller.close()
       },
     })
+  const reqWith = (body: ReadableStream<Uint8Array>, headers: Record<string, string>) =>
+    new Request('http://localhost/', { method: 'POST', body, headers })
 
   test('requestBodyParser: json body split inside a 2-byte code point', async () => {
     const { requestBodyParser } = await import('../src/parser')
@@ -1481,7 +1483,7 @@ describe('parser unit', () => {
     const bytes = new TextEncoder().encode(JSON.stringify(payload))
     const splitAt = bytes.indexOf(0xc3) + 1 // é = c3 a9, cut between the two bytes
     const body = await requestBodyParser(
-      chunked(bytes, splitAt),
+      reqWith(chunked(bytes, splitAt), { 'content-type': 'application/json' }),
       { 'content-type': 'application/json' },
       undefined,
       'application/json'
@@ -1492,7 +1494,12 @@ describe('parser unit', () => {
   test('requestBodyParser: text body split inside a 3-byte code point', async () => {
     const { requestBodyParser } = await import('../src/parser')
     const bytes = new TextEncoder().encode('a€b') // € = e2 82 ac
-    const body = await requestBodyParser(chunked(bytes, 2, 3), { 'content-type': 'text/plain' }, undefined, 'text/plain')
+    const body = await requestBodyParser(
+      reqWith(chunked(bytes, 2, 3), { 'content-type': 'text/plain' }),
+      { 'content-type': 'text/plain' },
+      undefined,
+      'text/plain'
+    )
     expect(body).toBe('a€b')
   })
 
@@ -1532,7 +1539,7 @@ describe('parser unit', () => {
   test('requestBodyParser: multipart body parsed identically across chunkings', async () => {
     const { requestBodyParser } = await import('../src/parser')
     const parse = (body: ReadableStream<Uint8Array>) =>
-      requestBodyParser(body, mpHeaders, { 'multipart/form-data': $T.multipartForm(mpProps) }, 'multipart/form-data')
+      requestBodyParser(reqWith(body, mpHeaders), mpHeaders, { 'multipart/form-data': $T.multipartForm(mpProps) }, 'multipart/form-data')
     const control: any = await parse(chunked(mpBody))
     expect(control.name.content).toBe('hello world')
     expect(control.n.content).toBe(42)
@@ -1543,7 +1550,7 @@ describe('parser unit', () => {
   test('requestBodyParser: multipart body split inside boundary token and header delimiter', async () => {
     const { requestBodyParser } = await import('../src/parser')
     const parse = (body: ReadableStream<Uint8Array>) =>
-      requestBodyParser(body, mpHeaders, { 'multipart/form-data': $T.multipartForm(mpProps) }, 'multipart/form-data')
+      requestBodyParser(reqWith(body, mpHeaders), mpHeaders, { 'multipart/form-data': $T.multipartForm(mpProps) }, 'multipart/form-data')
     const control: any = await parse(chunked(mpBody))
     const str = new TextDecoder().decode(mpBody) // ASCII-only: string offsets are byte offsets
     const cuts = [
@@ -1558,7 +1565,7 @@ describe('parser unit', () => {
     const { requestBodyParser } = await import('../src/parser')
     const parse = async (body: ReadableStream<Uint8Array>) => {
       const stream: any = await requestBodyParser(
-        body,
+        reqWith(body, mpHeaders),
         mpHeaders,
         { 'multipart/form-data': $T.stream($T.multipartForm(mpProps)) },
         'multipart/form-data'
@@ -1579,7 +1586,12 @@ describe('parser unit', () => {
   test('requestBodyParser: urlencoded body parsed identically across chunkings', async () => {
     const { requestBodyParser } = await import('../src/parser')
     const parse = (body: ReadableStream<Uint8Array>) =>
-      requestBodyParser(body, ufHeaders, { 'application/x-www-form-urlencoded': $T.object(ufProps) }, ufHeaders['content-type'])
+      requestBodyParser(
+        reqWith(body, ufHeaders),
+        ufHeaders,
+        { 'application/x-www-form-urlencoded': $T.object(ufProps) },
+        ufHeaders['content-type']
+      )
     const control = await parse(chunked(ufBody))
     expect(control).toEqual({ name: 'John Doe', n: 42, arr: ['x', 'y'] })
     for (const size of [7, 1]) expect(await parse(chunkedEvery(ufBody, size))).toEqual(control)
@@ -1589,7 +1601,7 @@ describe('parser unit', () => {
     const { requestBodyParser } = await import('../src/parser')
     const parse = async (body: ReadableStream<Uint8Array>) => {
       const stream: any = await requestBodyParser(
-        body,
+        reqWith(body, ufHeaders),
         ufHeaders,
         { 'application/x-www-form-urlencoded': $T.stream($T.object(ufProps)) },
         ufHeaders['content-type']
