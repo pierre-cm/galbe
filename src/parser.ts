@@ -18,7 +18,7 @@ import type {
 
 import { Kind, Optional, Stream } from './schema'
 import { runCompiled } from './validator.compile'
-import { InternalServerError, RequestError } from './index'
+import { InternalServerError, PayloadTooLargeError, RequestError } from './index'
 import { isIterator, inferBodyType, type ParseMode } from './util'
 
 const textDecoder = new TextDecoder()
@@ -43,8 +43,32 @@ async function* rsToAsyncIterator(readableStream: ReadableStream) {
 }
 
 // req.bytes() is untyped and returns ArrayBuffer or Uint8Array depending on
-// body chunking (Bun 1.3) — normalize through arrayBuffer
-const reqBytes = async (req: Request) => new Uint8Array(await req.arrayBuffer())
+// body chunking (Bun 1.3) — normalize through arrayBuffer. With a limit,
+// accumulate manually so chunked clients lying about their size (no or forged
+// content-length) are cut off as soon as they cross it.
+const reqBytes = async (req: Request, limit?: number) => {
+  if (limit === undefined) return new Uint8Array(await req.arrayBuffer())
+  const body = req.body
+  if (body === null) return new Uint8Array()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for await (const chunk of body) {
+    total += chunk.length
+    if (total > limit) throw new PayloadTooLargeError()
+    chunks.push(chunk)
+  }
+  const res = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    res.set(chunk, offset)
+    offset += chunk.length
+  }
+  return res
+}
+const reqText = async (req: Request, limit?: number) =>
+  limit === undefined ? req.text() : textDecoder.decode(await reqBytes(req, limit))
+const reqJson = async (req: Request, limit?: number) =>
+  limit === undefined ? req.json() : JSON.parse(await reqText(req, limit))
 
 // Multipart boundary extraction from the content-type header: parameters are
 // `;`-separated and extra legal parameters (charset, …) must not leak into
@@ -64,7 +88,8 @@ export const requestBodyParser = async (
   req: Request,
   headers: Record<string, string>,
   schemas?: STBody | STNull,
-  contentType?: string
+  contentType?: string,
+  limit?: number
 ) => {
   const body = req.body
   const normalizedCT = contentType?.split(';')[0]?.trim()
@@ -86,12 +111,13 @@ export const requestBodyParser = async (
       // No schema defined, we base parsing on parseMode only
       if (parseMode === 'byteArray') {
         if (body === null) return new Uint8Array()
-        return await reqBytes(req)
+        return await reqBytes(req, limit)
       } else if (parseMode === 'json') {
         if (body === null) return null
         try {
-          return await req.json()
+          return await reqJson(req, limit)
         } catch (err: any) {
+          if (err instanceof RequestError) throw err
           throw new RequestError({
             status: 400,
             payload: { body: err?.message ?? 'Parsing error' },
@@ -99,13 +125,13 @@ export const requestBodyParser = async (
         }
       } else if (parseMode === 'text') {
         if (body === null) return ''
-        return await req.text()
+        return await reqText(req, limit)
       } else if (parseMode === 'urlForm') {
         if (body === null) return {}
-        return parseUrlForm(await req.text())
+        return parseUrlForm(await reqText(req, limit))
       } else if (parseMode === 'multipart') {
         if (body === null) return {}
-        return await streamToMultipartForm(oneChunkStream(await reqBytes(req)), multipartBoundary(headers))
+        return await streamToMultipartForm(oneChunkStream(await reqBytes(req, limit)), multipartBoundary(headers))
       } else return body === null ? null : rsToAsyncIterator(body)
     } else {
       // Schemas found
@@ -127,7 +153,7 @@ export const requestBodyParser = async (
             : new Uint8Array()
         }
         if (isStream) return rsToAsyncIterator(body)
-        return await reqBytes(req)
+        return await reqBytes(req, limit)
       } else if (parseMode === 'text') {
         if (!kind || !['string', 'boolean', 'number', 'integer', 'anyOf', 'oneOf', 'literal'].includes(kind))
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
@@ -141,7 +167,7 @@ export const requestBodyParser = async (
               })
             : runCompiled('', schema as STSchema, { parse: true })
         if (isStream) return $streamToString(body)
-        const str = await req.text()
+        const str = await reqText(req, limit)
         if (kind === 'anyOf' || kind === 'oneOf') return unionize(str, schema as STUnion)
         return runCompiled(str, schema as STSchema, { parse: true })
       } else if (parseMode === 'json') {
@@ -152,13 +178,14 @@ export const requestBodyParser = async (
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         // an absent body parses as `null`, matching JSON.parse('null')
         if (kind === 'anyOf' || kind === 'oneOf')
-          return unionize(body === null ? null : await req.json(), schema as STUnion)
+          return unionize(body === null ? null : await reqJson(req, limit), schema as STUnion)
         if (kind === 'intersection')
-          return intersectionize(body === null ? null : await req.json(), schema as STIntersection<any>)
+          return intersectionize(body === null ? null : await reqJson(req, limit), schema as STIntersection<any>)
         let json
         try {
-          json = body === null ? null : await req.json()
+          json = body === null ? null : await reqJson(req, limit)
         } catch (err: any) {
+          if (err instanceof RequestError) throw err
           throw new RequestError({
             status: 400,
             payload: { body: err?.message ?? 'Parsing error' },
@@ -177,9 +204,9 @@ export const requestBodyParser = async (
                 },
               })
             : parseUrlForm('', schema as STObject)
-        if (kind === 'anyOf' || kind === 'oneOf') return unionize(parseUrlForm(await req.text()), schema as STUnion)
+        if (kind === 'anyOf' || kind === 'oneOf') return unionize(parseUrlForm(await reqText(req, limit)), schema as STUnion)
         if (isStream) return $streamToUrlForm(body, schema as STStream<STObject>)
-        else return parseUrlForm(await req.text(), schema as STObject)
+        else return parseUrlForm(await reqText(req, limit), schema as STObject)
       } else if (parseMode === 'multipart') {
         if (kind !== 'multipartForm' && kind !== 'anyOf' && kind !== 'oneOf')
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
@@ -194,11 +221,11 @@ export const requestBodyParser = async (
             : {}
         const boundary = multipartBoundary(headers)
         if (kind === 'anyOf' || kind === 'oneOf') {
-          let mp = await streamToMultipartForm(oneChunkStream(await reqBytes(req)), boundary)
+          let mp = await streamToMultipartForm(oneChunkStream(await reqBytes(req, limit)), boundary, undefined, limit)
           return unionize(mp, schema as STUnion)
         }
-        if (isStream) return $streamToMultipartForm(body, boundary, schema as STStream<STMultipartForm>)
-        return streamToMultipartForm(oneChunkStream(await reqBytes(req)), boundary, schema as STMultipartForm)
+        if (isStream) return $streamToMultipartForm(body, boundary, schema as STStream<STMultipartForm>, limit)
+        return streamToMultipartForm(oneChunkStream(await reqBytes(req, limit)), boundary, schema as STMultipartForm, limit)
       } else if (parseMode === 'default') {
         throw new RequestError({ status: 400, payload: { body: `Not a valid content-type` } })
       }
@@ -338,7 +365,7 @@ const parseUrlForm = (text: string, schema?: STObject) => {
     })
   return object
 }
-async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundary: string, schema?: STMultipartForm) {
+async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundary: string, schema?: STMultipartForm, limit?: number) {
   const bound = textEncoder.encode(boundary)
   const delimiter = textEncoder.encode('\r\n\r\n')
   // A match straddling two chunks is undetectable within a single chunk: carry
@@ -382,6 +409,7 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
         bV = new Uint8Array(rest.length + i - start)
         bV.set(rest)
         bV.set(scan.slice(start, i), rest.length)
+        if (limit !== undefined && bV.length > limit) throw new PayloadTooLargeError()
         bV = bV.slice(1, bV.length - 4)
         const headers = parseMultipartHeader(textDecoder.decode(bK))
         if (headers) {
@@ -413,6 +441,8 @@ async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundar
         const newRest = new Uint8Array(rest.length + i - start + 1)
         newRest.set(rest)
         newRest.set(scan.slice(start, i + 1), rest.length)
+        // rest accumulates the current part across chunks — cap its growth
+        if (limit !== undefined && newRest.length > limit) throw new PayloadTooLargeError()
         rest = newRest
       }
     }
@@ -531,13 +561,13 @@ const oneChunkStream = (buf: Uint8Array) =>
       controller.close()
     },
   })
-const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary: string, schema?: STMultipartForm) => {
+const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary: string, schema?: STMultipartForm, limit?: number) => {
   const res: Record<string, MultipartFormData> = Object.create(null)
   const errors: Record<string, any> = Object.create(null)
   const required = Object.fromEntries(
     Object.entries(schema?.props || {}).filter(([_, v]: [string, any]) => !v?.[Optional])
   )
-  for await (const chunk of $streamToMultipartForm(data, boundary)) {
+  for await (const chunk of $streamToMultipartForm(data, boundary, undefined, limit)) {
     const name = chunk.headers.name
     if (name in res) {
       const existing = res[name]!

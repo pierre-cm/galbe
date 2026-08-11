@@ -1,6 +1,6 @@
 import type { Context, Method, Route } from './types'
 
-import { InternalServerError, RequestError } from './types'
+import { InternalServerError, PayloadTooLargeError, RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
 import { Galbe } from './index'
 import { validateResponse } from './validator'
@@ -101,11 +101,17 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         }
         let inParams = requestPathParser(url.pathname, route.path)
 
+        // reject oversized bodies declared by honest clients before reading a byte
+        const bodyLimit = schema.bodyLimit ?? galbe.config?.bodyLimit
+        if (bodyLimit !== undefined && Number(req.headers.get('content-length')) > bodyLimit)
+          throw new PayloadTooLargeError()
+
         context.body = await requestBodyParser(
           req,
           inHeaders,
           EMPTY_BODY_METHODS.includes(req.method) ? undefined : schema.body,
-          context.contentType
+          context.contentType,
+          bodyLimit
         )
         context.headers = inHeaders
         context.query = inQuery

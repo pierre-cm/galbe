@@ -10,7 +10,7 @@ import {
   isAsyncIterator,
   EMPTY_BA_STR,
 } from './test.utils'
-import { Galbe, $T } from '../src'
+import { Galbe, $T, PayloadTooLargeError } from '../src'
 import { schemaToTypeStr } from '../src/schema'
 
 const port = 7357
@@ -1618,5 +1618,95 @@ describe('parser unit', () => {
       ['arr', 'y'],
     ])
     for (const size of [7, 1]) expect(await parse(chunkedEvery(ufBody, size))).toEqual(control)
+  })
+
+  describe('body limit', () => {
+    const textHeaders = { 'content-type': 'text/plain' }
+    const bigMpBody = (size: number) =>
+      new TextEncoder().encode(
+        [
+          `--${mpBoundary}`,
+          'Content-Disposition: form-data; name="name"',
+          '',
+          'x'.repeat(size),
+          `--${mpBoundary}--`,
+          '',
+        ].join('\r\n')
+      )
+    const parseText = async (bytes: Uint8Array, limit?: number) => {
+      const { requestBodyParser } = await import('../src/parser')
+      return requestBodyParser(reqWith(chunkedEvery(bytes, 8), textHeaders), textHeaders, undefined, 'text/plain', limit)
+    }
+
+    test('requestBodyParser: body crossing the limit mid-stream is rejected with 413', async () => {
+      const err = await parseText(new TextEncoder().encode('a'.repeat(128)), 64).catch(e => e)
+      expect(err).toBeInstanceOf(PayloadTooLargeError)
+      expect(err.status).toBe(413)
+    })
+
+    test('requestBodyParser: body at the limit parses normally', async () => {
+      const body = await parseText(new TextEncoder().encode('a'.repeat(64)), 64)
+      expect(body).toBe('a'.repeat(64))
+    })
+
+    test('requestBodyParser: byteArray body over the limit is rejected', async () => {
+      const { requestBodyParser } = await import('../src/parser')
+      const baHeaders = { 'content-type': 'application/octet-stream' }
+      const err = await requestBodyParser(
+        reqWith(chunkedEvery(new TextEncoder().encode('a'.repeat(128)), 8), baHeaders),
+        baHeaders,
+        undefined,
+        'application/octet-stream',
+        64
+      ).catch(e => e)
+      expect(err).toBeInstanceOf(PayloadTooLargeError)
+    })
+
+    test('requestBodyParser: json body over the limit is rejected', async () => {
+      const { requestBodyParser } = await import('../src/parser')
+      const jsonHeaders = { 'content-type': 'application/json' }
+      const bytes = new TextEncoder().encode(JSON.stringify({ s: 'a'.repeat(128) }))
+      const err = await requestBodyParser(
+        reqWith(chunkedEvery(bytes, 8), jsonHeaders),
+        jsonHeaders,
+        undefined,
+        'application/json',
+        64
+      ).catch(e => e)
+      expect(err).toBeInstanceOf(PayloadTooLargeError)
+    })
+
+    test('requestBodyParser: multipart part larger than the limit is rejected', async () => {
+      const { requestBodyParser } = await import('../src/parser')
+      const parse = (body: ReadableStream<Uint8Array>, schema: any) =>
+        requestBodyParser(reqWith(body, mpHeaders), mpHeaders, schema, 'multipart/form-data', 64).catch(e => e)
+      const buffered = await parse(chunkedEvery(bigMpBody(256), 7), { 'multipart/form-data': $T.multipartForm(mpProps) })
+      expect(buffered).toBeInstanceOf(PayloadTooLargeError)
+      const streamed: any = await requestBodyParser(
+        reqWith(chunkedEvery(bigMpBody(256), 7), mpHeaders),
+        mpHeaders,
+        { 'multipart/form-data': $T.stream($T.multipartForm(mpProps)) },
+        'multipart/form-data',
+        64
+      )
+      const consume = async () => {
+        for await (const _ of streamed) {
+        }
+      }
+      const err = await consume().catch(e => e)
+      expect(err).toBeInstanceOf(PayloadTooLargeError)
+    })
+
+    test('requestBodyParser: multipart body under the limit parses normally', async () => {
+      const { requestBodyParser } = await import('../src/parser')
+      const body: any = await requestBodyParser(
+        reqWith(chunked(mpBody), mpHeaders),
+        mpHeaders,
+        { 'multipart/form-data': $T.multipartForm(mpProps) },
+        'multipart/form-data',
+        mpBody.length
+      )
+      expect(body.name.content).toBe('hello world')
+    })
   })
 })

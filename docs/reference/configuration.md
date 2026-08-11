@@ -73,6 +73,18 @@ Enables TLS support. Accepts a [Bun TLSOptions](https://bun.com/docs/api/http#tl
 
 Custom options passed through to the underlying [Bun.serve](https://bun.com/docs/api/http#bun-serve) call. Useful for fine-grained server tuning beyond what Galbe exposes directly.
 
+### bodyLimit
+
+Maximum request body size in bytes. When the declared `Content-Length` exceeds the limit, the request is rejected with a `413 Payload Too Large` error before a single byte is read; chunked bodies that outgrow the limit while being received are rejected as soon as they cross it. It can be overridden per route with the schema's [`bodyLimit`](../concepts/schemas.md#bodylimit) property.
+
+```ts
+export default {
+  bodyLimit: 1024 * 1024 // 1 MB
+}
+```
+
+Default: unset. Independently of this setting, Bun enforces its own `maxRequestBodySize` ceiling (128 MB by default) — raise it through the [`server`](#server) passthrough if you configure a larger `bodyLimit`.
+
 ### requestValidator.enabled
 
 Enables _request_ schema validation (see [Request Schema Definition](../concepts/schemas.md#request-schema-definition)). Default: `true`.

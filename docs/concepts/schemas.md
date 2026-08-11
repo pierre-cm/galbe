@@ -203,7 +203,7 @@ const schema = {}
 galbe.get('/foo/:bar', schema, ctx => {})
 ```
 
-The Request Schema has five optional properties: `headers`, `params`, `query`, `body`, and `response`.
+The Request Schema has six optional properties: `headers`, `params`, `query`, `body`, `response`, and `bodyLimit`.
 
 ### headers
 
@@ -401,6 +401,31 @@ galbe.post(
     }
     ctx.set.status = 201
   }
+)
+```
+
+### bodyLimit
+
+```ts
+bodyLimit: number
+```
+
+Maximum request body size in bytes for this route, overriding the global [`bodyLimit`](../reference/configuration.md#bodylimit) configuration. Larger bodies are rejected with a `413 Payload Too Large` error, and multipart parts are also capped individually.
+
+**Example:**
+
+```ts
+galbe.post(
+  '/upload',
+  {
+    bodyLimit: 10 * 1024 * 1024, // 10 MB
+    body: {
+      multipart: $T.multipartForm({
+        heavyImageFile: $T.byteArray()
+      })
+    }
+  },
+  ctx => {}
 )
 ```
 

@@ -151,6 +151,8 @@ export type GalbeConfig = {
   requestValidator?: { enabled: boolean }
   /** Enable or disable the response schema validation.*/
   responseValidator?: { enabled: boolean }
+  /** Maximum request body size in bytes; larger bodies are rejected with a 413 error. Can be overridden per route with the schema's `bodyLimit`. Unset by default: only Bun's `maxRequestBodySize` (128 MB, see `server`) applies. */
+  bodyLimit?: number
 }
 /**
  * #### Schema
@@ -185,6 +187,8 @@ export type RequestSchema<
   query?: Q
   body?: B
   response?: R
+  /** Maximum request body size in bytes for this route; overrides the global `bodyLimit` config. Larger bodies are rejected with a 413 error. */
+  bodyLimit?: number
 }
 
 type OmitNotDefined<S extends RequestSchema> = {

@@ -1,4 +1,4 @@
-import { expect, test, describe, beforeAll } from 'bun:test'
+import { expect, test, describe, beforeAll, afterAll } from 'bun:test'
 import { Galbe, $T } from '../src'
 import { formdata, type Case, fileHash, handleBody, isAsyncIterator } from './test.utils'
 
@@ -1034,5 +1034,81 @@ describe('requests', () => {
       expect((Object as any).content).toBeUndefined()
       expect(({} as any).x).toBeUndefined()
     })
+  })
+})
+
+describe('body limit', () => {
+  const limitPort = 7372
+  const galbe = new Galbe({ bodyLimit: 64 })
+
+  galbe.post('/echo', { body: { 'text/plain': $T.string() } }, ctx => ctx.body)
+  galbe.post('/roomy', { bodyLimit: 1024, body: { 'text/plain': $T.string() } }, ctx => ctx.body)
+  galbe.post('/tight', { bodyLimit: 8, body: { 'text/plain': $T.string() } }, ctx => ctx.body)
+  galbe.post('/upload', { body: { 'multipart/form-data': $T.multipartForm({ file: $T.byteArray() }) } }, () => 'ok')
+
+  beforeAll(async () => {
+    await galbe.listen(limitPort)
+  })
+  afterAll(() => galbe.stop())
+
+  const postText = (path: string, body: string) =>
+    fetch(`http://localhost:${limitPort}${path}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body })
+  // a stream body is sent chunked, without a content-length header
+  const postChunks = (path: string, text: string, type = 'text/plain') => {
+    const bytes = new TextEncoder().encode(text)
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < bytes.length; i += 16) controller.enqueue(bytes.slice(i, i + 16))
+        controller.close()
+      },
+    })
+    return fetch(`http://localhost:${limitPort}${path}`, {
+      method: 'POST',
+      // the server may reject mid-upload; keep the aborted socket out of the
+      // keep-alive pool so it can't poison the next request
+      headers: { 'content-type': type, connection: 'close' },
+      body,
+      duplex: 'half',
+    } as any)
+  }
+
+  test('content-length over the limit is rejected with 413 before parsing', async () => {
+    const resp = await postText('/echo', 'a'.repeat(128))
+    expect(resp.status).toBe(413)
+  })
+
+  test('bodies at or under the limit parse normally', async () => {
+    for (const size of [10, 64]) {
+      const resp = await postText('/echo', 'a'.repeat(size))
+      expect(resp.status).toBe(200)
+      expect(await resp.text()).toBe('a'.repeat(size))
+    }
+  })
+
+  test('chunked body growing past the limit is rejected with 413 mid-stream', async () => {
+    const resp = await postChunks('/echo', 'a'.repeat(128))
+    expect(resp.status).toBe(413)
+  })
+
+  test('per-route bodyLimit overrides the global one', async () => {
+    const roomy = await postText('/roomy', 'a'.repeat(128)) // over the global 64, under the route's 1024
+    expect(roomy.status).toBe(200)
+    const tight = await postText('/tight', 'a'.repeat(32)) // under the global 64, over the route's 8
+    expect(tight.status).toBe(413)
+  })
+
+  test('multipart part larger than the limit is rejected with 413', async () => {
+    const boundary = 'X-LIMIT-BOUNDARY'
+    const payload = [
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="file"; filename="f.txt"',
+      'Content-Type: application/octet-stream',
+      '',
+      'x'.repeat(256),
+      `--${boundary}--`,
+      '',
+    ].join('\r\n')
+    const resp = await postChunks('/upload', payload, `multipart/form-data; boundary=${boundary}`)
+    expect(resp.status).toBe(413)
   })
 })
