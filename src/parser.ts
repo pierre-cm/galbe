@@ -120,7 +120,7 @@ export const requestBodyParser = async (
           if (err instanceof RequestError) throw err
           throw new RequestError({
             status: 400,
-            payload: { body: err?.message ?? 'Parsing error' },
+            payload: { body: 'Not a valid JSON body' },
           })
         }
       } else if (parseMode === 'text') {
@@ -188,7 +188,7 @@ export const requestBodyParser = async (
           if (err instanceof RequestError) throw err
           throw new RequestError({
             status: 400,
-            payload: { body: err?.message ?? 'Parsing error' },
+            payload: { body: 'Not a valid JSON body' },
           })
         }
         return runCompiled(json, schema as STSchema, { parse: true })
@@ -507,7 +507,7 @@ const parseMultipartContent = (
       try {
         result = JSON.parse(textDecoder.decode(content).trim())
       } catch (err: any) {
-        throw new RequestError({ status: 400, payload: { body: { [headers.name]: err?.message || 'Parsing error' } } })
+        throw new RequestError({ status: 400, payload: { body: { [headers.name]: 'Not a valid JSON part' } } })
       }
     } else if (schema?.props) {
       const prop = schema.props[headers.name]!
@@ -517,7 +517,7 @@ const parseMultipartContent = (
         } catch (err: any) {
           throw new RequestError({
             status: 400,
-            payload: { body: { [headers.name]: err?.message || 'Parsing error' } },
+            payload: { body: { [headers.name]: 'Not a valid JSON part' } },
           })
         }
         try {

@@ -1214,7 +1214,7 @@ describe('parser', () => {
         expected: {
           status: 400,
           resp: {
-            body: { jsonFile: "JSON Parse error: Expected '}'" },
+            body: { jsonFile: 'Not a valid JSON part' },
           },
         },
       },
@@ -1307,7 +1307,7 @@ describe('parser', () => {
         expected: {
           status: 400,
           resp: {
-            body: { jsonFile: "JSON Parse error: Expected '}'" },
+            body: { jsonFile: 'Not a valid JSON part' },
           },
         },
       },
@@ -1489,6 +1489,34 @@ describe('parser unit', () => {
       'application/json'
     )
     expect(body).toEqual(payload)
+  })
+
+  // Malformed JSON must yield a fixed generic 400 — raw JSON.parse messages are
+  // an implementation leak and can embed attacker-controlled input fragments.
+  test('requestBodyParser: malformed json body returns a generic 400, schema-less', async () => {
+    const { requestBodyParser } = await import('../src/parser')
+    const bytes = new TextEncoder().encode('{"a": "unterminated')
+    const err = await requestBodyParser(
+      reqWith(chunked(bytes), { 'content-type': 'application/json' }),
+      { 'content-type': 'application/json' },
+      undefined,
+      'application/json'
+    ).catch(e => e)
+    expect(err.status).toBe(400)
+    expect(err.payload).toEqual({ body: 'Not a valid JSON body' })
+  })
+
+  test('requestBodyParser: malformed json body returns a generic 400, with schema', async () => {
+    const { requestBodyParser } = await import('../src/parser')
+    const bytes = new TextEncoder().encode('{"a": "unterminated')
+    const err = await requestBodyParser(
+      reqWith(chunked(bytes), { 'content-type': 'application/json' }),
+      { 'content-type': 'application/json' },
+      { 'application/json': $T.object({ a: $T.string() }) },
+      'application/json'
+    ).catch(e => e)
+    expect(err.status).toBe(400)
+    expect(err.payload).toEqual({ body: 'Not a valid JSON body' })
   })
 
   test('requestBodyParser: text body split inside a 3-byte code point', async () => {

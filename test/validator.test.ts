@@ -111,3 +111,38 @@ describe('validator: validateResponse default fallback', () => {
     expect(() => validateResponse({ anything: true }, schema, 404)).not.toThrow()
   })
 })
+
+describe('validator: reflected input in error messages', () => {
+  // Attacker-controlled input interpolated into error messages must be capped,
+  // so a huge string cannot be echoed back verbatim (response amplification).
+  const grab = (fn: () => any): any => {
+    try {
+      fn()
+    } catch (e) {
+      return e
+    }
+  }
+
+  test('literal error caps over-long input at 100 chars with an ellipsis', () => {
+    const input = 'x'.repeat(500)
+    const err = grab(() => validate(input, $T.literal('y')))
+    expect(err).toBe(`Not a valid value. Found "${'x'.repeat(100)}…" but expected "y"`)
+  })
+
+  test('literal error renders short input uncapped', () => {
+    const err = grab(() => validate('toto', $T.literal('bar')))
+    expect(err).toBe('Not a valid value. Found "toto" but expected "bar"')
+  })
+
+  test('null error caps over-long input', () => {
+    const err = grab(() => validate('n'.repeat(500), $T.null()))
+    expect(err).toBe(`Expected null value got ${'n'.repeat(100)}…`)
+  })
+
+  test('null error stringifies non-string input safely', () => {
+    const circular: any = {}
+    circular.self = circular
+    const err = grab(() => validate(circular, $T.null()))
+    expect(err).toBe('Expected null value got [object Object]')
+  })
+})

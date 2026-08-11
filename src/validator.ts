@@ -17,13 +17,25 @@ import { Kind, Optional, Stream } from './schema'
 import { isIterator } from './util'
 import { runCompiled } from './validator.compile'
 
+// Renders a value for inclusion in an error message, capped so large
+// attacker-controlled input cannot be reflected verbatim into a 400 response.
+export const preview = (value: any): string => {
+  let str: string
+  try {
+    str = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value))
+  } catch {
+    str = String(value)
+  }
+  return str.length > 100 ? `${str.slice(0, 100)}…` : str
+}
+
 export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }): any => {
   type ValidationError = string | string[] | { [key: string]: ValidationError }
   const errors: ValidationError[] = []
   const iElt = elt
 
   if (schema[Kind] === 'null') {
-    if (elt !== null) throw `Expected null value got ${iElt}`
+    if (elt !== null) throw `Expected null value got ${preview(iElt)}`
   } else if (schema[Kind] === 'boolean') {
     if (typeof elt === 'string') {
       if (opt?.parse) elt = elt === 'true' ? true : elt === 'false' ? false : null
@@ -45,7 +57,7 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
     schemaValidation(elt, schema)
   } else if (schema[Kind] === 'literal') {
     const lit = schema as STLiteral
-    if (elt !== lit.value) throw `Not a valid value. Found "${elt}" but expected "${lit.value}"`
+    if (elt !== lit.value) throw `Not a valid value. Found "${preview(elt)}" but expected "${lit.value}"`
   } else if (schema[Kind] === 'object') {
     if (opt?.parse && typeof elt === 'string') {
       try {

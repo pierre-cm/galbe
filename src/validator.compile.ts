@@ -14,7 +14,7 @@ import type {
 } from './schema'
 import type { RequestSchema, STBody } from './types'
 import { Kind, Optional } from './schema'
-import { validate } from './validator'
+import { validate, preview } from './validator'
 
 /** A validator specialized to a single schema, with the same contract as `validate`. */
 export type CompiledValidator = (elt: any, opt?: { parse?: boolean }) => any
@@ -155,7 +155,7 @@ const build = (schema: STSchema): CompiledValidator | undefined => {
   switch (schema[Kind]) {
     case 'null':
       return elt => {
-        if (elt !== null) throw `Expected null value got ${elt}`
+        if (elt !== null) throw `Expected null value got ${preview(elt)}`
         return elt
       }
     case 'boolean':
@@ -198,7 +198,7 @@ const build = (schema: STSchema): CompiledValidator | undefined => {
     case 'literal': {
       const value = (schema as STLiteral).value
       return elt => {
-        if (elt !== value) throw `Not a valid value. Found "${elt}" but expected "${value}"`
+        if (elt !== value) throw `Not a valid value. Found "${preview(elt)}" but expected "${value}"`
         return elt
       }
     }
