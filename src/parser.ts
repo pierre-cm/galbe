@@ -17,7 +17,7 @@ import type {
 } from './schema'
 
 import { Kind, Optional, Stream } from './schema'
-import { validate } from './validator'
+import { runCompiled } from './validator.compile'
 import { InternalServerError, RequestError } from './index'
 import { isIterator, inferBodyType, type ParseMode } from './util'
 
@@ -139,11 +139,11 @@ export const requestBodyParser = async (
                   controller.close()
                 },
               })
-            : validate('', schema as STSchema, { parse: true })
+            : runCompiled('', schema as STSchema, { parse: true })
         if (isStream) return $streamToString(body)
         const str = await req.text()
         if (kind === 'anyOf' || kind === 'oneOf') return unionize(str, schema as STUnion)
-        return validate(str, schema as STSchema, { parse: true })
+        return runCompiled(str, schema as STSchema, { parse: true })
       } else if (parseMode === 'json') {
         if (
           !kind ||
@@ -164,7 +164,7 @@ export const requestBodyParser = async (
             payload: { body: err?.message ?? 'Parsing error' },
           })
         }
-        return validate(json, schema as STSchema, { parse: true })
+        return runCompiled(json, schema as STSchema, { parse: true })
       } else if (parseMode === 'urlForm') {
         if (!kind || !['object', 'anyOf', 'oneOf'].includes(kind))
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
@@ -491,13 +491,13 @@ const parseMultipartContent = (
           })
         }
         try {
-          validate(result, prop)
+          runCompiled(result, prop)
         } catch (err) {
           throw new RequestError({ status: 400, payload: { body: { [headers.name]: err } } })
         }
       } else if (prop[Kind] === 'byteArray') {
         try {
-          return validate(content, prop)
+          return runCompiled(content, prop)
         } catch (err) {
           throw new RequestError({ status: 400, payload: { body: { [headers.name]: err } } })
         }
@@ -514,7 +514,7 @@ const parseMultipartContent = (
     const s = getProp(schema?.props, headers.name)
     if (s) {
       try {
-        validate(result, s[Kind] === 'array' ? s.items : s)
+        runCompiled(result, s[Kind] === 'array' ? s.items : s)
       } catch (err) {
         throw new RequestError({ status: 400, payload: { body: { [headers.name]: err } } })
       }
@@ -556,7 +556,7 @@ const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary:
         const entry = res[name]!
         if (Array.isArray(entry.content) && prop[Kind] !== 'array')
           throw `Multiple values found`
-        entry.content = validate(entry.content, prop, {
+        entry.content = runCompiled(entry.content, prop, {
           parse: true,
         })
         if (prop[Kind] === 'array')
@@ -602,7 +602,7 @@ const paramParser = (
   } else if (value === null) return null
   else if (Array.isArray(value)) {
     if (type[Kind] !== 'array') throw `Multiple values found`
-    validate(value, type)
+    runCompiled(value, type)
     let pv = []
     let errors: Record<number, any> = {}
     for (let [idx, v] of value.entries()) {
@@ -624,16 +624,16 @@ const paramParser = (
       if (value === null || value === undefined || value === '') throw `Not a valid integer`
       const parsedValue = Number(value)
       if (!Number.isFinite(parsedValue) || !Number.isInteger(parsedValue)) throw `Not a valid integer`
-      validate(parsedValue, type)
+      runCompiled(parsedValue, type)
       return parsedValue
     } else if (type[Kind] === 'number') {
       if (value === null || value === undefined || value === '') throw `Not a valid number`
       const parsedValue = Number(value)
       if (!Number.isFinite(parsedValue)) throw `Not a valid number`
-      validate(parsedValue, type)
+      runCompiled(parsedValue, type)
       return parsedValue
     } else if (type[Kind] === 'string') {
-      validate(value, type)
+      runCompiled(value, type)
       return value
     } else if (type[Kind] === 'literal') {
       const lit = type as STLiteral
@@ -649,7 +649,7 @@ const paramParser = (
       } catch (e) {
         throw `Not a valid object`
       }
-      return validate(json, type)
+      return runCompiled(json, type)
     } else if (type[Kind] === 'array') {
       return [paramParser(value, (type as STArray).items as STMultipartFormValues) as Static<STPropsValue>]
     } else if (type[Kind] === 'byteArray') {
@@ -833,7 +833,7 @@ const unionize = (b: any, schema: STUnion) => {
   }, Object.keys((schema.members[0] as STObject)?.props || {}))
   for (let s of schema.members) {
     try {
-      res = validate(b, s, { parse: true })
+      res = runCompiled(b, s, { parse: true })
       if (res !== undefined) break
     } catch (err: any) {
       if (discriminants.every(d => !err?.[d]?.startsWith('Not a valid value'))) error = err
@@ -847,7 +847,7 @@ const unionize = (b: any, schema: STUnion) => {
 const intersectionize = (b: any, schema: STIntersection<any>) => {
   let res
   try {
-    for (let s of schema.allOf) res = validate(b, s, { parse: true })
+    for (let s of schema.allOf) res = runCompiled(b, s, { parse: true })
     return res
   } catch (e) {
     throw new RequestError({ status: 400, payload: { body: `No matching body schema found` } })

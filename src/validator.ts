@@ -15,6 +15,7 @@ import type {
 } from './schema'
 import { Kind, Optional, Stream } from './schema'
 import { isIterator } from './util'
+import { runCompiled } from './validator.compile'
 
 export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }): any => {
   type ValidationError = string | string[] | { [key: string]: ValidationError }
@@ -138,7 +139,7 @@ export const validateResponse = (response: any, schema: STResponse, status: numb
     if (!s[Stream]) throw new InternalServerError(`Expected ${s[Kind]} response, but got Iterator`)
   } else {
     try {
-      validate(response, s)
+      runCompiled(response, s)
     } catch (error) {
       throw new InternalServerError({ ResponseValidationError: error })
     }

@@ -26,6 +26,7 @@ import { resolve as resolvePath } from 'path'
 import server from './server'
 import { GalbeRouter } from './router'
 import { SchemaType, type STObject, type Static } from './schema'
+import { compileRoute } from './validator.compile'
 
 const overloadDiscriminer = <
   M extends Method,
@@ -140,6 +141,8 @@ export class Galbe {
     })
   }
   private add(route: any) {
+    // schemas are immutable once the route is added: compile their validators now
+    if (route?.schema) compileRoute(route.schema)
     this.router.add(route)
     return route
   }
