@@ -43,6 +43,20 @@ async function* rsToAsyncIterator(readableStream: ReadableStream) {
   }
 }
 
+// Multipart boundary extraction from the content-type header: parameters are
+// `;`-separated and extra legal parameters (charset, …) must not leak into
+// the boundary value.
+const multipartBoundary = (headers: Record<string, string>): string => {
+  for (const param of headers?.['content-type']?.split(';') ?? []) {
+    const eq = param.indexOf('=')
+    if (eq === -1 || param.slice(0, eq).trim().toLowerCase() !== 'boundary') continue
+    let value = param.slice(eq + 1).trim()
+    if (value.length > 1 && value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1)
+    if (value) return value
+  }
+  throw new RequestError({ status: 400, payload: { body: `Missing multipart boundary` } })
+}
+
 export const requestBodyParser = async (
   body: ReadableStream | null,
   headers: Record<string, string>,
@@ -87,8 +101,7 @@ export const requestBodyParser = async (
         return await streamToUrlForm(body)
       } else if (parseMode === 'multipart') {
         if (body === null) return {}
-        const boundary = headers?.['content-type']?.match(/boundary\="?([^"]*)"?;?.*$/)?.[1] || ''
-        return await streamToMultipartForm(body, boundary)
+        return await streamToMultipartForm(body, multipartBoundary(headers))
       } else return body === null ? null : rsToAsyncIterator(body)
     } else {
       // Schemas found
@@ -194,7 +207,7 @@ export const requestBodyParser = async (
                 },
               })
             : {}
-        const boundary = headers?.['content-type']?.match(/boundary\="?([^"]*)"?;?.*$/)?.[1] || ''
+        const boundary = multipartBoundary(headers)
         if (kind === 'anyOf' || kind === 'oneOf') {
           let mp = await streamToMultipartForm(body, boundary)
           return unionize(mp, schema as STUnion)

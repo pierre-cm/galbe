@@ -143,6 +143,12 @@ describe('parser', () => {
       handleBody
     )
     galbe.post(
+      '/mp/schema/simple',
+      { body: { 'multipart/form-data': $T.multipartForm({ a: $T.string() }) } },
+      handleBody
+    )
+    galbe.post('/mp/noschema', handleBody)
+    galbe.post(
       '/mp/stream/schema/base',
       {
         body: {
@@ -1098,6 +1104,46 @@ describe('parser', () => {
         else expect(respBody).toEqual(expected.resp)
       }
     }
+  })
+
+  test('body, multipart boundary parsing', async () => {
+    const boundary = 'X-BOUNDARY'
+    const mp = [
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="a"',
+      '',
+      'hello',
+      `--${boundary}--`,
+      '',
+    ].join('\r\n')
+    // Extra parameters around the boundary are legal per RFC 2046 and must not
+    // leak into the boundary value.
+    const contentTypes = [
+      `multipart/form-data; boundary=${boundary}; charset=utf-8`,
+      `multipart/form-data; charset=utf-8; boundary=${boundary}`,
+      `multipart/form-data; boundary="${boundary}"`,
+      `multipart/form-data; boundary = ${boundary}`,
+    ]
+    for (const route of ['/mp/noschema', '/mp/schema/simple']) {
+      for (const type of contentTypes) {
+        let resp = await fetch(`http://localhost:${port}${route}`, {
+          method: 'POST',
+          headers: { 'content-type': type },
+          body: mp,
+        })
+        expect(resp.status).toBe(200)
+        let body = (await resp.json()) as any
+        expect(body.content.a.content).toBe('hello')
+      }
+    }
+    // A missing boundary is a clear 400, not silently corrupted content
+    let resp = await fetch(`http://localhost:${port}/mp/schema/simple`, {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data' },
+      body: mp,
+    })
+    expect(resp.status).toBe(400)
+    expect(await resp.json()).toEqual({ body: 'Missing multipart boundary' })
   })
 
   test('body, FileUpload', async () => {
