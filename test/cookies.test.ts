@@ -1,6 +1,6 @@
 import { describe, expect, it, test, beforeAll, afterAll } from 'bun:test'
 import { parseCookie, stringifyCookie, readCookies } from '../src/cookies'
-import { Galbe } from '../src'
+import { Galbe, BadRequestError } from '../src'
 
 describe('Cookies', () => {
     describe('readCookies', () => {
@@ -71,6 +71,41 @@ describe('Cookies', () => {
         })
     })
 
+    describe('encoding', () => {
+        const specials = ['hello world', 'a;b', 'a=b', '"quoted"', 'héllo ✓', 'line1\r\nline2', '100%']
+
+        it('round-trips special characters through stringifyCookie → readCookies', () => {
+            for (const value of specials) {
+                const pair = stringifyCookie('name', value).split(';')[0]!
+                expect(readCookies(pair)).toEqual({ name: value })
+            }
+        })
+
+        it('round-trips special characters in names', () => {
+            const pair = stringifyCookie('wéird name', 'v').split(';')[0]!
+            expect(readCookies(pair)).toEqual({ 'wéird name': 'v' })
+        })
+
+        it('parseCookie decodes stringified cookies', () => {
+            const cookie = parseCookie(stringifyCookie('foo', 'hello; wörld'))
+            expect(cookie.name).toBe('foo')
+            expect(cookie.value).toBe('hello; wörld')
+        })
+
+        it('readCookies tolerates malformed percent-encoding', () => {
+            expect(readCookies('foo=%E0%A4%A; bar=%zz')).toEqual({ foo: '%E0%A4%A', bar: '%zz' })
+        })
+
+        it('throws BadRequestError on unencodable name or value', () => {
+            expect(() => stringifyCookie('foo', '\ud800')).toThrow(BadRequestError)
+            expect(() => stringifyCookie('\ud800', 'bar')).toThrow(BadRequestError)
+        })
+
+        it('throws BadRequestError on control characters in path', () => {
+            expect(() => stringifyCookie('foo', 'bar', { path: '/\r\nSet-Cookie: hax=1' })).toThrow(BadRequestError)
+        })
+    })
+
     describe('ctx.set.cookie', () => {
         const port = 7364
         const g = new Galbe()
@@ -95,6 +130,18 @@ describe('Cookies', () => {
         })
         g.get('/cookie/read', ctx => {
             return ctx.cookies
+        })
+        g.get('/cookie/special', ctx => {
+            ctx.set.cookie('sp', 'a b;c=d\r\n✓')
+            return 'ok'
+        })
+        g.get('/cookie/bad-value', ctx => {
+            ctx.set.cookie('bad', '\ud800')
+            return 'ok'
+        })
+        g.get('/cookie/bad-path', ctx => {
+            ctx.set.cookie('x', 'y', { path: '/\r\nX-Injected: 1' })
+            return 'ok'
         })
 
         beforeAll(async () => {
@@ -140,6 +187,28 @@ describe('Cookies', () => {
             })
             expect(resp.status).toBe(200)
             expect(await resp.json()).toEqual({ session: 'abc', theme: 'dark' })
+        })
+
+        test('special characters round-trip through Set-Cookie and back', async () => {
+            const resp = await fetch(`http://localhost:${port}/cookie/special`)
+            expect(resp.status).toBe(200)
+            const pair = resp.headers.getSetCookie()[0]!.split(';')[0]!
+            await resp.body?.cancel()
+            const read = await fetch(`http://localhost:${port}/cookie/read`, { headers: { cookie: pair } })
+            expect(read.status).toBe(200)
+            expect(await read.json()).toEqual({ sp: 'a b;c=d\r\n✓' })
+        })
+
+        test('unencodable cookie value yields a controlled 400', async () => {
+            const resp = await fetch(`http://localhost:${port}/cookie/bad-value`)
+            expect(resp.status).toBe(400)
+            expect(await resp.text()).toBe('Invalid cookie value')
+        })
+
+        test('control characters in cookie path yield a controlled 400', async () => {
+            const resp = await fetch(`http://localhost:${port}/cookie/bad-path`)
+            expect(resp.status).toBe(400)
+            await resp.body?.cancel()
         })
     })
 })

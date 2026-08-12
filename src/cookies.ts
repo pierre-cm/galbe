@@ -1,3 +1,22 @@
+import { BadRequestError } from './types'
+
+// encodeURIComponent throws on lone surrogates; surface that as a controlled 400
+const encode = (str: string, part: string) => {
+  try {
+    return encodeURIComponent(str)
+  } catch {
+    throw new BadRequestError(`Invalid cookie ${part}`)
+  }
+}
+// malformed %XX sequences fall back to the raw string instead of throwing
+const decode = (str: string) => {
+  try {
+    return decodeURIComponent(str)
+  } catch {
+    return str
+  }
+}
+
 export type CookieOptions = {
   path?: string
   maxAge?: number
@@ -18,8 +37,8 @@ export const parseCookie = (str: string) => {
     for (const [idx, entry] of entries.entries()) {
       const [_, key, val] = [...(entry.match(/([^=]+)(?:=(.*))?/) || [])]
       if (idx === 0) {
-        cookie.name = key ?? ''
-        cookie.value = val ?? ''
+        cookie.name = decode(key ?? '')
+        cookie.value = decode(val ?? '')
       } else {
         switch (key) {
           case 'Path':
@@ -59,16 +78,18 @@ export const stringifyCookie = (name: string, value: string, opt: CookieOptions 
       : opt.sameSite === true
         ? ' SameSite=Lax;'
         : ''
-  return (
-    `${name}=${value};` +
+  const cookie =
+    `${encode(name, 'name')}=${encode(value, 'value')};` +
     ` path=${opt.path || '/'};` +
-    (opt.domain ? ` Domain=${opt.domain};` : '') +
+    (opt.domain ? ` Domain=${encode(opt.domain, 'Domain')};` : '') +
     (typeof opt.maxAge === 'number' ? ` Max-Age=${Math.floor(opt.maxAge)};` : '') +
     (opt.expires ? ` Expires=${opt.expires.toUTCString()};` : '') +
     (opt.secure ? ' Secure;' : '') +
     sameSite +
     (opt.httpOnly ? ' HttpOnly;' : '')
-  )
+  // path is the only free-form part left unencoded; block header injection through it
+  if (/[\x00-\x1f\x7f]/.test(cookie)) throw new BadRequestError('Invalid cookie: control characters not allowed')
+  return cookie
 }
 
 function capitalize(str?: string) {
@@ -81,7 +102,7 @@ export const readCookies = (cookies?: string | null) => {
   return Object.fromEntries(
     cookies.split(';').map(c => {
       const [name, ...value] = c.split('=')
-      return [(name ?? '').trim(), value.join('=').trim()]
+      return [decode((name ?? '').trim()), decode(value.join('=').trim())]
     })
   )
 }
