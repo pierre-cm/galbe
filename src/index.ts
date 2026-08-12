@@ -62,6 +62,52 @@ const overloadDiscriminer = <
   }
   throw new Error('Undefined route signature')
 }
+type HookChainState = { handlerCalled: boolean; response: any }
+
+// Compose the hook/handler chain once, at registration: a route's chain is
+// immutable after `add()`, so rebuilding it per request is pure allocation
+// churn. Per-request semantics are unchanged: fresh `handlerCalled`/`nextCalled`
+// state per invocation, `Hook already called - ignored` on a double-next(), a
+// truthy hook return short-circuits and becomes the response, and a hook that
+// neither called next() nor returned a value triggers an implicit next().
+// The composed function resolves to the handler's response (or the
+// short-circuit value), starting from '' exactly like the historical chain.
+const composeHooks = <M extends Method, Path extends string, S extends RequestSchema>(
+  hooks: Hook<M, Path, S>[],
+  handler: Handler<M, Path, S>
+): ((context: Context<M, Path, S>) => Promise<any>) => {
+  // terminal entry: run the handler and settle the response status
+  let downstream: (context: Context<M, Path, S>, state: HookChainState) => Promise<any> = async (context, state) => {
+    state.handlerCalled = true
+    state.response = await handler(context)
+    context.set.status = state.response instanceof Response ? state.response.status : context.set.status || 200
+  }
+  for (let i = hooks.length - 1; i >= 0; i--) {
+    const hook = hooks[i]!
+    const next = downstream
+    downstream = async (context, state) => {
+      let nextCalled = false
+      const nextFn = async () => {
+        if (nextCalled) console.error('Hook already called - ignored')
+        else {
+          nextCalled = true
+          return await next(context, state)
+        }
+      }
+      const r = await hook(context, nextFn)
+      if (r) return r
+      if (!nextCalled && !state.handlerCalled) return await nextFn()
+    }
+  }
+  const chain = downstream
+  return async context => {
+    const state: HookChainState = { handlerCalled: false, response: '' }
+    const r = await chain(context, state)
+    if (r) state.response = r
+    return state.response
+  }
+}
+
 const galbeMethod = <
   M extends Method,
   Path extends string,
@@ -98,6 +144,7 @@ const galbeMethod = <
     context,
     hooks,
     handler,
+    composed: composeHooks(hooks, handler),
   }
 }
 

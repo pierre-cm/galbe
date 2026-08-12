@@ -153,35 +153,8 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
           if (r) return r
         }
 
-        // call chain
-        let handlerCalled = false
-        const handlerWrapper = async (context: Context) => {
-          handlerCalled = true
-          return route.handler(context)
-        }
-        const callChain: { call: () => any }[] = route.hooks.map((hook, idx) => ({
-          call: async () => {
-            let nextCalled = false
-            let next = async () => {
-              if (nextCalled) console.error('Hook already called - ignored')
-              else {
-                nextCalled = true
-                return await callChain[idx + 1]!.call()
-              }
-            }
-            let r = await hook(context as Context, next)
-            if (r) return r
-            if (!nextCalled && !handlerCalled) return await next()
-          },
-        }))
-        callChain.push({
-          call: async () => {
-            response = await handlerWrapper(context as Context)
-            context.set.status = response instanceof Response ? response.status : context.set.status || 200
-          },
-        })
-        const r = await callChain[0]!.call()
-        if (r) response = r
+        // hook/handler chain, composed once at route registration (see galbeMethod)
+        response = await route.composed(context as Context)
         if (context.set.status === undefined)
           context.set.status = response instanceof Response ? response.status : 200
 

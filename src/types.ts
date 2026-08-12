@@ -401,6 +401,12 @@ export type Route<
   context: Context<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
   hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[]
   handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
+  /**
+   * Hook/handler chain composed once at registration (the chain is immutable
+   * afterwards). Runs the hooks then the handler and resolves to the handler's
+   * response — or a hook's short-circuit value.
+   */
+  composed: (context: Context<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>) => Promise<any>
   static?: { path: SP; root: SR }
 }
 
