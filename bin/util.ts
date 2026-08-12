@@ -39,6 +39,12 @@ export const silentExec = async (fn: () => any) => {
   process.stderr.write = _processStderrWrite
   return r
 }
+export type ReloadStrategy = 'registry' | 'respawn'
+// `Loader.registry` is a low-level JavaScriptCore API that current Bun versions (1.3.x)
+// do not expose at runtime; when absent, watch-mode reload must respawn the app process.
+export const resolveReloadStrategy = (scope: any = globalThis): ReloadStrategy =>
+  typeof scope?.Loader?.registry?.clear === 'function' ? 'registry' : 'respawn'
+
 export const watchDir = async (
   path: string,
   callback: (event: {

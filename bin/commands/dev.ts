@@ -2,7 +2,7 @@ import { $ } from 'bun'
 import { Command, Option } from 'commander'
 import { resolve, dirname } from 'path'
 
-import { CWD, fmtInterval, fmtVal, instanciateRoutes, watchDir } from '../util'
+import { CWD, fmtInterval, fmtVal, instanciateRoutes, resolveReloadStrategy, watchDir } from '../util'
 import { Galbe } from '../../src'
 import { softMerge } from '../../src/util'
 import { existsSync } from 'fs'
@@ -42,14 +42,62 @@ export default (cmd: Command) => {
 
       if (!Bun.env.BUN_ENV) Bun.env.BUN_ENV = 'development'
 
+      if (!!watch_dir && resolveReloadStrategy() === 'respawn') {
+        // Reload by respawning the app process: a syntax error in an edited file
+        // kills the child, not the watcher — the next save reloads.
+        const spawnApp = () =>
+          Bun.spawn([process.execPath, process.argv[1], 'dev', index, '-p', `${port || DEFAULT_PORT}`], {
+            stdio: ['inherit', 'inherit', 'inherit'],
+            cwd: CWD
+          })
+        const killChild = () => {
+          try {
+            child?.kill()
+          } catch {}
+        }
+        process.on('SIGINT', () => {
+          killChild()
+          process.exit(0)
+        })
+        process.on('SIGTERM', () => {
+          killChild()
+          process.exit(0)
+        })
+        if (clear) await $`clear`.nothrow()
+        let child = spawnApp()
+        let reloading: Promise<void> = Promise.resolve()
+        await watchDir(
+          watch_dir,
+          () => {
+            reloading = reloading.then(async () => {
+              killChild()
+              await child.exited
+              if (clear) await $`clear`.nothrow()
+              child = spawnApp()
+            })
+          },
+          { ignore: watchignore ? new RegExp(watchignore) : /node_modules/ }
+        )
+        // The watcher is non-persistent and a pending promise alone does not
+        // keep the event loop alive — hold it open with an interval.
+        setInterval(() => {}, 2 ** 31 - 1)
+        return
+      }
+
       if (!!watch_dir) {
         await watchDir(
           watch_dir,
           async () => {
             g.stop()
-            if (clear) await $`clear`
+            if (clear) await $`clear`.nothrow()
             Loader.registry.clear()
-            g = (await import(indexPath)).default
+            try {
+              g = (await import(indexPath)).default
+            } catch (e) {
+              console.error('\x1b[0;31mReload failed:\x1b[0m', e)
+              return
+            }
+            g.config = softMerge(galbeConfig, g.config)
             await instanciateRoutes(g)
             await g.listen(port)
           },
@@ -57,7 +105,7 @@ export default (cmd: Command) => {
         )
       }
 
-      if (!!watch_dir && clear) await $`clear`
+      if (!!watch_dir && clear) await $`clear`.nothrow()
       g = (await import(indexPath)).default
       let conf = g.config
       g.config = softMerge(galbeConfig, conf)
