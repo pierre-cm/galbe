@@ -76,14 +76,16 @@ export default (cmd: Command) => {
 
       if (tName === 'openapi') {
         let openapiSpec = await OpenAPISerializer(g)
+        // Precedence: explicit `config.openapi.info` > package.json inference > serializer defaults.
         openapiSpec = {
           ...openapiSpec,
           info: {
             title: pckg?.name || 'Galbe app',
             description: pckg?.description,
             contact: parseAuthor(pckg.author),
-            //license: TODO
+            license: pckg?.license ? { name: pckg.license } : undefined,
             version: pckg?.version || '0.1.0',
+            ...g.config?.openapi?.info,
           },
         }
         openapiSpec = softMerge(openapiSpec, baseSpec) as OpenAPIV3.Document

@@ -3,6 +3,51 @@ import { Galbe, $T } from '../src'
 import { OpenAPISerializer } from '../src/extras/spec/openapi.serializer'
 
 describe('openapi serializer', () => {
+  test('uses default info block when no openapi config is set', async () => {
+    const g = new Galbe()
+    g.get('/items', () => [])
+
+    const spec = await OpenAPISerializer(g)
+    expect(spec.info).toMatchObject({ title: 'Galbe app', version: '0.1.0' })
+    expect(spec.servers).toBeUndefined()
+  })
+
+  test('merges config.openapi info and servers into the spec', async () => {
+    const g = new Galbe({
+      openapi: {
+        info: {
+          title: 'My API',
+          version: '2.3.4',
+          description: 'An API with a custom info block',
+          contact: { name: 'Jane Doe', email: 'jane@example.com' },
+          license: { name: 'MIT' },
+          termsOfService: 'https://example.com/tos',
+        },
+        servers: [{ url: 'https://api.example.com/v1', description: 'production' }],
+      },
+    })
+    g.get('/items', () => [])
+
+    const spec = await OpenAPISerializer(g)
+    expect(spec.info).toEqual({
+      title: 'My API',
+      version: '2.3.4',
+      description: 'An API with a custom info block',
+      contact: { name: 'Jane Doe', email: 'jane@example.com' },
+      license: { name: 'MIT' },
+      termsOfService: 'https://example.com/tos',
+    })
+    expect(spec.servers).toEqual([{ url: 'https://api.example.com/v1', description: 'production' }])
+  })
+
+  test('partial info config keeps defaults for unset fields', async () => {
+    const g = new Galbe({ openapi: { info: { title: 'Only Title' } } })
+    g.get('/items', () => [])
+
+    const spec = await OpenAPISerializer(g)
+    expect(spec.info).toMatchObject({ title: 'Only Title', version: '0.1.0' })
+  })
+
   test('emits minItems/maxItems/uniqueItems for arrays from minLength/maxLength/unique', async () => {
     // ArrayOptions exposes minLength/maxLength on the schema-builder side; the
     // serializer must translate those to minItems/maxItems on the OpenAPI side.

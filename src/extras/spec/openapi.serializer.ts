@@ -448,7 +448,9 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     info: {
       title: 'Galbe app',
       version: '0.1.0',
+      ...g.config?.openapi?.info,
     },
+    ...(g.config?.openapi?.servers ? { servers: g.config.openapi.servers } : {}),
     paths,
     components: Object.keys(components)?.length ? components : undefined,
   }

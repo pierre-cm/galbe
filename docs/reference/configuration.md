@@ -101,6 +101,30 @@ Enables route caching for dynamic routes (see [Router Caching](../concepts/route
 
 Maximum number of entries kept in the route cache. The cache is a bounded LRU: once the limit is reached, the least recently used entries are evicted. Default: `1024`.
 
+### openapi
+
+Customizes the top-level `info` and `servers` blocks of the OpenAPI specification produced by `OpenAPISerializer` (`galbe/extras`) and `galbe generate spec`.
+
+```ts
+export default {
+  openapi: {
+    info: {
+      title: 'My API',
+      version: '1.2.0',
+      description: 'An API described explicitly',
+      contact: { name: 'Jane Doe', email: 'jane@example.com' },
+      license: { name: 'MIT' },
+    },
+    servers: [{ url: 'https://api.example.com/v1' }],
+  },
+}
+```
+
+- **openapi.info**: any subset of the OpenAPI [Info Object](https://spec.openapis.org/oas/v3.0.3#info-object) (`title`, `version`, `description`, `contact`, `license`, `termsOfService`). Unset fields fall back to `title: 'Galbe app'` and `version: '0.1.0'`.
+- **openapi.servers**: an OpenAPI [Server Object](https://spec.openapis.org/oas/v3.0.3#server-object) list. Unset by default.
+
+When generating a spec with `galbe generate spec`, values set here take precedence over the `package.json` inference (`name`, `description`, `author`, `license`, `version`), which itself takes precedence over the built-in defaults.
+
 ## Config Type Safety
 
 To enforce type safety in your configuration file, use the `config` helper, which leverages your IDE's IntelliSense:
