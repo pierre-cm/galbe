@@ -246,6 +246,12 @@ describe('requests', () => {
     }
   })
 
+  test('static missing target', () => {
+    expect(() => new Galbe().static('/x', './does-not-exist')).toThrow(
+      "galbe.static('/x', './does-not-exist'): target does not exist: ./does-not-exist"
+    )
+  })
+
   test('methods, empty calls', async () => {
     for (let method of METHODS) {
       let resp = await fetch(`http://localhost:${port}/test`, { method: method.toUpperCase() })

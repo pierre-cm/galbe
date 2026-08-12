@@ -21,7 +21,7 @@ import type {
   STBodyValue,
 } from './types'
 
-import { readdirSync, statSync } from 'fs'
+import { existsSync, readdirSync, statSync } from 'fs'
 import { resolve as resolvePath } from 'path'
 import server from './server'
 import { GalbeRouter } from './router'
@@ -361,6 +361,7 @@ export class Galbe {
   static: StaticEndpoint = (path: string, target: string, options?: StaticEndpointOptions) => {
     let { resolve } = options ?? {}
     const rootPath = path
+    const rootTarget = target
 
     const walkStatic = (path: string, target: string) => {
       path = path?.[0] === '/' ? path : `/${path}`
@@ -370,6 +371,9 @@ export class Galbe {
       if (Bun.env.BUN_ENV === 'production') {
         t = resolvePath(import.meta.dir, `static-${Bun.env.GALBE_BUILD}/${target}`)
       }
+
+      if (!existsSync(t))
+        throw new Error(`galbe.static('${rootPath}', '${rootTarget}'): target does not exist: ${t}`)
 
       if (!statSync(t).isDirectory()) {
         let ut: string | null | undefined | void = t
