@@ -317,11 +317,11 @@ g.head('/body/schema', { body: { 'application/json': $T.string() } }, ctx => {
   ctx.set.status = body === null ? 200 : 500
 })
 
-g.post('/body/post', ctx => {
+g.post('/body/post/noschema', ctx => {
   const { body } = ctx
   type _ep_body = Expect<Equal<typeof body, any>>
 })
-g.patch('/body/patch', ctx => {
+g.patch('/body/patch/noschema', ctx => {
   const { body } = ctx
   type _ep_body = Expect<Equal<typeof body, any>>
 })

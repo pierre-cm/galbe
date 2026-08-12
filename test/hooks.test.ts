@@ -4,7 +4,8 @@ import { Galbe } from '../src'
 const port = 7360
 
 describe('hooks', async () => {
-  const galbe = new Galbe()
+  // tests below intentionally re-register /hooks/called: mute conflict warnings
+  const galbe = new Galbe({ router: { cacheEnabled: false, warn: () => {} } })
   await galbe.listen(port)
 
   test('hooks, empty', async () => {

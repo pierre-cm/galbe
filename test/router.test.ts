@@ -1,4 +1,4 @@
-import { expect, test, describe } from 'bun:test'
+import { expect, test, describe, mock } from 'bun:test'
 import { Galbe, MethodNotAllowedError, NotFoundError, type RouteNode } from '../src'
 
 describe('router', () => {
@@ -68,7 +68,8 @@ describe('router', () => {
   })
 
   test('redefining root', async () => {
-    const galbe = new Galbe()
+    const warn = mock((_: string) => {})
+    const galbe = new Galbe({ router: { cacheEnabled: false, warn } })
     const router = galbe.router
 
     const [h1, h2, h3] = [() => { }, () => { }, () => { }]
@@ -76,6 +77,7 @@ describe('router', () => {
     galbe.get('/', h1)
     galbe.get('/test', h2)
     galbe.get('/', h3)
+    expect(warn).toHaveBeenCalledTimes(1)
 
     let r: RouteNode | undefined = router.routes
     expect(router.prefix).toBe('')
@@ -376,5 +378,52 @@ describe('router', () => {
     expect((Object as any).children).toBeUndefined()
     expect((Object as any).routes).toBeUndefined()
     expect(Object.keys(Object.prototype)).toEqual([])
+  })
+
+  test('redefinition warning', async () => {
+    const warn = mock((_: string) => {})
+    const galbe = new Galbe({ router: { cacheEnabled: false, warn } })
+    const router = galbe.router
+
+    const [h1, h2] = [() => {}, () => {}]
+
+    galbe.get('/user/:id', h1)
+    galbe.post('/user/:id', () => {})
+    expect(warn).not.toHaveBeenCalled()
+
+    galbe.get('/user/:id', h2)
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0]?.[0]).toBe('route GET /user/:id redefined — previous registration overwritten')
+    expect(router.find('get', '/user/42').handler).toBe(h2)
+
+    // static redefinition warns too and keeps refreshing the cache entry
+    const [h3, h4] = [() => {}, () => {}]
+    galbe.get('/health', h3)
+    galbe.get('/health', h4)
+    expect(warn).toHaveBeenCalledTimes(2)
+    expect(warn.mock.calls[1]?.[0]).toBe('route GET /health redefined — previous registration overwritten')
+    expect(router.find('get', '/health').handler).toBe(h4)
+  })
+
+  test('param name collision warning', async () => {
+    const warn = mock((_: string) => {})
+    const galbe = new Galbe({ router: { cacheEnabled: false, warn } })
+    const router = galbe.router
+
+    const [h1, h2] = [() => {}, () => {}]
+
+    galbe.get('/user/:id', h1)
+    galbe.get('/user/:id/pets', () => {})
+    expect(warn).not.toHaveBeenCalled()
+
+    galbe.post('/user/:name', h2)
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0]?.[0]).toBe(
+      '/user/:name collides with /user/:id — param routes share one trie node regardless of name'
+    )
+
+    // both registrations still resolve
+    expect(router.find('get', '/user/42').handler).toBe(h1)
+    expect(router.find('post', '/user/42').handler).toBe(h2)
   })
 })

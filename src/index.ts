@@ -185,6 +185,7 @@ export class Galbe {
       prefix: this.config?.basePath || '',
       cacheEnabled: this.config?.router?.cacheEnabled,
       cacheLimit: this.config?.router?.cacheLimit,
+      warn: this.config?.router?.warn,
     })
   }
   private add(route: any) {

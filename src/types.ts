@@ -161,7 +161,7 @@ export type GalbeConfig = {
   server?: Partial<Omit<Parameters<typeof Bun.serve>[0], 'port' | 'fetch' | 'error'>> | TLSOptions
   /** A Glob Pattern or a list of Glob patterns defining the route files to be analyzed by the Automatic Route Analyzer. */
   routes?: boolean | string | string[]
-  router?: { cacheEnabled: boolean; cacheLimit?: number }
+  router?: { cacheEnabled: boolean; cacheLimit?: number; warn?: (message: string) => void }
   /** A property that can be used by plugins to add plugin's specific configuration. */
   plugin?: Record<string, any>
   /** Enable or disable the request schema validation.*/
@@ -381,6 +381,8 @@ export type ErrorHandler = (error: any, context: Context) => any
 export type RouteNode = {
   routes: { [K in Method]?: Route }
   param?: RouteNode
+  /** name of the first param registered on this node, e.g. 'id' for /user/:id */
+  paramName?: string
   children?: Record<string, RouteNode>
 }
 

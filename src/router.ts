@@ -66,7 +66,15 @@ export class GalbeRouter {
   cacheEnabled: boolean
   cacheLimit: number
   cachedRoutes: Map<string, Route | null>
-  constructor(options?: { prefix?: string; cacheEnabled?: boolean; cacheLimit?: number }) {
+  // registration-conflict warnings; injectable so tests can observe them. The
+  // console.warn default is silenced in production, an injected hook is not.
+  warn: (message: string) => void
+  constructor(options?: {
+    prefix?: string
+    cacheEnabled?: boolean
+    cacheLimit?: number
+    warn?: (message: string) => void
+  }) {
     this.routes = { routes: {} }
     let prefix = options?.prefix || ''
     if (prefix && !prefix.match(/^\//)) prefix = `/${prefix}`
@@ -74,6 +82,7 @@ export class GalbeRouter {
     this.cachedRoutes = new Map()
     this.cacheEnabled = options?.cacheEnabled ?? false
     this.cacheLimit = options?.cacheLimit ?? DEFAULT_CACHE_LIMIT
+    this.warn = options?.warn ?? (message => Bun.env.BUN_ENV !== 'production' && console.warn(message))
   }
   // bounded LRU: gets refresh recency, sets evict the oldest entry once past
   // cacheLimit, so a flood of distinct lookups (including cached misses) can't
@@ -100,33 +109,29 @@ export class GalbeRouter {
     let path = route.path.replace(/^\/+|\/+$/g, '').split('/')
     if (path[0] === '') path.shift()
     let r = this.routes
-    if (!path.length) {
-      r.routes[route.method] = route
-    } else {
-      while (path.length) {
-        let p = path.shift()
-        if (p === undefined) break
-        if (!path.length) {
-          if (p.match(/^:/)) {
-            if (!r.param) r.param = { routes: {} }
-            r.param.routes[route.method] = route
-          } else {
-            if (!r.children) r.children = newChildren()
-            if (!(p in r.children)) r.children[p] = { routes: {} }
-            r.children[p]!.routes[route.method] = route
-          }
-        } else {
-          if (p.match(/^:/)) {
-            if (!r.param) r.param = { routes: {} }
-            r = r.param
-          } else {
-            if (!r.children) r.children = newChildren()
-            if (!(p in r.children)) r.children[p] = { routes: {} }
-            r = r.children[p]!
-          }
-        }
+    let walked = ''
+    while (path.length) {
+      let p = path.shift()
+      if (p === undefined) break
+      if (p.match(/^:/)) {
+        // params sharing a trie node keep the first registered name: a later
+        // registration with a different name lands on the same node
+        if (!r.param) r.param = { routes: {}, paramName: p.slice(1) }
+        else if (r.param.paramName !== p.slice(1))
+          this.warn(
+            `${walked}/${p} collides with ${walked}/:${r.param.paramName} — param routes share one trie node regardless of name`
+          )
+        r = r.param
+      } else {
+        if (!r.children) r.children = newChildren()
+        if (!(p in r.children)) r.children[p] = { routes: {} }
+        r = r.children[p]!
       }
+      walked += `/${p}`
     }
+    if (r.routes[route.method])
+      this.warn(`route ${route.method.toUpperCase()} ${route.path} redefined — previous registration overwritten`)
+    r.routes[route.method] = route
   }
   find(method: Method, path: string): Route {
     path = normalizePath(path)
