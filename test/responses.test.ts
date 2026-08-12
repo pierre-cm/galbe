@@ -63,6 +63,10 @@ describe('responses', () => {
       ctx.body ? genTxt(ctx.body) : ''
     )
     galbe.post('/stream/str', { response: { 200: $T.stream($T.string()) } }, ctx => (ctx.body ? genTxt(ctx.body) : 42))
+    galbe.post('/stream/multiline', function* () {
+      yield 'line1\nline2'
+      yield 'a\r\nb\n\nc'
+    })
 
     await galbe.listen(port)
   })
@@ -119,6 +123,19 @@ describe('responses', () => {
       expect(resp.headers.get('content-type')).toBe('text/event-stream')
       expect(body).toMatch(new RegExp(`id:${UUID_RGX}\ndata:Hello\n\nid:${UUID_RGX}\ndata:Mom!\n\n`))
     }
+  })
+
+  test('response, no schema, stream, multi-line values', async () => {
+    let resp = await fetch(`http://localhost:${port}/stream/multiline`, { method: 'POST' })
+
+    const body = await resp.text()
+
+    expect(resp.status).toBe(200)
+    expect(resp.headers.get('content-type')).toBe('text/event-stream')
+    // one data: line per source line; \n\n inside a value must not terminate the event early
+    expect(body).toMatch(
+      new RegExp(`^id:${UUID_RGX}\ndata:line1\ndata:line2\n\nid:${UUID_RGX}\ndata:a\ndata:b\ndata:\ndata:c\n\n$`)
+    )
   })
 
   test('response, ba, validation OK', async () => {

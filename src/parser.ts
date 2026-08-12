@@ -828,7 +828,8 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
       async pull(controller) {
         let id = ctx.request.headers.get('last-event-id') ?? crypto.randomUUID()
         for await (const r of response) {
-          let data = `id:${id}\ndata:${r}\n\n`
+          // multi-line values must be split into one data: field per line (SSE spec)
+          let data = `id:${id}\n` + String(r).split(/\r\n|\r|\n/).map(l => `data:${l}`).join('\n') + '\n\n'
           try {
             await controller.write(data)
             await controller.flush()
