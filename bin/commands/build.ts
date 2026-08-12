@@ -16,6 +16,11 @@ const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string, ou
   const buildPath = resolve(tmpdir(), buildId)
   const indexDir = dirname(indexPath)
 
+  // Locate galbe's own util module from the CLI's install location rather than
+  // assuming `<app>/node_modules/galbe/src/util`, which breaks under pnpm,
+  // hoisted or global CLI installs.
+  const galbeUtilPath = resolve(import.meta.dir, '..', '..', 'src', 'util')
+
   let configPath = ''
   if (existsSync(`${indexDir}/galbe.config.ts`)) configPath = `${indexDir}/galbe.config.ts`
   else if (existsSync(`${indexDir}/galbe.config.js`)) configPath = `${indexDir}/galbe.config.js`
@@ -47,7 +52,7 @@ const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string, ou
     `import galbe from '${relative(buildPath, indexPath)}';\n` +
     (configPath ? `import config from '${relative(buildPath, configPath)}';\n` : '') +
     (configPath
-      ? `import {softMerge} from '${relative(buildPath, `${indexDir}/node_modules/galbe/src/util`)}';\n`
+      ? `import {softMerge} from '${relative(buildPath, galbeUtilPath)}';\n`
       : '') +
     (configPath ? `let conf = galbe.config;\ngalbe.config = softMerge(config, conf)\n` : '') +
     `${[...routes.values()].map((r, idx) => `import _${idx} from '${relative(buildPath, r.filepath)}'`).join(';\n')}\n` +

@@ -6,7 +6,10 @@ Designed for simplicity, Galbe lets you create and configure a project quickly. 
 
 ## Requirements
 
-To start developing with Galbe, you first need to install [Bun](https://bun.sh).
+To start developing with Galbe, you first need to install [Bun](https://bun.sh) (v1.2.21 or later).
+
+> [!NOTE]
+> Galbe is **Bun-only** by design: it builds on Bun-native APIs (`Bun.serve`, `Bun.Glob`, …) and ships its TypeScript sources directly. Node.js and Deno are not supported.
 
 ## Automatic Installation (Recommended)
 

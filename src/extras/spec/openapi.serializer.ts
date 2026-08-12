@@ -15,7 +15,7 @@ import { Galbe } from '../../../src'
 import { walkRoutes, HttpStatus } from '../../../src/util'
 import { Kind, Optional } from '../../../src/schema'
 
-import { OpenAPIV3 } from 'openapi-types'
+import type { OpenAPIV3 } from 'openapi-types'
 
 type SchemaType = { type: string; format: string; isJson: boolean }
 

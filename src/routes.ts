@@ -5,7 +5,7 @@ import { extname } from 'path'
 import { parse } from 'acorn'
 import { simple } from 'acorn-walk'
 import { Galbe } from './index'
-import { transformSync } from '@swc/core'
+import { transformSync } from '@swc/wasm'
 import { Glob } from 'bun'
 
 export const DEFAULT_ROUTE_PATTERN = 'src/**/*.route.{js,ts}'
@@ -169,7 +169,8 @@ export const metaAnalysis = async (filePath: string): Promise<RoutesMeta> => {
           syntax: 'typescript'
         },
         preserveAllComments: true,
-        target: 'esnext'
+        // @swc/wasm's JscTarget typing lags @swc/core's; 'esnext' is supported at runtime
+        target: 'esnext' as any
       }
     }).code
   }

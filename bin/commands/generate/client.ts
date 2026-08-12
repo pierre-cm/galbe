@@ -1,6 +1,6 @@
 import { Command, Option } from 'commander'
 import { resolve } from 'path'
-import { transformSync } from '@swc/core'
+import { transformSync } from '@swc/wasm'
 import { CWD, fmtList, instanciateRoutes, silentExec } from '../../util'
 import { Galbe, type GalbeClientRoute, type GalbeClientOptions } from '../../../src'
 import { walkRoutes } from '../../../src/util'
@@ -561,7 +561,8 @@ export default (cmd: Command) => {
 
       if (target === 'js') {
         code = transformSync(code, {
-          jsc: { parser: { syntax: 'typescript' }, preserveAllComments: true, target: 'esnext' },
+          // @swc/wasm's JscTarget typing lags @swc/core's; 'esnext' is supported at runtime
+          jsc: { parser: { syntax: 'typescript' }, preserveAllComments: true, target: 'esnext' as any },
         }).code
       }
 

@@ -9,6 +9,9 @@
 
 Galbe is a fast, lightweight and highly customizable JavaScript web framework based on [Bun](https://bun.sh).
 
+> [!NOTE]
+> Galbe is Bun-only (Bun v1.2.21+): it relies on Bun-native APIs and ships TypeScript sources directly. Node.js and Deno are not supported.
+
 > [!IMPORTANT]  
 > Galbe is currently under active development and not guaranteed to be stable. Future releases may potentially introduce breaking changes.
 

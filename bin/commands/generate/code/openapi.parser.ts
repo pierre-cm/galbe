@@ -1,5 +1,5 @@
 import { semver } from 'bun'
-import { transformSync } from '@swc/core'
+import { transformSync } from '@swc/wasm'
 import { resolve, relative, dirname } from 'path'
 import { OpenAPIV3 } from 'openapi-types'
 
@@ -93,7 +93,8 @@ const writeCodeFile = async (path: string, content: string, target: 'js' | 'ts')
           syntax: 'typescript',
         },
         preserveAllComments: true,
-        target: 'esnext',
+        // @swc/wasm's JscTarget typing lags @swc/core's; 'esnext' is supported at runtime
+        target: 'esnext' as any,
       },
     }).code
   }
