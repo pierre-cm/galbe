@@ -57,6 +57,11 @@ describe('STJson', () => {
       expect(schemaToTypeStr($T.json($T.number()))).toBe('Json<number>')
       expect(schemaToTypeStr($T.json($T.object({ a: $T.string() })))).toBe(`Json<{'a':string}>`)
     })
+
+    test('emits Record<string, unknown> for prop-less objects', () => {
+      expect(schemaToTypeStr($T.object())).toBe('Record<string, unknown>')
+      expect(schemaToTypeStr($T.object({ a: $T.object() }))).toBe(`{'a':Record<string, unknown>}`)
+    })
   })
 
   describe('runtime validation via /body/json route', () => {

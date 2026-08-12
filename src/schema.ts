@@ -536,10 +536,13 @@ export const schemaToTypeStr = (schema: STSchema): string => {
   } else if (kind === 'array') {
     type = `Array<${schemaToTypeStr((schema as STArray).items)}>`
   } else if (kind === 'object') {
-    let props = (schema as STObject).props
-    type = `{${Object.entries(props)
-      .map(([k, v]) => `${typeof k === 'string' ? `'${k}'` : k}${v?.[Optional] ? '?' : ''}:${schemaToTypeStr(v)}`)
-      .join(';')}}`
+    let entries = Object.entries((schema as STObject).props ?? {})
+    // prop-less object accepts any object at runtime, so `{}` would be too loose
+    type = entries.length
+      ? `{${entries
+          .map(([k, v]) => `${typeof k === 'string' ? `'${k}'` : k}${v?.[Optional] ? '?' : ''}:${schemaToTypeStr(v)}`)
+          .join(';')}}`
+      : 'Record<string, unknown>'
   } else if (kind === 'json') {
     type = `Json<${schemaToTypeStr((schema as STJson).value)}>`
   } else if (kind === 'anyOf' || kind === 'oneOf') {

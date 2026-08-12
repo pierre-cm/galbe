@@ -366,3 +366,29 @@ describe('config transform', () => {
     expect(typeof c.createUser).toBe('undefined')
   })
 })
+
+// ─── empty-object schemas ─────────────────────────────────────────────────────
+
+describe('empty-object schemas', () => {
+  test('generation completes for routes with prop-less object schemas', async () => {
+    const g2 = new Galbe()
+    g2.post(
+      '/things',
+      {
+        body: { 'application/json': $T.object() },
+        response: { 200: $T.object() },
+      },
+      () => {}
+    )
+
+    const runtimeContent = await Bun.file(resolve(__dirname, '../bin/res/client.runtime.ts')).text()
+    const code = await generateClientCode({
+      routes: buildRoutes(g2),
+      namedTypes: {},
+      className: 'EmptyObjectClient',
+      version: '0.0.0',
+      runtimeContent,
+    })
+    expect(code).toContain('Record<string, unknown>')
+  })
+})
