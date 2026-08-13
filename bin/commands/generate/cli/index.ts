@@ -63,8 +63,11 @@ export default (cmd: Command) => {
 
       let commands: GalbeCLICommand[] = []
 
+      // meta keys are relative to basePath; route paths carry it
+      const prefix = g.router.prefix || ''
       walkRoutes(g.router.routes, r => {
-        let meta = metaRoutes?.[r.path]?.[r.method]
+        const rPath = prefix && r.path.startsWith(prefix) ? r.path.slice(prefix.length) || '/' : r.path
+        let meta = metaRoutes?.[rPath]?.[r.method]
         let [_, summary, description] = meta?.head?.match(/^([^\n]*)\n\n(.*)/) || []
         if (!summary) description = meta?.head
 

@@ -76,6 +76,78 @@ describe('openapi serializer', () => {
     expect(schema.anyOf).toBeUndefined()
   })
 
+  test('basePath is stripped from paths and surfaced via servers', async () => {
+    const g = new Galbe({ basePath: '/base' })
+    g.get('/items', () => [])
+
+    const spec = await OpenAPISerializer(g)
+    expect(spec.paths).toHaveProperty('/items')
+    expect(spec.paths).not.toHaveProperty('/base/items')
+    expect(spec.servers).toEqual([{ url: '/base' }])
+  })
+
+  test('explicit servers config wins over the basePath default', async () => {
+    const g = new Galbe({ basePath: '/base', openapi: { servers: [{ url: 'https://api.example.com' }] } })
+    g.get('/items', () => [])
+
+    const spec = await OpenAPISerializer(g)
+    expect(spec.servers).toEqual([{ url: 'https://api.example.com' }])
+  })
+
+  test('meta applies under basePath (tags, hide)', async () => {
+    // Regression: meta keys are relative to basePath while route paths carry
+    // it; meta used to be silently dropped whenever basePath was set.
+    const g = new Galbe({ basePath: '/base' })
+    g.meta = [
+      {
+        file: 'f.route.ts',
+        header: {},
+        routes: {
+          '/items': { get: { tags: 'shop', summary: 'List items' } },
+          '/internal': { get: { hide: true } },
+        },
+      },
+    ]
+    g.get('/items', () => [])
+    g.get('/internal', () => 'x')
+
+    const spec = await OpenAPISerializer(g)
+    expect((spec.paths['/items'] as any).get.tags).toEqual(['shop'])
+    expect(spec.paths).not.toHaveProperty('/internal')
+  })
+
+  test('middleware-file @security and @tags apply to the file scope', async () => {
+    const g = new Galbe()
+    g.metaMiddleware.push({ file: 'auth.middleware.ts', scope: '/api/*', header: { security: 'bearerAuth', tags: 'api' } })
+    g.meta = [
+      {
+        file: 'f.route.ts',
+        header: {},
+        routes: {
+          '/api/open': { get: { security: 'none' } },
+          '/api/custom': { get: { security: 'apiKey', tags: 'custom' } },
+        },
+      },
+    ]
+    g.get('/api/items', () => [])
+    g.get('/api/open', () => 'open')
+    g.get('/api/custom', () => 'custom')
+    g.get('/health', () => 'ok')
+
+    const spec = await OpenAPISerializer(g)
+    const op = (p: string) => (spec.paths[p] as any).get
+    // inherited from the middleware file scope
+    expect(op('/api/items').security).toEqual([{ bearerAuth: [] }])
+    expect(op('/api/items').tags).toEqual(['api'])
+    // route-level meta wins, including the 'none' escape
+    expect(op('/api/open').security).toEqual([])
+    expect(op('/api/custom').security).toEqual([{ apiKey: [] }])
+    expect(op('/api/custom').tags).toEqual(['custom', 'api'])
+    // outside the scope: untouched
+    expect(op('/health').security).toBeUndefined()
+    expect(op('/health').tags).toBeUndefined()
+  })
+
   test('Bearer-pattern auth header does not clobber other security schemes', async () => {
     // Two operations: one declares `bearerAuth` via meta-style (synthetic),
     // another declares it via the Authorization-pattern path. The serializer

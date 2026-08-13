@@ -49,6 +49,24 @@ A base path added as a prefix to all routes. A leading `/` is added automaticall
 
 A glob pattern (or array of glob patterns) defining the route files to be picked up by the [Automatic Route Analyzer](../concepts/routes.md#automatic-route-analyzer). Set to `false` to disable the analyzer entirely. Default: `src/**/*.route.{js,ts}`.
 
+An object form gives access to the analyzer options:
+
+```ts
+export default {
+  routes: {
+    pattern: 'src/**/*.route.ts', // glob pattern or array of patterns
+    dirPrefix: false,             // disable directory groups (default: true)
+  }
+}
+```
+
+- **routes.pattern**: same as the plain form. Default: `src/**/*.route.{js,ts}`.
+- **routes.dirPrefix**: when `true`, a route file's directory relative to its glob's static base becomes its path prefix (see [Directory Groups](../concepts/routes.md#directory-groups)). Default: `true`.
+
+### middleware
+
+A glob pattern (or array of glob patterns) defining the [middleware files](../concepts/middleware.md#middleware-files) discovered by the Automatic Route Analyzer. Each file default-exports a hook (or array of hooks) scoped to its directory subtree. Set to `false` to disable middleware discovery only; `routes: false` disables the whole analyzer, middleware files included. Default: `src/**/*.middleware.{js,ts}`.
+
 ### plugin
 
 A namespace used by plugins to read their configuration. Each key should match a [Unique Plugin Identifier](../concepts/plugins.md#name).
@@ -121,7 +139,7 @@ export default {
 ```
 
 - **openapi.info**: any subset of the OpenAPI [Info Object](https://spec.openapis.org/oas/v3.0.3#info-object) (`title`, `version`, `description`, `contact`, `license`, `termsOfService`). Unset fields fall back to `title: 'Galbe app'` and `version: '0.1.0'`.
-- **openapi.servers**: an OpenAPI [Server Object](https://spec.openapis.org/oas/v3.0.3#server-object) list. Unset by default.
+- **openapi.servers**: an OpenAPI [Server Object](https://spec.openapis.org/oas/v3.0.3#server-object) list. When unset and a [`basePath`](#basepath) is configured, it defaults to `[{ url: basePath }]` — generated `paths` are relative to `basePath`, which is a deploy location rather than API structure.
 
 When generating a spec with `galbe generate spec`, values set here take precedence over the `package.json` inference (`name`, `description`, `author`, `license`, `version`), which itself takes precedence over the built-in defaults.
 

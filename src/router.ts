@@ -133,6 +133,25 @@ export class GalbeRouter {
       this.warn(`route ${route.method.toUpperCase()} ${route.path} redefined — previous registration overwritten`)
     r.routes[route.method] = route
   }
+  /**
+   * Unregister a route. Identity-checked: the node's entry is only deleted when
+   * it still holds this exact route object, so removing a route that was since
+   * redefined leaves the newer registration in place.
+   */
+  remove(route: Route): boolean {
+    let path = route.path.replace(/^\/+|\/+$/g, '').split('/')
+    if (path[0] === '') path.shift()
+    let r: RouteNode | undefined = this.routes
+    for (const p of path) {
+      if (p === '') break
+      r = p.match(/^:/) ? r.param : r.children?.[p]
+      if (!r) return false
+    }
+    if (r.routes[route.method] !== route) return false
+    delete r.routes[route.method]
+    for (const [key, cached] of this.cachedRoutes) if (cached === route) this.cachedRoutes.delete(key)
+    return true
+  }
   find(method: Method, path: string): Route {
     path = normalizePath(path)
     const staticRoute = this.cacheGet(`[${method}]${path}`)

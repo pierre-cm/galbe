@@ -94,6 +94,59 @@ middleware end
 
 Middleware can be declared at any time, including after the routes it targets: matching routes are recomposed on registration.
 
+## Middleware Files
+
+> [!NOTE]
+> Like [Route Files](routes.md#route-files), this feature requires running or building the app with the [Galbe CLI](../reference/cli.md).
+
+The [Automatic Route Analyzer](routes.md#automatic-route-analyzer) also discovers middleware files, matching the [`middleware`](../reference/configuration.md#middleware) configuration glob (default: `src/**/*.middleware.{js,ts}`). A middleware file default-exports a hook or an array of hooks — not a registration function:
+
+```ts
+// src/api/auth.middleware.ts
+export default ctx => {
+  if (!isAuthenticated(ctx.headers.authorization)) throw new UnauthorizedError()
+}
+```
+
+**Placement decides scope**: the file's directory, relative to the glob's static base, becomes the pattern — `src/api/auth.middleware.ts` registers as `galbe.middleware('/api/*', ...)`; a file at the base applies globally. An optional named export narrows the pattern, relative to the file's directory scope:
+
+```ts
+// src/api/admin.middleware.ts — applies to /api/admin/*
+export const scope = '/admin/*'
+export default auditHook
+```
+
+**Ordering** is deterministic; since the chain runs in registration order, this is user-visible:
+
+1. entry-file registrations (the app's own `galbe.middleware(...)` calls) — outermost;
+2. middleware files, sorted by directory depth (shallowest first) then path — outer scopes wrap inner ones;
+3. registrations inside route files, in file import order.
+
+A `@galbe-ignore` comment above the default export skips the file. Header annotations (`/** @security bearerAuth */`, `@tags`) apply to every operation in the file's scope in the generated OpenAPI spec; route-level metadata wins on conflict.
+
+### Scoping Summary
+
+Code-level API:
+
+| Definition | Example | Scope |
+| --- | --- | --- |
+| Global middleware | `galbe.middleware(log)` | every route |
+| Prefix middleware | `galbe.middleware('/api/*', auth)` | routes matching the pattern, wherever registered |
+| Route hooks | `galbe.get('/x', [h], handler)` | that route only |
+| Group | `galbe.group('/v1', g => ...)` | prefixes the routes registered through `g` |
+| Group hooks | `galbe.group('/v1', [auth], g => ...)` | the whole `/v1/*` subtree, incl. routes registered outside the group |
+| Group-scoped middleware | `g.middleware(h)` / `g.middleware('/sub/*', h)` | group subtree / pattern relative to the group prefix |
+
+Analyzer level:
+
+| Definition | Example | Scope |
+| --- | --- | --- |
+| Directory group *(default on)* | `src/api/users.route.ts` | the file's routes get `/api`; nested dirs compose |
+| `@prefix` annotation | `/** @prefix /v2 */` atop a route file | replaces the dir-derived prefix for that file |
+| Middleware file | `src/api/auth.middleware.ts` exporting `Hook \| Hook[]` | `/api/*` — the file's directory subtree |
+| Scope override export | `export const scope = '/admin/*'` in a middleware file | narrows within the directory scope |
+| In-file registration | `g.middleware(...)` / `g.group(...)` inside a route file | relative to the file's prefix |
+
 ## Route Groups
 
 To register many routes under a shared prefix — optionally with hooks covering the whole subtree — see [Route Groups](routes.md#route-groups).

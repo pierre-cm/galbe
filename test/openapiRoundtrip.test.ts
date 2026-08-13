@@ -44,6 +44,16 @@ describe('openapi roundtrip', () => {
     if (dir) await rm(dir, { recursive: true, force: true })
   })
 
+  test('generated layout follows the directory convention with relative paths', async () => {
+    // /v1/modules/... → src/v1/modules.route.ts, paths emitted relative to /v1
+    // so the analyzer's dirPrefix reconstructs the full path on load
+    const modules = await Bun.file(join(dir, 'src/v1/modules.route.ts')).text()
+    expect(modules).toContain('g.get("/modules/:scope/:name"')
+    expect(modules).not.toContain('"/v1/modules')
+    const health = await Bun.file(join(dir, 'src/health.route.ts')).text()
+    expect(health).toContain('g.get("/health"')
+  })
+
   test('every original path operation is present in generated', () => {
     for (const [path, methods] of Object.entries(original.paths || {})) {
       expect(generated.paths).toHaveProperty(path)

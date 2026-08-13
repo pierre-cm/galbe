@@ -82,6 +82,33 @@ export const walkMetaRoutes = (
 
 export const isIterator = (obj: any) => typeof obj?.next === 'function'
 
+export const joinPath = (prefix: string, path: string) => {
+  if (prefix && prefix[0] !== '/') prefix = `/${prefix}`
+  prefix = prefix.replace(/\/+$/, '')
+  return `${prefix}${path[0] === '/' ? path : `/${path}`}`
+}
+
+// middleware pattern segments are literals or '*'; ':params' are a routing
+// concept and rejected here ('*' already matches any single segment)
+export const parseMiddlewarePattern = (pattern: string): string[] => {
+  const segments = pattern.split('/').filter(s => s !== '')
+  const valid = pattern === '/' || (segments.length && segments.every(s => s === '*' || !/[:*\s]/.test(s)))
+  if (!valid) throw new SyntaxError(`${pattern} is not a valid middleware pattern (segments are literals or '*')`)
+  return segments
+}
+
+// literal segments match identical route segments, '*' matches any single
+// segment (including ':params'), a trailing '*' matches the whole subtree and
+// the prefix itself (like the router's terminal wildcard)
+export const matchMiddleware = (pattern: string[], path: string[]): boolean => {
+  for (let i = 0; i < pattern.length; i++) {
+    const p = pattern[i]!
+    if (p === '*' && i === pattern.length - 1) return true
+    if (i >= path.length || (p !== '*' && p !== path[i])) return false
+  }
+  return pattern.length === path.length
+}
+
 export const HttpStatus = {
   100: 'Continue',
   101: 'Switching Protocols',

@@ -1,10 +1,12 @@
 import ts from 'typescript'
-import type { RoutePlanEntry, ScopePlan } from './openapi.parser'
+import { joinPath } from '../../../../src/util'
+import { schemaImportPath, type RoutePlanEntry, type ScopePlan } from './openapi.parser'
 
 const METHODS = new Set(['get', 'put', 'patch', 'post', 'delete', 'options', 'head'])
 
 export type RouteId = string
 
+/** Ids are full paths: the file's prefix (dir-derived or `@prefix`) joined with the literal path. */
 export const routeId = (method: string, path: string): RouteId => `${method.toUpperCase()} ${path}`
 
 export type MergeOptions = {
@@ -39,18 +41,15 @@ type ExistingFile = {
   text: string
   sourceFile: ts.SourceFile
   routes: ExistingRoute[]
+  /** effective route prefix: `@prefix` header if present, else the scope's dir-derived one */
+  prefix: string
   schemaImport: ts.ImportDeclaration | null
   bodyOpenBracePos: number | null
   bodyCloseBracePos: number | null
 }
 
-const importPathForScope = (scopeKey: string): string => {
-  const deepness = scopeKey.split('/').length - 1
-  return `${Array(deepness).fill('../').join('')}schemas${scopeKey}.schema`
-}
-
 const renderFreshRouteFile = (scope: ScopePlan): string => {
-  const importPath = importPathForScope(scope.scopeKey)
+  const importPath = schemaImportPath(scope)
   const rDecl = scope.routes.map(r => `  ${r.meta}\ng.${r.call}`)
   return (
     `import { NotImplementedError, type Galbe } from 'galbe'\n` +
@@ -78,6 +77,7 @@ const parseExistingFile = (text: string, scope: ScopePlan): ExistingFile => {
   const expectedSuffix = `schemas${scope.scopeKey}.schema`
   let schemaImport: ts.ImportDeclaration | null = null
   let body: ts.Block | null = null
+  let prefix = scope.prefix
 
   for (const stmt of sf.statements) {
     if (ts.isImportDeclaration(stmt)) {
@@ -87,6 +87,10 @@ const parseExistingFile = (text: string, scope: ScopePlan): ExistingFile => {
       const expr = stmt.expression
       if (ts.isArrowFunction(expr) && ts.isBlock(expr.body)) body = expr.body
       else if (ts.isFunctionExpression(expr)) body = expr.body
+      // a hand-written @prefix header overrides the dir-derived prefix
+      const jsdoc = findLeadingJsDoc(sf, stmt)
+      const m = jsdoc ? sf.text.slice(jsdoc.pos, jsdoc.end).match(/@prefix\s+(\S+)/) : null
+      if (m) prefix = m[1] === '/' ? '' : m[1]!.replace(/\/+$/, '')
     }
   }
 
@@ -110,7 +114,7 @@ const parseExistingFile = (text: string, scope: ScopePlan): ExistingFile => {
       if (!ts.isIdentifier(schemaArg)) continue
 
       routes.push({
-        origId: routeId(method, pathArg.text),
+        origId: routeId(method, joinPath(prefix, pathArg.text)),
         method,
         path: pathArg.text,
         stmt,
@@ -125,6 +129,7 @@ const parseExistingFile = (text: string, scope: ScopePlan): ExistingFile => {
     text,
     sourceFile: sf,
     routes,
+    prefix,
     schemaImport,
     bodyOpenBracePos: body ? body.getStart(sf) : null,
     bodyCloseBracePos: body ? body.end - 1 : null,
@@ -151,7 +156,7 @@ export const mergeRouteFile = (
   const rename = opts.rename ?? new Map<RouteId, RouteId>()
 
   const planById = new Map<RouteId, RoutePlanEntry>()
-  for (const r of scope.routes) planById.set(routeId(r.method, r.path), r)
+  for (const r of scope.routes) planById.set(routeId(r.method, joinPath(scope.prefix, r.path)), r)
 
   if (existing === null || existing.trim() === '') {
     return {
@@ -162,6 +167,8 @@ export const mergeRouteFile = (
       stale: [],
     }
   }
+  // diffing is prefix-aware on both sides: plan ids come from full spec paths,
+  // existing ids from the file's effective prefix joined with its literal paths
 
   const file = parseExistingFile(existing, scope)
   const sf = file.sourceFile
@@ -199,8 +206,12 @@ export const mergeRouteFile = (
   const edits: Edit[] = []
 
   for (const { er, entry } of updates) {
-    if (er.path !== entry.path) {
-      edits.push({ pos: er.pathArg.getStart(sf), end: er.pathArg.end, text: JSON.stringify(entry.path) })
+    // the emitted literal is relative to the file's effective prefix, which may
+    // differ from the scope's when the file declares @prefix
+    const full = joinPath(scope.prefix, entry.path)
+    const literal = file.prefix && full.startsWith(file.prefix) ? full.slice(file.prefix.length) || '/' : full
+    if (er.path !== literal) {
+      edits.push({ pos: er.pathArg.getStart(sf), end: er.pathArg.end, text: JSON.stringify(literal) })
     }
     if (er.schemaArg.text !== entry.schemaName) {
       edits.push({ pos: er.schemaArg.getStart(sf), end: er.schemaArg.end, text: entry.schemaName })
@@ -222,8 +233,7 @@ export const mergeRouteFile = (
     if (sortedImports.length === 0) {
       edits.push({ pos: file.schemaImport.pos, end: file.schemaImport.end, text: '' })
     } else {
-      const importPath = importPathForScope(scope.scopeKey)
-      const newText = `import { ${sortedImports.join(', ')} } from '${importPath}'`
+      const newText = `import { ${sortedImports.join(', ')} } from '${schemaImportPath(scope)}'`
       edits.push({
         pos: file.schemaImport.getStart(sf),
         end: file.schemaImport.end,
@@ -239,8 +249,8 @@ export const mergeRouteFile = (
 
   return {
     content: applyEdits(existing, edits),
-    added: additions.map(a => routeId(a.method, a.path)),
-    updated: updates.map(u => routeId(u.entry.method, u.entry.path)),
+    added: additions.map(a => routeId(a.method, joinPath(scope.prefix, a.path))),
+    updated: updates.map(u => routeId(u.entry.method, joinPath(scope.prefix, u.entry.path))),
     removed: removals.map(r => r.origId),
     stale: stale.map(s => s.origId),
   }

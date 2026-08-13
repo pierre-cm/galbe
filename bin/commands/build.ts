@@ -7,7 +7,7 @@ import { mkdir, rm } from 'fs/promises'
 
 import { CWD, fmtVal, silentExec } from '../util'
 import { Galbe } from '../../src'
-import { defineRoutes, GalbeProxy } from '../../src/routes'
+import { defineRoutes } from '../../src/routes'
 import type { BuildConfig } from 'bun'
 import { cpSync, existsSync } from 'fs'
 import { softMerge } from '../../src/util'
@@ -16,50 +16,56 @@ const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string, ou
   const buildPath = resolve(tmpdir(), buildId)
   const indexDir = dirname(indexPath)
 
-  // Locate galbe's own util module from the CLI's install location rather than
-  // assuming `<app>/node_modules/galbe/src/util`, which breaks under pnpm,
+  // Locate galbe's own modules from the CLI's install location rather than
+  // assuming `<app>/node_modules/galbe/src`, which breaks under pnpm,
   // hoisted or global CLI installs.
   const galbeUtilPath = resolve(import.meta.dir, '..', '..', 'src', 'util')
+  const galbeIndexPath = resolve(import.meta.dir, '..', '..', 'src', 'index')
 
   let configPath = ''
   if (existsSync(`${indexDir}/galbe.config.ts`)) configPath = `${indexDir}/galbe.config.ts`
   else if (existsSync(`${indexDir}/galbe.config.js`)) configPath = `${indexDir}/galbe.config.js`
 
-  const routes = new Map<string, { filepath: string; static?: { path: string; root: string } }>()
   let errors: any[] = []
-  // Create GalbeProxy here
-  // use it to define routes
-  const proxy = new GalbeProxy(g, ({ type, error, filepath, route }) => {
-    if (!filepath) return
-    routes.set(filepath, { filepath, static: route?.static })
-    if (type === 'error') errors.push(error)
-  })
-  await defineRoutes({ routes: g?.config?.routes }, proxy)
-  // call init on it for plugin initialization
-  await proxy.init()
+  const { routeFiles, middlewareFiles } = await defineRoutes(
+    { routes: g?.config?.routes, middleware: g?.config?.middleware },
+    g,
+    ({ type, error }) => {
+      if (type === 'error') errors.push(error)
+    }
+  )
+  // plugin initialization
+  await g.init()
 
   if (errors.length) throw errors
 
   // Copy static assets next to the bundle so the runtime can resolve them
   // via static-${BUILD_ID}/<target> at request time.
-  for (const { target } of proxy._staticTargets) {
+  for (const { target } of g.staticTargets) {
     cpSync(target, `${outPath}/static-${buildId}/${target}`, { recursive: true, dereference: true })
   }
 
   await mkdir(buildPath, { recursive: true })
 
+  const usesGroup = routeFiles.some(r => r.prefix)
   let buildIndex =
     `import galbe from '${relative(buildPath, indexPath)}';\n` +
+    (usesGroup ? `import {GalbeGroup} from '${relative(buildPath, galbeIndexPath)}';\n` : '') +
     (configPath ? `import config from '${relative(buildPath, configPath)}';\n` : '') +
     (configPath
       ? `import {softMerge} from '${relative(buildPath, galbeUtilPath)}';\n`
       : '') +
     (configPath ? `let conf = galbe.config;\ngalbe.config = softMerge(config, conf)\n` : '') +
-    `${[...routes.values()].map((r, idx) => `import _${idx} from '${relative(buildPath, r.filepath)}'`).join(';\n')}\n` +
+    `${middlewareFiles.map((m, idx) => `import mw_${idx} from '${relative(buildPath, m.file)}'`).join(';\n')}\n` +
+    `${routeFiles.map((r, idx) => `import _${idx} from '${relative(buildPath, r.file)}'`).join(';\n')}\n` +
     `Bun.env.BUN_ENV = 'production';\n` +
     `Bun.env.GALBE_BUILD = '${buildId}';\n` +
     `galbe.meta = ${JSON.stringify(g.meta)};\n` +
-    `${[...routes].map((_, idx) => `_${idx}(galbe)`).join(';\n')};\n` +
+    `galbe.metaMiddleware = ${JSON.stringify(g.metaMiddleware)};\n` +
+    `${middlewareFiles.map((m, idx) => `galbe.middleware(${JSON.stringify(m.scope)}, mw_${idx})`).join(';\n')};\n` +
+    `${routeFiles
+      .map((r, idx) => `_${idx}(${r.prefix ? `new GalbeGroup(galbe, ${JSON.stringify(r.prefix)})` : 'galbe'})`)
+      .join(';\n')};\n` +
     `galbe.listen();\n` +
     `process.on('SIGTERM', () => galbe.stop());\n` +
     `process.on('SIGINT', () => galbe.stop());\n`

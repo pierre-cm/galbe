@@ -1,17 +1,23 @@
-import type { GalbeConfig, GalbePlugin, Method, Route } from './types'
+import type { GalbeConfig, Hook, Method, Route } from './types'
 
 import { readdir, lstat } from 'fs/promises'
-import { extname } from 'path'
+import { extname, dirname, relative, resolve, sep } from 'path'
 import { parse } from 'acorn'
 import { simple } from 'acorn-walk'
-import { Galbe } from './index'
+import { Galbe, GalbeGroup } from './index'
+import { joinPath } from './util'
 import { transformSync } from '@swc/wasm'
 import { Glob } from 'bun'
 
 export const DEFAULT_ROUTE_PATTERN = 'src/**/*.route.{js,ts}'
+export const DEFAULT_MIDDLEWARE_PATTERN = 'src/**/*.middleware.{js,ts}'
 
 const IGNORE_COMMENT_RGX = /^\s*\@galbe-ignore\s*$/
 const HIDE_COMMENT_RGX = /^\s*\@galbe-hide\s*$/
+const ROUTE_PATH_RGX = /^(\/(\*|:?\d+|:?\w+|:?[\w\d.][\w-.]+[\w\d]))*\/?$/
+// literal route segment: the router's segment rules minus ':param' and '*'
+const LITERAL_SEGMENT_RGX = /^(\d+|\w+|[\w\d.][\w-.]+[\w\d])$/
+const ROUTE_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'static'])
 
 export type RouteMeta = { head?: string, ignore?: boolean, hide?: boolean } & Record<string, boolean | string | string[]>
 export type RoutesMeta = {
@@ -30,93 +36,14 @@ export type RouteInstanciationCallback = <T extends 'add' | 'error'>(event: {
 export type RouteFileMeta = {
   file: string
 } & RoutesMeta
-
-export class GalbeProxy {
-  #g: Galbe
-  #plugins: GalbePlugin[] = []
-  _cb?: RouteInstanciationCallback
-  _metaTmp?: RoutesMeta
-  _filepath?: string
-  _meta: Array<RouteFileMeta> = []
-  _staticTargets: Array<{ path: string; target: string }> = []
-  constructor(g: Galbe, cb?: RouteInstanciationCallback) {
-    this.#g = g
-    this._cb = cb
-    this.#plugins = g.plugins
-  }
-  get server() {
-    return this.#g.server
-  }
-  get router() {
-    return this.#g.router
-  }
-  get config() {
-    return this.#g.config
-  }
-  get meta() {
-    return this._meta
-  }
-  set meta(meta: Array<RouteFileMeta>) {
-    this._meta = meta
-    this.#g.meta = meta
-  }
-  async init() {
-    for (const p of this.#plugins) {
-      // @ts-ignore
-      if (p.init) await p.init(this.#g.config?.plugin?.[p.name] || {}, this)
-    }
-  }
-  private async handleRoute(method: Method | 'static', ...args: any[]): Promise<Route | undefined> {
-    let path = args[0]
-    let meta = {
-      ...this._metaTmp?.routes?.[path]?.[method],
-      ...(this._metaTmp?.hide ? { hide: true } : {}),
-      ...(this._metaTmp?.ignore ? { ignore: true } : {})
-    }
-    if (meta?.ignore) return
-
-    //@ts-ignore
-    const route = this.#g[method](...args) as Route
-
-    if (this._cb && !meta?.ignore) {
-      await this._cb({
-        type: 'add',
-        route,
-        filepath: this._filepath || '',
-        meta
-      })
-    }
-    return route
-  }
-  async get(...args: any[]) {
-    return this.handleRoute('get', ...args)
-  }
-  async post(...args: any[]) {
-    return this.handleRoute('post', ...args)
-  }
-  async put(...args: any[]) {
-    return this.handleRoute('put', ...args)
-  }
-  async patch(...args: any[]) {
-    return this.handleRoute('patch', ...args)
-  }
-  async delete(...args: any[]) {
-    return this.handleRoute('delete', ...args)
-  }
-  async options(...args: any[]) {
-    return this.handleRoute('options', ...args)
-  }
-  async head(...args: any[]) {
-    return this.handleRoute('head', ...args)
-  }
-  async static(...args: any[]) {
-    const [path, target] = args
-    if (typeof path === 'string' && typeof target === 'string') {
-      this._staticTargets.push({ path, target })
-    }
-    return this.handleRoute('static', ...args)
-  }
+export type MiddlewareFileMeta = {
+  file: string
+  /** effective middleware pattern, e.g. `/api/*` or `*` */
+  scope: string
+  header: Record<string, boolean | string | string[]>
 }
+export type RouteFileRegistration = { file: string; prefix: string }
+export type MiddlewareFileRegistration = { file: string; scope: string }
 
 const parseComment = (comment: string): Record<string, string | string[]> => {
   // Find the first JSDoc-tag line (a line whose first non-whitespace/star
@@ -219,10 +146,12 @@ export const metaAnalysis = async (filePath: string): Promise<RoutesMeta> => {
           // @ts-ignore
           if (node?.callee?.object?.name === galbeIdentifier) {
             // @ts-ignore
-            let path = node.arguments[0].value
-            if (!path?.startsWith("/")) path = `/${path}`
-            // @ts-ignore
             const method = node.callee.property.name as Method
+            // 'group'/'middleware' calls are not routes; skip non-literal paths
+            // @ts-ignore
+            let path = node.arguments?.[0]?.value
+            if (!ROUTE_METHODS.has(method) || typeof path !== 'string') return
+            if (!path.startsWith("/")) path = `/${path}`
             const line = node.loc?.start.line || -1
             const col = node.loc?.start.column || -1
             const com = comments?.[line]?.[col - 1] ?? ''
@@ -237,40 +166,162 @@ export const metaAnalysis = async (filePath: string): Promise<RoutesMeta> => {
   return meta
 }
 
-export const defineRoutes = async (
-  options: Pick<GalbeConfig, 'routes'>,
-  proxy: GalbeProxy,
-) => {
-  const routes = options?.routes === undefined || options?.routes === true ? DEFAULT_ROUTE_PATTERN : options?.routes
-  if (!routes) return
-  const root = process.cwd()
-  if (typeof routes === 'string') {
-    for await (const path of new Glob(routes).scan({ cwd: root, absolute: true, onlyFiles: false, dot: true })) {
-      const isDir = (await lstat(path)).isDirectory()
+// static base of a glob pattern: the segments before the first one containing a
+// glob metachar. Directory prefixes are derived relative to this anchor. A
+// pattern with no metachar names a file: its own directory is the base.
+export const globBase = (pattern: string): string => {
+  const segments = pattern.split('/')
+  const idx = segments.findIndex(s => /[*?[{]/.test(s))
+  return (idx === -1 ? segments.slice(0, -1) : segments.slice(0, idx)).join('/')
+}
 
-      let files: string[] = []
-      if (!isDir) files.push(path)
-      else files = files.concat((await readdir(path)).map(f => `${path}/${f}`))
-      for (const f of files) {
-        try {
-          const metadata = await metaAnalysis(f)
-          if (metadata?.ignore) continue
-          proxy._filepath = f
-          proxy._metaTmp = metadata
-          proxy.meta = [...proxy.meta, { file: path, ...metadata }]
-          const imported = await import(f)
-          if (!imported?.default) throw new Error('No default export function')
-          if (typeof imported.default !== 'function') throw new Error('Default export must be a function')
-          const routes = imported.default
-          routes(proxy)
-        } catch (err: any) {
-          if (proxy._cb) await proxy._cb({ type: 'error', error: err, filepath: f, route: undefined, meta: undefined })
-        }
+const dirPrefixOf = (file: string, base: string): string => {
+  const rel = relative(base, dirname(file))
+  if (!rel || rel === '.') return ''
+  const segments = rel.split(sep)
+  for (const s of segments) {
+    if (!LITERAL_SEGMENT_RGX.test(s))
+      throw new Error(
+        `invalid directory name '${s}' for ${file} — directory names must be valid literal route segments`
+      )
+  }
+  return `/${segments.join('/')}`
+}
+
+// '@prefix /v2' declares the file's route prefix, overriding the dir-derived
+// one entirely; '@prefix /' opts a file out of dirPrefix
+const headerPrefixOf = (meta: RoutesMeta, file: string): string | undefined => {
+  let p = meta.header?.prefix
+  if (p === undefined) return undefined
+  if (Array.isArray(p)) {
+    console.warn(`duplicate @prefix in ${file} — using the first one`)
+    p = p[0]!
+  }
+  if (typeof p !== 'string' || !ROUTE_PATH_RGX.test(p) || p.includes('*'))
+    throw new Error(`invalid @prefix ${String(p)} in ${file} — must be a valid route path`)
+  return p.replace(/\/+$/, '')
+}
+
+// rewrite meta keys to the final path relative to basePath: group/@prefix
+// included, basePath excluded — the shape every consumer looks up by
+const prefixMeta = (meta: RoutesMeta, prefix: string): RoutesMeta =>
+  !prefix
+    ? meta
+    : { ...meta, routes: Object.fromEntries(Object.entries(meta.routes).map(([p, m]) => [joinPath(prefix, p), m])) }
+
+const collectFiles = async (pattern: string): Promise<Array<{ file: string; base: string }>> => {
+  const root = process.cwd()
+  const base = resolve(root, globBase(pattern))
+  const out: Array<{ file: string; base: string }> = []
+  for await (const path of new Glob(pattern).scan({ cwd: root, absolute: true, onlyFiles: false, dot: true })) {
+    if ((await lstat(path)).isDirectory()) {
+      // a pattern naming a directory registers its direct children, unprefixed
+      for (const f of await readdir(path)) out.push({ file: `${path}/${f}`, base: path })
+    } else out.push({ file: path, base })
+  }
+  return out
+}
+
+/**
+ * Automatic Route Analyzer: discovers middleware files (registered first,
+ * shallowest directory wins the outer position), then imports route files,
+ * handing each a registrar bound to its prefix (directory-derived or
+ * `@prefix`). Route-to-file correlation relies on `galbe.onRouteAdded` and
+ * assumes registration is synchronous within a file's default export.
+ */
+export const defineRoutes = async (
+  options: Pick<GalbeConfig, 'routes' | 'middleware'>,
+  galbe: Galbe,
+  cb?: RouteInstanciationCallback
+): Promise<{ routeFiles: RouteFileRegistration[]; middlewareFiles: MiddlewareFileRegistration[] }> => {
+  const result = { routeFiles: [] as RouteFileRegistration[], middlewareFiles: [] as MiddlewareFileRegistration[] }
+  const routesConf = options?.routes
+  if (routesConf === false) return result
+  const conf =
+    typeof routesConf === 'object' && !Array.isArray(routesConf)
+      ? routesConf
+      : { pattern: routesConf === undefined || routesConf === true ? undefined : routesConf }
+  const dirPrefix = conf.dirPrefix !== false
+  const patterns = conf.pattern === undefined ? [DEFAULT_ROUTE_PATTERN] : [conf.pattern].flat()
+
+  const relPath = (path: string) =>
+    galbe.router.prefix && path.startsWith(galbe.router.prefix)
+      ? path.slice(galbe.router.prefix.length) || '/'
+      : path
+
+  // middleware files first: outer scopes wrap route files' in-file registrations
+  const mwConf = options?.middleware
+  if (mwConf !== false) {
+    const mwPatterns = mwConf === undefined || mwConf === true ? [DEFAULT_MIDDLEWARE_PATTERN] : [mwConf].flat()
+    const files = (await Promise.all(mwPatterns.map(collectFiles))).flat()
+    // deterministic order: directory depth (shallowest first), then path
+    files.sort((a, b) => a.file.split('/').length - b.file.split('/').length || a.file.localeCompare(b.file))
+    for (const { file, base } of files) {
+      const dirScope = dirPrefixOf(file, base)
+      try {
+        const metadata = await metaAnalysis(file)
+        if (metadata?.ignore) continue
+        const imported = await import(file)
+        const def = imported?.default
+        const hooks: Hook[] = Array.isArray(def) ? def : def ? [def] : []
+        if (!hooks.length || hooks.some(h => typeof h !== 'function'))
+          throw new Error('Middleware file must default-export a hook function or an array of hooks')
+        const scopeExport = imported.scope
+        if (scopeExport !== undefined && typeof scopeExport !== 'string')
+          throw new Error(`invalid scope export in ${file} — must be a middleware pattern string`)
+        const scope = scopeExport !== undefined ? joinPath(dirScope, scopeExport) : dirScope ? `${dirScope}/*` : '*'
+        galbe.middleware(scope, hooks)
+        galbe.metaMiddleware.push({ file, scope, header: metadata.header })
+        result.middlewareFiles.push({ file, scope })
+      } catch (err: any) {
+        if (cb) await cb({ type: 'error', error: err, filepath: file, route: undefined, meta: undefined })
       }
     }
-  } else if (Array.isArray(routes)) {
-    for (const r of routes) {
-      await defineRoutes({ routes: r }, proxy)
+  }
+
+  for (const pattern of patterns) {
+    for (const { file, base } of await collectFiles(pattern)) {
+      let metadata: RoutesMeta
+      try {
+        metadata = await metaAnalysis(file)
+      } catch (err: any) {
+        if (cb) await cb({ type: 'error', error: err, filepath: file, route: undefined, meta: undefined })
+        continue
+      }
+      if (metadata?.ignore) continue
+      // invalid dir segments and invalid @prefix are boot errors, not per-file ones
+      const prefix = headerPrefixOf(metadata, file) ?? (dirPrefix ? dirPrefixOf(file, base) : '')
+      const meta = prefixMeta(metadata, prefix)
+      galbe.meta = [...(galbe.meta ?? []), { file, ...meta }]
+      const added: Route[] = []
+      const unsub = galbe.onRouteAdded(({ route }) => added.push(route))
+      try {
+        const imported = await import(file)
+        if (!imported?.default) throw new Error('No default export function')
+        if (typeof imported.default !== 'function') throw new Error('Default export must be a function')
+        imported.default(prefix ? new GalbeGroup(galbe, prefix) : galbe)
+        result.routeFiles.push({ file, prefix })
+      } catch (err: any) {
+        if (cb) await cb({ type: 'error', error: err, filepath: file, route: undefined, meta: undefined })
+      } finally {
+        unsub()
+      }
+      for (const route of added) {
+        const root = route.static?.root
+        const key = root ? (root[0] === '/' ? root : `/${root}`) : relPath(route.path)
+        const routeMeta: RouteMeta = {
+          ...meta.routes?.[key]?.[root ? 'static' : route.method],
+          ...(meta.hide ? { hide: true } : {}),
+          ...(meta.ignore ? { ignore: true } : {})
+        }
+        // '@galbe-ignore'd routes must not be served: unregister them
+        if (routeMeta.ignore) {
+          galbe.router.remove(route)
+          continue
+        }
+        if (cb) await cb({ type: 'add', route, filepath: file, meta: routeMeta })
+      }
     }
   }
+  return result
 }

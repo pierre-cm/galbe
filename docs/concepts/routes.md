@@ -174,3 +174,56 @@ The first paragraph of a comment is captured as the route's description (its fir
 
 > [!TIP]
 > To exclude a route or a whole route file from analysis, add a `@galbe-ignore` comment immediately before its definition (or before the file's default export). Use `@galbe-hide` instead to keep the route registered but hide it from generated artifacts (e.g. OpenAPI specs, generated clients).
+
+### Directory Groups
+
+By default, a route file's directory becomes its path prefix. The prefix is the file's directory relative to the *static base* of its glob pattern — the part of the pattern before the first segment containing a glob character. With the default pattern `src/**/*.route.{js,ts}`, the base is `src/`:
+
+```txt
+src/
+  health.route.ts          g.get('/health')     → GET /health
+  api/
+    users.route.ts         g.get('/users/:id')  → GET /api/users/:id
+    admin/
+      stats.route.ts       g.get('/stats')      → GET /api/admin/stats
+```
+
+Rules:
+
+- **Filenames never contribute** to the path — this is grouping, not filesystem routing. There is no `index.*` special-casing.
+- Directory names must be valid **literal** route segments; a directory name that is not (spaces, `:param`-like names, ...) fails at startup. Use [`@prefix`](#prefix-annotation) for prefixes containing parameters.
+- When `routes` is a list of patterns, each pattern anchors its own base. A pattern naming an exact file has the file's own directory as base, so no prefix.
+- Prefixed files receive a group registrar bound to their prefix: nested `g.group(...)` and `g.middleware(...)` calls inside the file are scope-relative.
+
+To opt out, use the object form of the [`routes`](../reference/configuration.md#routes) configuration:
+
+```ts
+export default {
+  routes: { pattern: 'src/**/*.route.ts', dirPrefix: false }
+}
+```
+
+### @prefix Annotation
+
+The `@prefix` header annotation declares a file's route prefix explicitly, replacing the directory-derived one entirely (it is absolute, not composed):
+
+```ts
+/**
+ * @prefix /v2
+ */
+export default g => {
+  g.get('/users', listUsers)  // GET /v2/users, wherever the file lives
+}
+```
+
+- `@prefix /` opts a file out of `dirPrefix` — the escape hatch for e.g. a health-check file living in a nested directory.
+- The prefix may contain `:param` segments and must be a valid route path (startup error otherwise).
+- It also works with `dirPrefix: false`: the annotation is the primitive, the directory convention is sugar for it.
+
+### Registration Events
+
+The analyzer observes registrations through `galbe.onRouteAdded(cb)`, a public API you can use too: the callback fires synchronously for every route added to the router, with the final (prefixed) path, and returns an unsubscribe function.
+
+```ts
+const unsub = galbe.onRouteAdded(({ route }) => console.log(route.method, route.path))
+```

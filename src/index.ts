@@ -1,4 +1,4 @@
-import type { RouteFileMeta } from './routes'
+import type { MiddlewareFileMeta, RouteFileMeta } from './routes'
 import type {
   GalbeConfig,
   Method,
@@ -26,7 +26,7 @@ import type {
 import { existsSync, readdirSync, statSync } from 'fs'
 import { resolve as resolvePath } from 'path'
 import server from './server'
-import { walkRoutes } from './util'
+import { joinPath, matchMiddleware, parseMiddlewarePattern, walkRoutes } from './util'
 import { GalbeRouter } from './router'
 import { SchemaType, type STObject, type Static } from './schema'
 import { compileRoute } from './validator.compile'
@@ -111,36 +111,9 @@ const composeHooks = <M extends Method, Path extends string, S extends RequestSc
   }
 }
 
-const joinPath = (prefix: string, path: string) => {
-  if (prefix && prefix[0] !== '/') prefix = `/${prefix}`
-  prefix = prefix.replace(/\/+$/, '')
-  return `${prefix}${path[0] === '/' ? path : `/${path}`}`
-}
-
 // group prefixes may contain ':params', middleware patterns may not: a param
 // segment matches like '*'
 const patternFromPath = (path: string) => path.replace(/:[^/]+/g, '*')
-
-// middleware pattern segments are literals or '*'; ':params' are a routing
-// concept and rejected here ('*' already matches any single segment)
-const parseMiddlewarePattern = (pattern: string): string[] => {
-  const segments = pattern.split('/').filter(s => s !== '')
-  const valid = pattern === '/' || (segments.length && segments.every(s => s === '*' || !/[:*\s]/.test(s)))
-  if (!valid) throw new SyntaxError(`${pattern} is not a valid middleware pattern (segments are literals or '*')`)
-  return segments
-}
-
-// literal segments match identical route segments, '*' matches any single
-// segment (including ':params'), a trailing '*' matches the whole subtree and
-// the prefix itself (like the router's terminal wildcard)
-const matchMiddleware = (pattern: string[], path: string[]): boolean => {
-  for (let i = 0; i < pattern.length; i++) {
-    const p = pattern[i]!
-    if (p === '*' && i === pattern.length - 1) return true
-    if (i >= path.length || (p !== '*' && p !== path[i])) return false
-  }
-  return pattern.length === path.length
-}
 
 const galbeMethod = <
   M extends Method,
@@ -206,14 +179,19 @@ export const config = (config: GalbeConfig) => config
 export class Galbe {
   config: GalbeConfig
   meta?: Array<RouteFileMeta> = []
+  /** Header metadata of middleware files discovered by the Automatic Route Analyzer. */
+  metaMiddleware: Array<MiddlewareFileMeta> = []
   router: GalbeRouter
   startCb: (() => void)[] = []
   stopCb: (() => void)[] = []
   errorCb: ErrorHandler[] = []
+  routeAddedCb: ((event: { route: Route }) => void)[] = []
   listening: boolean = false
   server?: Awaited<ReturnType<typeof server>>
   plugins: GalbePlugin[] = []
   middlewares: GalbeMiddleware[] = []
+  /** User-supplied `static(path, target)` pairs, recorded so `galbe build` can copy the assets next to the bundle. */
+  staticTargets: Array<{ path: string; target: string }> = []
   constructor(config?: GalbeConfig) {
     this.config = config ?? {}
     this.router = new GalbeRouter({
@@ -229,6 +207,7 @@ export class Galbe {
     this.router.add(route)
     const segments = this.routeSegments(route)
     if (this.middlewares.some(m => matchMiddleware(m.segments, segments))) this.composeMiddleware(route)
+    for (const cb of this.routeAddedCb) cb({ route })
     return route
   }
   // route.path carries the basePath prefix once registered: strip it, patterns
@@ -336,6 +315,20 @@ export class Galbe {
   }
   onError(handler: ErrorHandler) {
     this.errorCb.push(handler)
+  }
+  /**
+   * #### Route registration event
+   * Subscribe to route registrations: the callback fires synchronously for
+   * every route added to the router, right after its hook chain is composed,
+   * with the final (prefixed) path. Listener errors propagate to the
+   * registration site. Returns an unsubscribe function.
+   */
+  onRouteAdded(callback: (event: { route: Route }) => void): () => void {
+    this.routeAddedCb.push(callback)
+    return () => {
+      const idx = this.routeAddedCb.indexOf(callback)
+      if (idx >= 0) this.routeAddedCb.splice(idx, 1)
+    }
   }
   get: Endpoint<'get'> = <
     Path extends string,
@@ -468,6 +461,7 @@ export class Galbe {
     let { resolve } = options ?? {}
     const rootPath = path
     const rootTarget = target
+    this.staticTargets.push({ path, target })
 
     const walkStatic = (path: string, target: string) => {
       path = path?.[0] === '/' ? path : `/${path}`

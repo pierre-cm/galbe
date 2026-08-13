@@ -101,7 +101,7 @@ describe('generate code merge flow', () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     const r = await run(['generate', 'code', 'spec.yaml'], dir)
     expect(r.code).toBe(0)
-    const route = await readFile(join(dir, 'src/routes/users.route.ts'), 'utf-8')
+    const route = await readFile(join(dir, 'src/users.route.ts'), 'utf-8')
     expect(route).toContain('g.get("/users"')
     expect(route).toContain('g.get("/users/:id"')
   })
@@ -109,10 +109,10 @@ describe('generate code merge flow', () => {
   test('re-run with same spec is idempotent and reports no diff items', async () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     await run(['generate', 'code', 'spec.yaml'], dir)
-    const before = await readFile(join(dir, 'src/routes/users.route.ts'), 'utf-8')
+    const before = await readFile(join(dir, 'src/users.route.ts'), 'utf-8')
     const r = await run(['generate', 'code', 'spec.yaml'], dir)
     expect(r.code).toBe(0)
-    const after = await readFile(join(dir, 'src/routes/users.route.ts'), 'utf-8')
+    const after = await readFile(join(dir, 'src/users.route.ts'), 'utf-8')
     expect(after).toBe(before)
   })
 
@@ -120,7 +120,7 @@ describe('generate code merge flow', () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     await run(['generate', 'code', 'spec.yaml'], dir)
 
-    const routePath = join(dir, 'src/routes/users.route.ts')
+    const routePath = join(dir, 'src/users.route.ts')
     let content = await readFile(routePath, 'utf-8')
     // Patch the listUsers handler
     content = content.replace(
@@ -150,7 +150,7 @@ describe('generate code merge flow', () => {
     expect(r.stdout + r.stderr).toContain('--remove-stale')
 
     // Confirm the file on disk was NOT modified.
-    const route = await readFile(join(dir, 'src/routes/users.route.ts'), 'utf-8')
+    const route = await readFile(join(dir, 'src/users.route.ts'), 'utf-8')
     expect(route).toContain('g.get("/users/:id"')
     expect(route).not.toContain('g.post("/users"')
   })
@@ -163,7 +163,7 @@ describe('generate code merge flow', () => {
     const r = await run(['generate', 'code', 'spec.yaml', '--remove-stale'], dir)
     expect(r.code).toBe(0)
 
-    const route = await readFile(join(dir, 'src/routes/users.route.ts'), 'utf-8')
+    const route = await readFile(join(dir, 'src/users.route.ts'), 'utf-8')
     expect(route).not.toContain('/users/:id')
     expect(route).toContain('g.post("/users"')
     expect(route).toContain('g.get("/users"')
@@ -174,7 +174,7 @@ describe('generate code merge flow', () => {
     await run(['generate', 'code', 'spec.yaml'], dir)
 
     // User customizes the now-stale handler
-    const routePath = join(dir, 'src/routes/users.route.ts')
+    const routePath = join(dir, 'src/users.route.ts')
     let content = await readFile(routePath, 'utf-8')
     content = content.replace(
       /g\.get\("\/users\/:id"[\s\S]*?throw new NotImplementedError\(\)/,
@@ -199,7 +199,7 @@ describe('generate code merge flow', () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     await run(['generate', 'code', 'spec.yaml'], dir)
 
-    const routePath = join(dir, 'src/routes/users.route.ts')
+    const routePath = join(dir, 'src/users.route.ts')
     let content = await readFile(routePath, 'utf-8')
     content = content.replace(
       /g\.get\("\/users\/:id"[\s\S]*?throw new NotImplementedError\(\)/,
@@ -223,7 +223,7 @@ describe('generate code merge flow', () => {
   test('--dry-run prints diff and writes nothing', async () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     await run(['generate', 'code', 'spec.yaml'], dir)
-    const before = await readFile(join(dir, 'src/routes/users.route.ts'), 'utf-8')
+    const before = await readFile(join(dir, 'src/users.route.ts'), 'utf-8')
 
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V2)
     const r = await run(
@@ -235,7 +235,7 @@ describe('generate code merge flow', () => {
     expect(r.stdout).toContain('POST /users')
     expect(r.stdout).toContain('GET /users/:id')
 
-    const after = await readFile(join(dir, 'src/routes/users.route.ts'), 'utf-8')
+    const after = await readFile(join(dir, 'src/users.route.ts'), 'utf-8')
     expect(after).toBe(before)
   })
 

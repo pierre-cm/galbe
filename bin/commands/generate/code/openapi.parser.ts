@@ -18,10 +18,10 @@ type SchemaEntry = {
   responseExamples?: Record<string, any>
 }
 type EndpointEntry = {
-  version?: string
-  visibility?: 'public' | 'private'
-  scope?: string
+  /** leading literal path segments — the last one names the route file, the ones before it the directory */
+  scope: string[]
   method?: 'get' | 'put' | 'patch' | 'post' | 'delete' | 'options' | 'head'
+  /** path as emitted in the file, relative to the file's directory prefix */
   path?: string
   schema?: { imports: Record<string, string>; name: string; def: string }
   endpoint?: { meta?: string; def?: string }
@@ -332,12 +332,15 @@ const resolveParamRef = (
 const parseEndpointDef = (
   method: string,
   path: string,
+  emitPath: string,
   def?: OpenAPIV3.OperationObject,
   components?: OpenAPIV3.ComponentsObject
 ) => {
   if (!def) return {}
   let imports: Record<string, string> = {}
-  let p = path.replaceAll(/\{([^\}]*)\}/g, ':$1')
+  // the emitted path is relative to the file's directory prefix; the schema
+  // name derives from the full path so it stays unique across scopes
+  let p = emitPath.replaceAll(/\{([^\}]*)\}/g, ':$1')
   // let description = def.summary || def.description
   let schemaName = def.operationId
     ? def.operationId.replace(/^\w/, c => c.toUpperCase())
@@ -557,18 +560,21 @@ const parseEndpoints = (def: OpenAPIV3.Document) => {
   let endpoints: Record<string, EndpointEntry> = {}
   for (let [fullPath, pathVal] of Object.entries(def.paths || {})) {
     if (!pathVal) continue
-    let match = fullPath.match(/^\/?(?:(v\d+)[^\/]*\/)?(?:\/?(public|private))?\/?([^\/]+)\/?(.*)$/)
-    if (!match) continue
-    let [_, version, visibility, scope, path] = [...match]
-    path = `/${path}`
+    // Directory convention: the leading literal segments pick the output file
+    // (all but the last become its directory, i.e. its dirPrefix), and the
+    // emitted path is written relative to that directory so the analyzer
+    // reconstructs the full path on load.
+    const segments = fullPath.split('/').filter(s => s !== '')
+    let nLit = 0
+    while (nLit < segments.length && !/[{}]/.test(segments[nLit]!)) nLit++
+    const scope = segments.slice(0, nLit)
+    const emitPath = `/${segments.slice(Math.max(nLit - 1, 0)).join('/')}`
     let methods = ['get', 'put', 'patch', 'post', 'delete', 'options', 'head'] as const
     let pathParams = pathVal.parameters || []
     for (let m of methods) {
       let endpointDef = pathVal?.[m]
       if (!endpointDef) continue
-      let ref = `#/paths${version ? `/${version}` : ''}${visibility ? `/${visibility}` : ''}${
-        scope ? `/${scope}` : ''
-      }/${m}${path}`
+      let ref = `#/paths/${m}${fullPath}`
       let opParams = endpointDef.parameters || []
       let opKeys = new Set(
         opParams
@@ -584,13 +590,11 @@ const parseEndpoints = (def: OpenAPIV3.Document) => {
         return !opKeys.has(`${resolved.in}:${resolved.name}`)
       })
       let mergedDef = { ...endpointDef, parameters: [...inheritedParams, ...opParams] }
-      let { schema, endpoint } = parseEndpointDef(m, fullPath, mergedDef, def.components)
+      let { schema, endpoint } = parseEndpointDef(m, fullPath, emitPath, mergedDef, def.components)
       endpoints[ref] = {
-        version,
-        visibility: visibility as 'public' | 'private',
         method: m,
         scope,
-        path,
+        path: emitPath,
         schema,
         endpoint,
       }
@@ -668,7 +672,7 @@ const renderComponentSchemaFile = (
 export type RoutePlanEntry = {
   /** HTTP method, lowercase (matches the property accessed on `g`). */
   method: string
-  /** Path as emitted in the call expression: full prefix included, OpenAPI braces converted to `:param`. Stable identity for diff/rename. */
+  /** Path as emitted in the call expression: relative to the scope's `prefix`, OpenAPI braces converted to `:param`. */
   path: string
   schemaName: string
   /** JSDoc block string (e.g. '/**\n * summary\n *\/'). */
@@ -678,9 +682,11 @@ export type RoutePlanEntry = {
 }
 
 export type ScopePlan = {
-  /** e.g. '/main', '/v1/public/admin'. */
+  /** e.g. '/main', '/v1/modules'. */
   scopeKey: string
-  /** Output path without extension, e.g. 'routes/main.route'. */
+  /** The route file's directory prefix (dirPrefix reconstructs it on load), e.g. '/v1' or ''. */
+  prefix: string
+  /** Output path without extension, e.g. 'main.route', 'v1/modules.route'. */
   routeFile: string
   /** Output path without extension, e.g. 'schemas/main.schema'. */
   schemaFile: string
@@ -726,9 +732,7 @@ export const buildPlan = (
   }
 
   let scopedDefs = Object.entries(endpoints).reduce<Record<string, EndpointEntry[]>>((p, [_, v]) => {
-    let scopeKey = `${v.version ? `/${v.version}` : ''}${v.visibility ? `/${v.visibility}` : ''}${
-      v.scope ? `/${v.scope}` : '/main'
-    }`
+    let scopeKey = v.scope.length ? `/${v.scope.join('/')}` : '/main'
     if (!(scopeKey in p)) p[scopeKey] = []
     p[scopeKey].push(v)
     return p
@@ -736,7 +740,9 @@ export const buildPlan = (
 
   const scopes: ScopePlan[] = []
   for (let [scopeKey, def] of Object.entries(scopedDefs)) {
-    let routeFile = `routes${scopeKey}.route`
+    const scope = def[0].scope
+    let prefix = scope.length > 1 ? `/${scope.slice(0, -1).join('/')}` : ''
+    let routeFile = scope.length ? `${scope.join('/')}.route` : 'main.route'
     let schemaFile = `schemas${scopeKey}.schema`
 
     let sImports: Record<string, Set<string>> = {}
@@ -772,6 +778,7 @@ export const buildPlan = (
 
     scopes.push({
       scopeKey,
+      prefix,
       routeFile,
       schemaFile,
       schemaImports: Object.fromEntries(Object.entries(sImports).map(([k, v]) => [k, [...v]])),
@@ -782,6 +789,12 @@ export const buildPlan = (
   }
 
   return { componentFiles, scopes, target }
+}
+
+/** Relative import path from a scope's route file to its sibling schema file. */
+export const schemaImportPath = (scope: Pick<ScopePlan, 'routeFile' | 'schemaFile'>): string => {
+  const rel = relative(dirname(scope.routeFile), scope.schemaFile)
+  return rel.startsWith('.') ? rel : `./${rel}`
 }
 
 export type ApplyPlanOptions = {
@@ -814,8 +827,7 @@ export const applyPlan = async (plan: GenerationPlan, outDir: string, opts: Appl
       if (override !== undefined) {
         routeContent = override
       } else {
-        const deepness = scope.scopeKey.split('/').length - 1
-        const importPath = `${Array(deepness).fill('../').join('')}schemas${scope.scopeKey}.schema`
+        const importPath = schemaImportPath(scope)
         const rDecl = scope.routes.map(r => `  ${r.meta}\ng.${r.call}`)
         routeContent =
           `import { NotImplementedError, type Galbe } from 'galbe'\n` +

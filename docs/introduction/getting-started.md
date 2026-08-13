@@ -103,9 +103,8 @@ Here are two examples of valid project structures:
 ┌── src
 │   ├── hooks
 │   │   └── log.hook.ts
-│   ├── routes
-│   │   ├── foo.route.ts
-│   │   └── bar.route.ts
+│   ├── foo.route.ts
+│   ├── bar.route.ts
 │   └── schemas
 │       ├── foo.schema.ts
 │       └── bar.schema.ts
@@ -136,6 +135,8 @@ Here are two examples of valid project structures:
 ```
 
 In both cases, the [Automatic Route Analyzer](../concepts/routes.md#automatic-route-analyzer) will detect `foo.route.ts` and `bar.route.ts` to set up route definitions.
+
+Note that a route file's directory becomes its URL prefix by default: in Example 2, the routes of `src/foo/foo.route.ts` are registered under `/foo`. See [Directory Groups](../concepts/routes.md#directory-groups) for details and how to opt out.
 
 For more details, see the [Route Files](../concepts/routes.md#route-files) section.
 

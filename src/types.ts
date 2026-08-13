@@ -159,8 +159,19 @@ export type GalbeConfig = {
   tls?: TLSOptions
   /** Extra options passed through to `Bun.serve` (e.g. `maxRequestBodySize`, `idleTimeout`). `port`, `fetch` and `error` are ignored, and the dedicated `hostname`, `reusePort` and `tls` config keys take precedence. */
   server?: Partial<Omit<Parameters<typeof Bun.serve>[0], 'port' | 'fetch' | 'error'>> | TLSOptions
-  /** A Glob Pattern or a list of Glob patterns defining the route files to be analyzed by the Automatic Route Analyzer. */
-  routes?: boolean | string | string[]
+  /**
+   * Route files picked up by the Automatic Route Analyzer: a glob pattern (or list of), `false` to
+   * disable the analyzer, or an object form to also control directory groups. By default a route
+   * file's directory relative to its glob's static base becomes its path prefix
+   * (`src/api/users.route.ts` → `/api`); set `dirPrefix: false` to opt out.
+   */
+  routes?: boolean | string | string[] | { pattern?: string | string[]; dirPrefix?: boolean }
+  /**
+   * Middleware files discovered by the Automatic Route Analyzer (default `src/**­/*.middleware.{js,ts}`).
+   * Files default-export `Hook | Hook[]`, scoped to their directory subtree. `false` disables
+   * middleware discovery only; `routes: false` disables the whole analyzer.
+   */
+  middleware?: boolean | string | string[]
   router?: { cacheEnabled: boolean; cacheLimit?: number; warn?: (message: string) => void }
   /** A property that can be used by plugins to add plugin's specific configuration. */
   plugin?: Record<string, any>

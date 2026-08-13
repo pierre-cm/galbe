@@ -13,14 +13,16 @@ const route = (over: Partial<RoutePlanEntry>): RoutePlanEntry => ({
   ...over,
 })
 
-const scope = (routes: RoutePlanEntry[]): ScopePlan => ({
+const scope = (routes: RoutePlanEntry[], over: Partial<ScopePlan> = {}): ScopePlan => ({
   scopeKey: '/main',
-  routeFile: 'routes/main.route',
+  prefix: '',
+  routeFile: 'main.route',
   schemaFile: 'schemas/main.schema',
   schemaImports: {},
   schemaDecls: [],
   routeSchemaImports: routes.map(r => r.schemaName),
   routes,
+  ...over,
 })
 
 const existingFile = (body: string, imports = `import { GetUsers } from './schemas/main.schema'`) => `import { NotImplementedError, type Galbe } from 'galbe'
@@ -39,7 +41,7 @@ describe('mergeRouteFile', () => {
     expect(result.updated).toEqual([])
     expect(result.removed).toEqual([])
     expect(result.content).toContain(`g.get("/users", GetUsers, ctx =>`)
-    expect(result.content).toContain(`import { GetUsers } from '../schemas/main.schema'`)
+    expect(result.content).toContain(`import { GetUsers } from './schemas/main.schema'`)
   })
 
   test('preserves user handler body on update', () => {
@@ -198,5 +200,58 @@ export default (g: Galbe) => {
     expect(result.content).toContain('const helper = () => 42')
     expect(result.content).toContain(`logger.info('list users')`)
     expect(result.content).toContain('helper()')
+  })
+
+  test('prefixed scope: ids are full paths, emitted paths and imports relative', () => {
+    const r = route({
+      path: '/modules/:id',
+      schemaName: 'GetModule',
+      call: 'get("/modules/:id", GetModule, ctx => {\n  throw new NotImplementedError()\n})',
+    })
+    const s = scope([r], {
+      scopeKey: '/v1/modules',
+      prefix: '/v1',
+      routeFile: 'v1/modules.route',
+      schemaFile: 'schemas/v1/modules.schema',
+    })
+
+    const fresh = mergeRouteFile(null, s)
+    expect(fresh.added).toEqual([routeId('get', '/v1/modules/:id')])
+    expect(fresh.content).toContain('g.get("/modules/:id"')
+    expect(fresh.content).toContain(`from '../schemas/v1/modules.schema'`)
+
+    // re-merge on the fresh output: stable ids, no spurious remove+add
+    const again = mergeRouteFile(fresh.content, s)
+    expect(again.added).toEqual([])
+    expect(again.updated).toEqual([routeId('get', '/v1/modules/:id')])
+    expect(again.removed).toEqual([])
+    expect(again.stale).toEqual([])
+    expect(again.content).toContain('g.get("/modules/:id"')
+  })
+
+  test('@prefix header in an existing file resolves its effective prefix', () => {
+    const existing = `import { NotImplementedError, type Galbe } from 'galbe'
+import { GetUsers } from './schemas/main.schema'
+
+/**
+ * @prefix /v2
+ */
+export default (g: Galbe) => {
+  g.get("/users", GetUsers, ctx => {
+    return ctx.db.users.list()
+  })
+}
+`
+    // plan addresses the route by its full path /v2/users
+    const updated = route({ path: '/v2/users', meta: meta('V2 users') })
+    const result = mergeRouteFile(existing, scope([updated]))
+
+    expect(result.updated).toEqual([routeId('get', '/v2/users')])
+    expect(result.added).toEqual([])
+    expect(result.stale).toEqual([])
+    // the literal stays relative to the file's @prefix
+    expect(result.content).toContain('g.get("/users"')
+    expect(result.content).toContain('return ctx.db.users.list()')
+    expect(result.content).toContain('V2 users')
   })
 })

@@ -444,8 +444,11 @@ export default (cmd: Command) => {
       const routes: GalbeClientRoute[] = []
       const autoDerivedIds: string[] = []
 
+      // meta keys are relative to basePath; route paths carry it
+      const prefix = g.router.prefix || ''
       walkRoutes(g.router.routes, r => {
-        const meta = metaRoutes?.[r.path]?.[r.method]
+        const rPath = prefix && r.path.startsWith(prefix) ? r.path.slice(prefix.length) || '/' : r.path
+        const meta = metaRoutes?.[rPath]?.[r.method]
         const [, summary, description] = meta?.head?.match(/^([^\n]*)\n\n(.*)/) ?? []
         const explicitId: string | undefined = meta?.operationId
         const autoDerived = !explicitId

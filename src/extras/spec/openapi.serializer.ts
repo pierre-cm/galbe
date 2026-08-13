@@ -12,7 +12,7 @@ import type {
 } from '../../../src/schema'
 
 import { Galbe } from '../../../src'
-import { walkRoutes, HttpStatus } from '../../../src/util'
+import { walkRoutes, HttpStatus, matchMiddleware, parseMiddlewarePattern } from '../../../src/util'
 import { Kind, Optional } from '../../../src/schema'
 
 import type { OpenAPIV3 } from 'openapi-types'
@@ -186,20 +186,33 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
   )
   let metaStatic = Object.fromEntries(Object.entries(metaRoutes || {}).filter(([_, d]) => d?.static))
 
+  // middleware-file header meta applies to every operation in the file's scope
+  const mwMeta = (g.metaMiddleware ?? [])
+    .filter(m => m.header && Object.keys(m.header).length)
+    .map(m => ({ segments: parseMiddlewarePattern(m.scope), header: m.header }))
+
+  // meta keys and spec paths are relative to basePath; route paths carry it
+  const prefix = g.router.prefix || ''
+  const relPath = (p: string) => (prefix && p.startsWith(prefix) ? p.slice(prefix.length) || '/' : p)
+
   walkRoutes(g.router.routes, r => {
-    let meta = metaRoutes?.[r.path]?.[r.method]
+    const rPath = relPath(r.path)
+    let meta = metaRoutes?.[rPath]?.[r.method]
     if (r.static?.root) meta = metaStatic[r.static?.root]?.static
     if (meta?.hide) return
-    let path = r.path.replaceAll(/:([^\/]+)/g, '{$1}')
+    const inherited = mwMeta.filter(m => matchMiddleware(m.segments, rPath.split('/').filter(s => s !== '')))
+    let path = rPath.replaceAll(/:([^\/]+)/g, '{$1}')
     if (!(path in paths)) paths[path] = {}
-    let tags = [
-      ...(meta?.tags?.split(' ')?.map((t: string) => t.trim()) || []),
-      ...(typeof meta?.tag === 'string' ? [meta?.tag] : meta?.tag || []),
+    const metaTags = (m?: Record<string, any>) => [
+      ...(m?.tags?.split?.(' ')?.map((t: string) => t.trim()) || []),
+      ...(typeof m?.tag === 'string' ? [m?.tag] : m?.tag || []),
     ]
+    let tags = [...new Set([...metaTags(meta), ...inherited.flatMap(m => metaTags(m.header))])]
     let security: Record<string, any> = []
     let securityExplicitlyEmpty = false
 
-    const metaSecRaw = meta?.security
+    // route-level @security wins over the middleware files' scope-level one
+    const metaSecRaw = meta?.security ?? inherited.find(m => m.header.security !== undefined)?.header.security
     if (metaSecRaw !== undefined) {
       const entries = Array.isArray(metaSecRaw) ? metaSecRaw : [metaSecRaw]
       for (const e of entries) {
@@ -450,7 +463,13 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       version: '0.1.0',
       ...g.config?.openapi?.info,
     },
-    ...(g.config?.openapi?.servers ? { servers: g.config.openapi.servers } : {}),
+    // basePath is a deploy location, not API structure: it is stripped from
+    // `paths` and surfaced through `servers` unless explicitly configured
+    ...(g.config?.openapi?.servers
+      ? { servers: g.config.openapi.servers }
+      : prefix
+        ? { servers: [{ url: prefix }] }
+        : {}),
     paths,
     components: Object.keys(components)?.length ? components : undefined,
   }
