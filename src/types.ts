@@ -298,55 +298,69 @@ export type Handler<
   Path extends string = string,
   S extends RequestSchema = RequestSchema,
 > = (ctx: Context<M, Path, S>) => any
-export type Endpoint<M extends Method> = {
+/**
+ * Prefix middleware entry registered via `galbe.middleware`. Patterns match
+ * registered route paths (not request URLs) and are resolved at registration:
+ * matched hooks are composed into the route's hook chain.
+ */
+export type GalbeMiddleware = {
+  /** the pattern as registered, e.g. `/api/*` */
+  pattern: string
+  /** pattern split into segments, precomputed at registration */
+  segments: string[]
+  hooks: Hook[]
+}
+// Prefix is prepended to Path at the type level (route groups): context params,
+// schemas and the returned Route are typed against the full, joined path.
+export type Endpoint<M extends Method, Prefix extends string = ''> = {
   <
     Path extends string,
-    P extends Partial<STParams<Path>>,
+    P extends Partial<STParams<`${Prefix}${Path}`>>,
     H extends STHeaders = any,
     Q extends STQuery = any,
     B extends STBody = any,
     R extends STResponse = STResponse,
   >(
     path: Path,
-    schema: RequestSchema<M, Path, H, P, Q, B, R>,
-    hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[],
-    handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-  ): Route<M, Path, P, H, Q, B, R>
+    schema: RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R>,
+    hooks: Hook<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R>>[],
+    handler: Handler<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R>>
+  ): Route<M, `${Prefix}${Path}`, P, H, Q, B, R>
   <
     Path extends string,
-    P extends Partial<STParams<Path>>,
+    P extends Partial<STParams<`${Prefix}${Path}`>>,
     H extends STHeaders = any,
     Q extends STQuery = any,
     B extends STBody = any,
     R extends STResponse = STResponse,
   >(
     path: Path,
-    schema: RequestSchema<M, Path, H, P, Q, B, R>,
-    handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-  ): Route<M, Path, P, H, Q, B, R>
+    schema: RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R>,
+    handler: Handler<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R>>
+  ): Route<M, `${Prefix}${Path}`, P, H, Q, B, R>
   <
     Path extends string,
-    P extends Partial<STParams<Path>>,
+    P extends Partial<STParams<`${Prefix}${Path}`>>,
     H extends STHeaders = any,
     Q extends STQuery = any,
     B extends STBody = any,
     R extends STResponse = STResponse,
   >(
     path: Path,
-    hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[],
-    handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-  ): Route<M, Path, P, H, Q, B, R>
+    hooks: Hook<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R>>[],
+    handler: Handler<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R>>
+  ): Route<M, `${Prefix}${Path}`, P, H, Q, B, R>
   <
     Path extends string,
-    P extends Partial<STParams<Path>>,
+    P extends Partial<STParams<`${Prefix}${Path}`>>,
     H extends STHeaders = any,
     Q extends STQuery = any,
     B extends STBody = any,
     R extends STResponse = STResponse,
   >(
     path: Path,
-    handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-  ): Route<M, Path, P, H, Q, B, R>
+    handler: Handler<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R>>
+  ): Route<M, `${Prefix}${Path}`, P, H, Q, B, R>
 }
 
 export type StaticEndpointOptions = {
@@ -404,8 +418,9 @@ export type Route<
   hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[]
   handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
   /**
-   * Hook/handler chain composed once at registration (the chain is immutable
-   * afterwards). Runs the hooks then the handler and resolves to the handler's
+   * Hook/handler chain composed at registration — and recomposed if a later
+   * `middleware()` call matches the route — never per request. Runs matched
+   * middleware, then the hooks, then the handler and resolves to the handler's
    * response — or a hook's short-circuit value.
    */
   composed: (context: Context<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>) => Promise<any>

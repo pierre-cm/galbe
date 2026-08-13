@@ -19,11 +19,14 @@ import type {
   Route,
   StaticEndpointOptions,
   STBodyValue,
+  GalbeMiddleware,
+  MaybeArray,
 } from './types'
 
 import { existsSync, readdirSync, statSync } from 'fs'
 import { resolve as resolvePath } from 'path'
 import server from './server'
+import { walkRoutes } from './util'
 import { GalbeRouter } from './router'
 import { SchemaType, type STObject, type Static } from './schema'
 import { compileRoute } from './validator.compile'
@@ -108,6 +111,37 @@ const composeHooks = <M extends Method, Path extends string, S extends RequestSc
   }
 }
 
+const joinPath = (prefix: string, path: string) => {
+  if (prefix && prefix[0] !== '/') prefix = `/${prefix}`
+  prefix = prefix.replace(/\/+$/, '')
+  return `${prefix}${path[0] === '/' ? path : `/${path}`}`
+}
+
+// group prefixes may contain ':params', middleware patterns may not: a param
+// segment matches like '*'
+const patternFromPath = (path: string) => path.replace(/:[^/]+/g, '*')
+
+// middleware pattern segments are literals or '*'; ':params' are a routing
+// concept and rejected here ('*' already matches any single segment)
+const parseMiddlewarePattern = (pattern: string): string[] => {
+  const segments = pattern.split('/').filter(s => s !== '')
+  const valid = pattern === '/' || (segments.length && segments.every(s => s === '*' || !/[:*\s]/.test(s)))
+  if (!valid) throw new SyntaxError(`${pattern} is not a valid middleware pattern (segments are literals or '*')`)
+  return segments
+}
+
+// literal segments match identical route segments, '*' matches any single
+// segment (including ':params'), a trailing '*' matches the whole subtree and
+// the prefix itself (like the router's terminal wildcard)
+const matchMiddleware = (pattern: string[], path: string[]): boolean => {
+  for (let i = 0; i < pattern.length; i++) {
+    const p = pattern[i]!
+    if (p === '*' && i === pattern.length - 1) return true
+    if (i >= path.length || (p !== '*' && p !== path[i])) return false
+  }
+  return pattern.length === path.length
+}
+
 const galbeMethod = <
   M extends Method,
   Path extends string,
@@ -179,6 +213,7 @@ export class Galbe {
   listening: boolean = false
   server?: Awaited<ReturnType<typeof server>>
   plugins: GalbePlugin[] = []
+  middlewares: GalbeMiddleware[] = []
   constructor(config?: GalbeConfig) {
     this.config = config ?? {}
     this.router = new GalbeRouter({
@@ -192,10 +227,81 @@ export class Galbe {
     // schemas are immutable once the route is added: compile their validators now
     if (route?.schema) compileRoute(route.schema)
     this.router.add(route)
+    const segments = this.routeSegments(route)
+    if (this.middlewares.some(m => matchMiddleware(m.segments, segments))) this.composeMiddleware(route)
     return route
+  }
+  // route.path carries the basePath prefix once registered: strip it, patterns
+  // are written relative to basePath like route paths
+  private routeSegments(route: Route): string[] {
+    const path = this.router.prefix ? route.path.slice(this.router.prefix.length) : route.path
+    return path.split('/').filter(s => s !== '')
+  }
+  private composeMiddleware(route: Route) {
+    const segments = this.routeSegments(route)
+    const matched = this.middlewares.filter(m => matchMiddleware(m.segments, segments)).flatMap(m => m.hooks)
+    route.composed = composeHooks([...matched, ...route.hooks], route.handler)
   }
   async use(plugin: GalbePlugin) {
     this.plugins.push(plugin)
+  }
+  /**
+   * #### Middleware
+   * Register hooks that run for every route whose path matches the given
+   * pattern, ahead of the route's own hooks. Pattern segments are literals or
+   * `*` (any single segment); a trailing `*` matches the whole subtree,
+   * including the prefix itself. Patterns match registered route paths (not
+   * request URLs) and are resolved at registration time: matched hooks are
+   * composed into the route chain, adding no per-request matching cost.
+   *
+   * ---
+   * @example
+   * ```typescript
+   * galbe.middleware(logger)              // every route
+   * galbe.middleware('/api/*', authHook)  // the /api subtree
+   * ```
+   */
+  middleware(hooks: MaybeArray<Hook>): void
+  middleware(pattern: string, hooks: MaybeArray<Hook>): void
+  middleware(arg1: string | MaybeArray<Hook>, arg2?: MaybeArray<Hook>): void {
+    const pattern = typeof arg1 === 'string' ? arg1 : '*'
+    const hooks = typeof arg1 === 'string' ? arg2 : arg1
+    const hookList = Array.isArray(hooks) ? hooks : hooks ? [hooks] : []
+    if (!hookList.length) return
+    const entry = { pattern, segments: parseMiddlewarePattern(pattern), hooks: hookList }
+    this.middlewares.push(entry)
+    // routes registered before this call: recompose the ones the new entry matches
+    walkRoutes(this.router.routes, route => {
+      if (matchMiddleware(entry.segments, this.routeSegments(route))) this.composeMiddleware(route)
+    })
+  }
+  /**
+   * #### Route group
+   * Register routes under a shared path prefix. Optional hooks apply to the
+   * whole `<prefix>/*` subtree — they are prefix middleware, so they also
+   * cover matching routes registered outside the group.
+   *
+   * ---
+   * @example
+   * ```typescript
+   * galbe.group('/v1', [authHook], g => {
+   *   g.get('/users', listUsers)      // GET /v1/users
+   *   g.group('/admin', a => { ... }) // /v1/admin/...
+   * })
+   * ```
+   */
+  group<P extends string>(prefix: P, cb: (group: GalbeGroup<P>) => void): GalbeGroup<P>
+  group<P extends string>(prefix: P, hooks: Hook[], cb: (group: GalbeGroup<P>) => void): GalbeGroup<P>
+  group<P extends string>(
+    prefix: P,
+    arg2: Hook[] | ((group: GalbeGroup<P>) => void),
+    arg3?: (group: GalbeGroup<P>) => void
+  ): GalbeGroup<P> {
+    const cb = typeof arg2 === 'function' ? arg2 : arg3
+    if (Array.isArray(arg2) && arg2.length) this.middleware(patternFromPath(joinPath(prefix, '/*')), arg2)
+    const group = new GalbeGroup<P>(this, prefix)
+    cb?.(group)
+    return group
   }
   async init() {
     for (const p of this.plugins) {
@@ -401,6 +507,51 @@ export class Galbe {
     }
 
     return walkStatic(path, target)
+  }
+}
+
+/**
+ * #### GalbeGroup
+ * Route sub-registrar created by {@link Galbe.group}. Paths are prefixed at
+ * registration time: router matching and precedence are unchanged, and the
+ * prefixed paths flow as-is into the generated OpenAPI spec.
+ */
+export class GalbeGroup<Prefix extends string = string> {
+  #galbe: Galbe
+  #prefix: string
+  constructor(galbe: Galbe, prefix: string) {
+    this.#galbe = galbe
+    this.#prefix = joinPath('', prefix).replace(/\/+$/, '')
+  }
+  #route(method: Method, path: string, args: any[]): any {
+    //@ts-ignore
+    return this.#galbe[method](joinPath(this.#prefix, path), ...args)
+  }
+  get: Endpoint<'get', Prefix> = (path: any, ...args: any[]): any => this.#route('get', path, args)
+  post: Endpoint<'post', Prefix> = (path: any, ...args: any[]): any => this.#route('post', path, args)
+  put: Endpoint<'put', Prefix> = (path: any, ...args: any[]): any => this.#route('put', path, args)
+  patch: Endpoint<'patch', Prefix> = (path: any, ...args: any[]): any => this.#route('patch', path, args)
+  delete: Endpoint<'delete', Prefix> = (path: any, ...args: any[]): any => this.#route('delete', path, args)
+  options: Endpoint<'options', Prefix> = (path: any, ...args: any[]): any => this.#route('options', path, args)
+  head: Endpoint<'head', Prefix> = (path: any, ...args: any[]): any => this.#route('head', path, args)
+  static: StaticEndpoint = (path: any, target: any, options?: any): any =>
+    this.#galbe.static(joinPath(this.#prefix, path), target, options)
+  /** Register middleware scoped to the group: bare hooks cover the group subtree, patterns are relative to the group prefix. */
+  middleware(hooks: MaybeArray<Hook>): void
+  middleware(pattern: string, hooks: MaybeArray<Hook>): void
+  middleware(arg1: string | MaybeArray<Hook>, arg2?: MaybeArray<Hook>): void {
+    const prefix = patternFromPath(this.#prefix)
+    if (typeof arg1 === 'string') this.#galbe.middleware(joinPath(prefix, arg1), arg2!)
+    else this.#galbe.middleware(joinPath(prefix, '/*'), arg1)
+  }
+  group<P extends string>(prefix: P, cb: (group: GalbeGroup<`${Prefix}${P}`>) => void): GalbeGroup<`${Prefix}${P}`>
+  group<P extends string>(
+    prefix: P,
+    hooks: Hook[],
+    cb: (group: GalbeGroup<`${Prefix}${P}`>) => void
+  ): GalbeGroup<`${Prefix}${P}`>
+  group(prefix: string, arg2: any, arg3?: any): any {
+    return this.#galbe.group(joinPath(this.#prefix, prefix), arg2, arg3)
   }
 }
 

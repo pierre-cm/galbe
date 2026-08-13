@@ -37,6 +37,9 @@ galbe.get('/foo', [hook1, hook2, ...], ctx => {})
 
 Hooks execute in the order they are declared, just before the [Handler](handler.md). For more on where hooks fit in the request lifecycle, see the [Lifecycle](https://galbe.dev/documentation/lifecycle) section.
 
+> [!TIP]
+> To run hooks across many routes at once (auth, logging, CORS, ...) instead of declaring them per route, see [Middleware](middleware.md).
+
 ### Examples
 
 #### Linear Hook Execution

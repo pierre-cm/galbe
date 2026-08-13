@@ -71,6 +71,44 @@ galbe.get(
 )
 ```
 
+## Route Groups
+
+Route groups register a set of routes under a shared path prefix:
+
+```ts
+galbe.group(prefix: string, hooks?: Hook[], cb: (group) => void)
+```
+
+- **prefix** (string)
+  - Prepended to every path registered on the group. Follows the same rules as route paths and may contain `:param` segments.
+
+- **hooks** (Hook[]) _(Optional)_
+  - [Middleware](middleware.md) covering the whole `<prefix>/*` subtree — including matching routes registered outside the group.
+
+- **cb** (`(group) => void`)
+  - Receives a group registrar exposing the route methods (`get`, `post`, ..., `static`), plus `middleware` (patterns relative to the group prefix) and `group` for nesting.
+
+### Examples
+
+<!-- prettier-ignore -->
+```js
+galbe.group('/v1', [authHook], g => {
+  g.get('/users', ctx => listUsers())        // GET /v1/users, runs authHook first
+  g.group('/admin', a => {
+    a.get('/stats', ctx => stats())          // GET /v1/admin/stats
+  })
+})
+```
+
+Path parameters declared in the prefix are available in the route context:
+
+<!-- prettier-ignore -->
+```js
+galbe.group('/team/:teamId', g => {
+  g.get('/members/:id', ctx => getMember(ctx.params.teamId, ctx.params.id))
+})
+```
+
 ## Defining Static Routes
 
 Static routes serve files from the filesystem. If the target is a directory, all files within it are served recursively.
