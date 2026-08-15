@@ -121,7 +121,7 @@ Maximum number of entries kept in the route cache. The cache is a bounded LRU: o
 
 ### openapi
 
-Customizes the top-level `info` and `servers` blocks of the OpenAPI specification produced by `OpenAPISerializer` (`galbe/extras`) and `galbe generate spec`.
+Customizes the document-level blocks of the OpenAPI specification produced by `OpenAPISerializer` (`galbe/extras`) and `galbe generate spec`. These describe the document rather than any single route, so they have no route-level equivalent.
 
 ```ts
 export default {
@@ -134,12 +134,23 @@ export default {
       license: { name: 'MIT' },
     },
     servers: [{ url: 'https://api.example.com/v1' }],
+    tags: [{ name: 'widgets', description: 'Everything about widgets.' }],
+    security: [{ bearerAuth: [] }],
+    externalDocs: { url: 'https://example.com/docs', description: 'Full handbook' },
+    securitySchemes: {
+      bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+    },
   },
 }
 ```
 
 - **openapi.info**: any subset of the OpenAPI [Info Object](https://spec.openapis.org/oas/v3.0.3#info-object) (`title`, `version`, `description`, `contact`, `license`, `termsOfService`). Unset fields fall back to `title: 'Galbe app'` and `version: '0.1.0'`.
 - **openapi.servers**: an OpenAPI [Server Object](https://spec.openapis.org/oas/v3.0.3#server-object) list. When unset and a [`basePath`](#basepath) is configured, it defaults to `[{ url: basePath }]` — generated `paths` are relative to `basePath`, which is a deploy location rather than API structure.
+
+- **openapi.tags**: the document's [Tag Object](https://spec.openapis.org/oas/v3.0.3#tag-object) list — the descriptions behind the names operations use. Operations *name* their tags through the `@tags` annotation; this is where a tag is described.
+- **openapi.security**: the document-level [Security Requirement](https://spec.openapis.org/oas/v3.0.3#security-requirement-object) list, applied to every operation that does not declare its own through `@security`.
+- **openapi.externalDocs**: the document's [External Documentation Object](https://spec.openapis.org/oas/v3.0.3#external-documentation-object). Route-level docs come from the `@externalDocs` annotation instead.
+- **openapi.securitySchemes**: the spec's [Security Schemes](https://spec.openapis.org/oas/v3.0.3#security-scheme-object), keyed by name. A route's `@security <name>` annotation *names* a scheme; this is where the scheme itself is defined. A scheme declared here always wins over the `bearerAuth` the serializer infers from an `Authorization: Bearer` header.
 
 When generating a spec with `galbe generate spec`, values set here take precedence over the `package.json` inference (`name`, `description`, `author`, `license`, `version`), which itself takes precedence over the built-in defaults.
 

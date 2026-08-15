@@ -50,10 +50,10 @@ galbe.get('/test', ctx => console.log(ctx.query))
 A JavaScript object representing the cookies of the current request.
 
 - **key** (string): Cookie name.
-- **value** (string): Cookie value.
+- **value** (string): Cookie value — or the parsed type, for a cookie declared in the [`cookies` schema](schemas.md#cookies).
 
 > [!NOTE]
-> Cookies are parsed from the `Cookie` header.
+> Cookies are parsed from the `Cookie` header. Declaring them in the request schema's [`cookies`](schemas.md#cookies) property types, coerces and validates them; undeclared cookies stay here as raw strings.
 
 ```js
 galbe.get('/cookies', ctx => console.log(ctx.cookies))

@@ -13,8 +13,8 @@ import type {
   STUnion,
 } from './schema'
 import type { RequestSchema, STBody } from './types'
-import { Kind, Optional } from './schema'
-import { validate, preview } from './validator'
+import { Kind, Optional, NUMBER_FORMAT_RANGES } from './schema'
+import { validate, preview, isMultipleOf } from './validator'
 
 /** A validator specialized to a single schema, with the same contract as `validate`. */
 export type CompiledValidator = (elt: any, opt?: { parse?: boolean }) => any
@@ -52,7 +52,7 @@ export const compile = (schema?: STSchema): CompiledValidator | undefined => {
 
 /** Compiles every schema reachable from a route's request schema. Called at route registration time. */
 export const compileRoute = (schema: RequestSchema) => {
-  for (const props of [schema.headers, schema.params, schema.query])
+  for (const props of [schema.headers, schema.params, schema.query, schema.cookies])
     if (props) for (const s of Object.values(props)) compile(s as STSchema)
   const body = schema.body as STBody | undefined
   if (body) {
@@ -100,6 +100,17 @@ const numberConstraints = (n: STNumber | STInteger) => {
   if (n.max !== undefined) {
     const b = n.max
     checks.push(v => (v > b ? `Is greater than ${b}` : undefined))
+  }
+  if (n.multipleOf !== undefined) {
+    const m = n.multipleOf
+    const msg = `Is not a multiple of ${m}`
+    checks.push(v => (!isMultipleOf(v, m) ? msg : undefined))
+  }
+  const range = n.format ? NUMBER_FORMAT_RANGES[n.format] : undefined
+  if (range) {
+    const [lo, hi] = range
+    const msg = `Is out of ${n.format} range`
+    checks.push(v => (v < lo || v > hi ? msg : undefined))
   }
   return constraintRunner(checks)
 }
@@ -209,6 +220,9 @@ const build = (schema: STSchema): CompiledValidator | undefined => {
         c: compile(s as STSchema),
         required: !(s as STSchema)?.[Optional],
       }))
+      const declared = new Set(props.map(p => p.k))
+      const ap = (schema as STObject).additionalProperties
+      const apCompiled = ap ? compile(ap) : undefined
       return (elt, opt) => {
         if (opt?.parse && typeof elt === 'string') {
           try {
@@ -230,6 +244,21 @@ const build = (schema: STSchema): CompiledValidator | undefined => {
             else validate(elt[k], s, opt)
           } catch (e) {
             ;(err ??= {})[k] = e
+          }
+        }
+        if (ap !== undefined) {
+          for (const k of Object.keys(elt)) {
+            if (declared.has(k)) continue
+            if (ap === false) {
+              ;(err ??= {})[k] = 'Unexpected property'
+              continue
+            }
+            try {
+              if (apCompiled) apCompiled(elt[k], opt)
+              else validate(elt[k], ap, opt)
+            } catch (e) {
+              ;(err ??= {})[k] = e
+            }
           }
         }
         if (err) throw err

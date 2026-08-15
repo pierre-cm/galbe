@@ -258,7 +258,7 @@ export default (g: Galbe) => {
    * an @-sign in \`@scope/name\`, and a trailing colon:
    *
    * @operationId getDeprecated
-   * @externalDocs https://example.test/docs/deprecated
+   * @externalDocs https://example.test/docs/deprecated Migration guide
    * @tags meta primitives
    * @deprecated
    */
@@ -275,7 +275,8 @@ import { GetDescriptionOnly } from "../schemas/meta/description-only.schema";
 
 export default (g: Galbe) => {
   /**
-   * An operation with a description but no summary.
+   * @summary
+   * @description An operation with a description but no summary.
    * @operationId getDescriptionOnly
    * @tags meta
    */
@@ -544,7 +545,7 @@ exports[`openapi exhaustive: generate code source schemas/bodies/json.schema.ts 
 import { Widget } from "../commons.schema";
 
 export const PostJsonBody = {
-  body: { "application/json": Widget },
+  body: { "application/json": Widget, description: "The widget to create." },
   response: { 201: { "application/json": Widget, description: "Created." } },
 };
 "
@@ -562,11 +563,19 @@ export const PostMultiBody = {
       name: $T.string(),
       count: $T.optional($T.integer()),
     }),
-    "multipart/form-data": $T.multipartForm({
-      file: $T.byteArray(),
-      caption: $T.optional($T.string()),
-      tags: $T.optional($T.array($T.string())),
-    }),
+    "multipart/form-data": $T.multipartForm(
+      {
+        file: $T.byteArray(),
+        caption: $T.optional($T.string()),
+        tags: $T.optional($T.array($T.string())),
+      },
+      {
+        encoding: {
+          file: { contentType: "application/octet-stream" },
+          tags: { style: "form", explode: true },
+        },
+      },
+    ),
     "text/plain": $T.string(),
     "application/octet-stream": $T.byteArray(),
   },
@@ -630,18 +639,18 @@ export const Session = $T.object(
 export type Session = Static<typeof Session>;
 
 export const ReadWriteOnly = $T.object(
-  { id: $T.optional($T.string()), password: $T.optional($T.string()) },
+  {
+    id: $T.optional($T.string({ readOnly: true })),
+    password: $T.optional($T.string({ writeOnly: true })),
+  },
   { id: "ReadWriteOnly" },
 );
 export type ReadWriteOnly = Static<typeof ReadWriteOnly>;
 
-export const MapObject = $T.object(
-  {},
-  {
-    id: "MapObject",
-    description: "A free-form map declared through additionalProperties.",
-  },
-);
+export const MapObject = $T.record($T.string(), {
+  id: "MapObject",
+  description: "A free-form map declared through additionalProperties.",
+});
 export type MapObject = Static<typeof MapObject>;
 
 export const NullableBag = $T.object(
@@ -650,7 +659,7 @@ export const NullableBag = $T.object(
     optionalNullable: $T.nullish($T.integer()),
     optionalNonNullable: $T.optional($T.string()),
     nullableArray: $T.nullish($T.array($T.string())),
-    arrayOfNullable: $T.optional($T.array($T.string())),
+    arrayOfNullable: $T.optional($T.array($T.nullable($T.string()))),
   },
   { id: "NullableBag" },
 );
@@ -748,8 +757,8 @@ export const PrimitiveBag = $T.object(
       maxLength: 64,
       pattern: /^[A-Za-z0-9 ]+$/,
     }),
-    int: $T.integer({ min: 0, max: 2147483647 }),
-    num: $T.number({ exclusiveMin: 0 }),
+    int: $T.integer({ min: 0, max: 2147483647, format: "int32" }),
+    num: $T.number({ exclusiveMin: 0, format: "float" }),
     bool: $T.boolean(),
     list: $T.array($T.string(), { minLength: 0, maxLength: 100, unique: true }),
     obj: $T.object({ key: $T.string(), value: $T.optional($T.string()) }),
@@ -910,13 +919,21 @@ export const GetParamMatrix = {
     expand: $T.optional(
       $T.array($T.string(), { description: "Repeated query parameter." }),
     ),
-    legacy: $T.optional($T.string({ description: "On the way out." })),
-    contentParam: $T.optional(
-      $T.any({
-        description:
-          "A parameter typed through \`content\` rather than \`schema\`.",
-      }),
+    legacy: $T.optional(
+      $T.string({ description: "On the way out.", deprecated: true }),
     ),
+    contentParam: $T.optional(
+      $T.object(
+        { lat: $T.optional($T.number()), lon: $T.optional($T.number()) },
+        {
+          description:
+            "A parameter typed through \`content\` rather than \`schema\`.",
+        },
+      ),
+    ),
+  },
+  cookies: {
+    session: $T.optional($T.string({ description: "Session cookie." })),
   },
   response: {
     200: { "application/json": Widget, description: "Matrix echoed back." },
@@ -980,13 +997,19 @@ export const ListPrimitives = {
         description: "A closed set of string values.",
       }),
     ),
-    singleEnumString: $T.optional($T.literal("only")),
-    boundedInteger: $T.optional($T.integer({ min: 0, max: 100 })),
-    exclusiveInteger: $T.optional(
-      $T.integer({ exclusiveMax: 999, exclusiveMin: 1 }),
+    singleEnumString: $T.optional(
+      $T.literal("only", { description: "A one-value enum, i.e. a literal." }),
     ),
-    boundedNumber: $T.optional($T.number({ min: -1.5, max: 1.5 })),
-    multipleOfNumber: $T.optional($T.number()),
+    boundedInteger: $T.optional(
+      $T.integer({ min: 0, max: 100, format: "int32" }),
+    ),
+    exclusiveInteger: $T.optional(
+      $T.integer({ exclusiveMax: 999, exclusiveMin: 1, format: "int64" }),
+    ),
+    boundedNumber: $T.optional(
+      $T.number({ min: -1.5, max: 1.5, format: "double" }),
+    ),
+    multipleOfNumber: $T.optional($T.number({ multipleOf: 0.25 })),
     flag: $T.optional($T.boolean({ default: false })),
     stringList: $T.optional(
       $T.array($T.string(), {
@@ -996,7 +1019,9 @@ export const ListPrimitives = {
         unique: true,
       }),
     ),
-    enumIntegerList: $T.optional($T.array($T.integer())),
+    enumIntegerList: $T.optional(
+      $T.array($T.union([$T.literal(1), $T.literal(2), $T.literal(3)])),
+    ),
     anySchema: $T.optional(
       $T.any({ description: "No type at all, i.e. anything goes." }),
     ),
@@ -1060,6 +1085,7 @@ export const PatchPrimitive = {
     "application/json": $T.optional(
       $T.object({ label: $T.optional($T.string()) }),
     ),
+    description: "Sparse patch document.",
   },
   response: {
     200: { "application/json": PrimitiveBag, description: "Patched." },
@@ -1237,6 +1263,9 @@ export const GetResponseHeaders = {
           $T.integer({ description: "Calls left in the window." }),
         ),
         "X-Cached": $T.optional($T.boolean()),
+        "X-Ref-Header": $T.optional(
+          $T.integer({ description: "Remaining calls in the current window." }),
+        ),
       },
     },
   },
@@ -1256,6 +1285,12 @@ export const PostWithLinks = {
       "application/json": Widget,
       description: "Created, with a link to the read endpoint.",
       responseHeaders: { Location: $T.string({ format: "uri" }) },
+      responseLinks: {
+        GetWidget: {
+          operationId: "getPrimitive",
+          parameters: { id: "$response.body#/id" },
+        },
+      },
     },
   },
 };
@@ -1288,7 +1323,7 @@ import { Error } from "../commons.schema";
 
 export const GetRangeResponse = {
   response: {
-    default: { "application/json": Error, description: "Any server error." },
+    "5XX": { "application/json": Error, description: "Any server error." },
   },
 };
 "
@@ -1548,6 +1583,29 @@ servers:
           - acme
           - globex
         description: Tenant subdomain
+tags: 
+  - name: primitives
+    description: "Scalar types, formats and constraints."
+  - name: composition
+    description: allOf / oneOf / anyOf / discriminator.
+  - name: bodies
+    description: Request body media types.
+  - name: responses
+    description: "Status codes, headers, examples, links."
+  - name: params
+    description: Parameter locations and styles.
+  - name: security
+    description: Security schemes and scopes.
+  - name: meta
+    description: Operation metadata.
+  - name: admin
+    description: Deeply nested scope.
+security: 
+  - bearerAuth: 
+      []
+externalDocs: 
+  url: https://example.test/docs
+  description: Full handbook
 paths: 
   /primitives: 
     get: 
@@ -1593,6 +1651,7 @@ paths:
               - gamma
         - name: singleEnumString
           in: query
+          description: "A one-value enum, i.e. a literal."
           schema: 
             type: string
             enum: 
@@ -1601,12 +1660,14 @@ paths:
           in: query
           schema: 
             type: integer
+            format: int32
             minimum: 0
             maximum: 100
         - name: exclusiveInteger
           in: query
           schema: 
             type: integer
+            format: int64
             minimum: 1
             exclusiveMinimum: true
             maximum: 999
@@ -1615,12 +1676,14 @@ paths:
           in: query
           schema: 
             type: number
+            format: double
             minimum: -1.5
             maximum: 1.5
         - name: multipleOfNumber
           in: query
           schema: 
             type: number
+            multipleOf: 0.25
         - name: flag
           in: query
           schema: 
@@ -1642,6 +1705,10 @@ paths:
             type: array
             items: 
               type: integer
+              enum: 
+                - 1
+                - 2
+                - 3
         - name: anySchema
           in: query
           description: "No type at all, i.e. anything goes."
@@ -1683,7 +1750,6 @@ paths:
         - $ref: "#/components/parameters/Id"
         - $ref: "#/components/parameters/XTraceId"
       requestBody: 
-        description: One property per scalar shape.
         required: true
         content: 
           application/json: 
@@ -1710,6 +1776,7 @@ paths:
             type: string
         - $ref: "#/components/parameters/XTraceId"
       requestBody: 
+        description: Sparse patch document.
         required: false
         content: 
           application/json: 
@@ -1765,13 +1832,6 @@ paths:
       responses: 
         "200": 
           description: Exists.
-          content: 
-            application/json: 
-              schema: 
-                description: Exists.
-                nullable: true
-                enum: 
-                  - null
         "404": 
           $ref: "#/components/responses/NotFound"
   /formats: 
@@ -1924,17 +1984,28 @@ paths:
         - name: legacy
           in: query
           description: On the way out.
+          deprecated: true
           schema: 
             type: string
         - name: contentParam
           in: query
           description: "A parameter typed through \`content\` rather than \`schema\`."
           schema: 
-            {}
+            type: object
+            properties: 
+              lat: 
+                type: number
+              lon: 
+                type: number
         - name: X-Tenant
           in: header
           description: Tenant selector.
           required: true
+          schema: 
+            type: string
+        - name: session
+          in: cookie
+          description: Session cookie.
           schema: 
             type: string
       responses: 
@@ -1984,6 +2055,9 @@ paths:
         - primitives
       summary: A deprecated operation with several tags.
       description: "Multi-paragraph description.\\n\\nThe second paragraph must survive intact, including \`code spans\`,\\nan @-sign in \`@scope/name\`, and a trailing colon:"
+      externalDocs: 
+        url: https://example.test/docs/deprecated
+        description: Migration guide
       operationId: getDeprecated
       responses: 
         "200": 
@@ -2006,7 +2080,8 @@ paths:
     get: 
       tags: 
         - meta
-      summary: An operation with a description but no summary.
+      summary: ""
+      description: An operation with a description but no summary.
       operationId: getDescriptionOnly
       responses: 
         "200": 
@@ -2165,6 +2240,10 @@ paths:
             X-Cached: 
               schema: 
                 type: boolean
+            X-Ref-Header: 
+              description: Remaining calls in the current window.
+              schema: 
+                type: integer
   /responses/default: 
     get: 
       tags: 
@@ -2203,6 +2282,11 @@ paths:
               schema: 
                 type: string
                 format: uri
+          links: 
+            GetWidget: 
+              operationId: getPrimitive
+              parameters: 
+                id: "$response.body#/id"
   /responses/media: 
     get: 
       tags: 
@@ -2233,7 +2317,7 @@ paths:
       summary: A wildcard status range.
       operationId: getRangeResponse
       responses: 
-        default: 
+        5XX: 
           description: Any server error.
           content: 
             application/json: 
@@ -2262,13 +2346,6 @@ paths:
           description: No content at all.
         "301": 
           description: "Moved, no body."
-          content: 
-            application/json: 
-              schema: 
-                description: "Moved, no body."
-                nullable: true
-                enum: 
-                  - null
         "304": 
           description: "Not modified, no body."
         "400": 
@@ -2301,13 +2378,6 @@ paths:
       responses: 
         "200": 
           description: Fine either way.
-          content: 
-            application/json: 
-              schema: 
-                description: Fine either way.
-                nullable: true
-                enum: 
-                  - null
   /bodies/multi: 
     post: 
       tags: 
@@ -2345,6 +2415,12 @@ paths:
                     type: string
               required: 
                 - file
+            encoding: 
+              file: 
+                contentType: application/octet-stream
+              tags: 
+                style: form
+                explode: true
           text/plain: 
             schema: 
               type: string
@@ -2355,13 +2431,6 @@ paths:
       responses: 
         "202": 
           description: Accepted.
-          content: 
-            application/json: 
-              schema: 
-                description: Accepted.
-                nullable: true
-                enum: 
-                  - null
   /bodies/ref: 
     put: 
       tags: 
@@ -2384,6 +2453,7 @@ paths:
       summary: A plain JSON body.
       operationId: postJsonBody
       requestBody: 
+        description: The widget to create.
         required: true
         content: 
           application/json: 
@@ -2448,10 +2518,12 @@ components:
           maxLength: 64
         int: 
           type: integer
+          format: int32
           minimum: 0
           maximum: 2147483647
         num: 
           type: number
+          format: float
           minimum: 0
           exclusiveMinimum: true
         bool: 
@@ -2541,15 +2613,17 @@ components:
     MapObject: 
       description: A free-form map declared through additionalProperties.
       type: object
-      properties: 
-        {}
+      additionalProperties: 
+        type: string
     ReadWriteOnly: 
       type: object
       properties: 
         id: 
           type: string
+          readOnly: true
         password: 
           type: string
+          writeOnly: true
     Identified: 
       type: object
       properties: 
@@ -2657,6 +2731,7 @@ components:
           type: array
           items: 
             type: string
+            nullable: true
       required: 
         - requiredNullable
     Widget: 
@@ -2824,6 +2899,49 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
       }
     }
   ],
+  "tags": [
+    {
+      "name": "primitives",
+      "description": "Scalar types, formats and constraints."
+    },
+    {
+      "name": "composition",
+      "description": "allOf / oneOf / anyOf / discriminator."
+    },
+    {
+      "name": "bodies",
+      "description": "Request body media types."
+    },
+    {
+      "name": "responses",
+      "description": "Status codes, headers, examples, links."
+    },
+    {
+      "name": "params",
+      "description": "Parameter locations and styles."
+    },
+    {
+      "name": "security",
+      "description": "Security schemes and scopes."
+    },
+    {
+      "name": "meta",
+      "description": "Operation metadata."
+    },
+    {
+      "name": "admin",
+      "description": "Deeply nested scope."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "externalDocs": {
+    "url": "https://example.test/docs",
+    "description": "Full handbook"
+  },
   "paths": {
     "/primitives": {
       "get": {
@@ -2887,6 +3005,7 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
           {
             "name": "singleEnumString",
             "in": "query",
+            "description": "A one-value enum, i.e. a literal.",
             "schema": {
               "type": "string",
               "enum": [
@@ -2899,6 +3018,7 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
             "in": "query",
             "schema": {
               "type": "integer",
+              "format": "int32",
               "minimum": 0,
               "maximum": 100
             }
@@ -2908,6 +3028,7 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
             "in": "query",
             "schema": {
               "type": "integer",
+              "format": "int64",
               "minimum": 1,
               "exclusiveMinimum": true,
               "maximum": 999,
@@ -2919,6 +3040,7 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
             "in": "query",
             "schema": {
               "type": "number",
+              "format": "double",
               "minimum": -1.5,
               "maximum": 1.5
             }
@@ -2927,7 +3049,8 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
             "name": "multipleOfNumber",
             "in": "query",
             "schema": {
-              "type": "number"
+              "type": "number",
+              "multipleOf": 0.25
             }
           },
           {
@@ -2958,7 +3081,12 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
             "schema": {
               "type": "array",
               "items": {
-                "type": "integer"
+                "type": "integer",
+                "enum": [
+                  1,
+                  2,
+                  3
+                ]
               }
             }
           },
@@ -3030,7 +3158,6 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
           }
         ],
         "requestBody": {
-          "description": "One property per scalar shape.",
           "required": true,
           "content": {
             "application/json": {
@@ -3074,6 +3201,7 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
           }
         ],
         "requestBody": {
+          "description": "Sparse patch document.",
           "required": false,
           "content": {
             "application/json": {
@@ -3168,18 +3296,7 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
         ],
         "responses": {
           "200": {
-            "description": "Exists.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "Exists.",
-                  "nullable": true,
-                  "enum": [
-                    null
-                  ]
-                }
-              }
-            }
+            "description": "Exists."
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -3434,6 +3551,7 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
             "name": "legacy",
             "in": "query",
             "description": "On the way out.",
+            "deprecated": true,
             "schema": {
               "type": "string"
             }
@@ -3442,13 +3560,31 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
             "name": "contentParam",
             "in": "query",
             "description": "A parameter typed through \`content\` rather than \`schema\`.",
-            "schema": {}
+            "schema": {
+              "type": "object",
+              "properties": {
+                "lat": {
+                  "type": "number"
+                },
+                "lon": {
+                  "type": "number"
+                }
+              }
+            }
           },
           {
             "name": "X-Tenant",
             "in": "header",
             "description": "Tenant selector.",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "description": "Session cookie.",
             "schema": {
               "type": "string"
             }
@@ -3533,6 +3669,10 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
         ],
         "summary": "A deprecated operation with several tags.",
         "description": "Multi-paragraph description.\\n\\nThe second paragraph must survive intact, including \`code spans\`,\\nan @-sign in \`@scope/name\`, and a trailing colon:",
+        "externalDocs": {
+          "url": "https://example.test/docs/deprecated",
+          "description": "Migration guide"
+        },
         "operationId": "getDeprecated",
         "responses": {
           "200": {
@@ -3568,7 +3708,8 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
         "tags": [
           "meta"
         ],
-        "summary": "An operation with a description but no summary.",
+        "summary": "",
+        "description": "An operation with a description but no summary.",
         "operationId": "getDescriptionOnly",
         "responses": {
           "200": {
@@ -3816,6 +3957,12 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
                 "schema": {
                   "type": "boolean"
                 }
+              },
+              "X-Ref-Header": {
+                "description": "Remaining calls in the current window.",
+                "schema": {
+                  "type": "integer"
+                }
               }
             }
           }
@@ -3878,6 +4025,14 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
                   "format": "uri"
                 }
               }
+            },
+            "links": {
+              "GetWidget": {
+                "operationId": "getPrimitive",
+                "parameters": {
+                  "id": "$response.body#/id"
+                }
+              }
             }
           }
         }
@@ -3928,7 +4083,7 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
         "summary": "A wildcard status range.",
         "operationId": "getRangeResponse",
         "responses": {
-          "default": {
+          "5XX": {
             "description": "Any server error.",
             "content": {
               "application/json": {
@@ -3973,18 +4128,7 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
             "description": "No content at all."
           },
           "301": {
-            "description": "Moved, no body.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "Moved, no body.",
-                  "nullable": true,
-                  "enum": [
-                    null
-                  ]
-                }
-              }
-            }
+            "description": "Moved, no body."
           },
           "304": {
             "description": "Not modified, no body."
@@ -4035,18 +4179,7 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
         },
         "responses": {
           "200": {
-            "description": "Fine either way.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "Fine either way.",
-                  "nullable": true,
-                  "enum": [
-                    null
-                  ]
-                }
-              }
-            }
+            "description": "Fine either way."
           }
         }
       }
@@ -4103,6 +4236,15 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
                 "required": [
                   "file"
                 ]
+              },
+              "encoding": {
+                "file": {
+                  "contentType": "application/octet-stream"
+                },
+                "tags": {
+                  "style": "form",
+                  "explode": true
+                }
               }
             },
             "text/plain": {
@@ -4120,18 +4262,7 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
         },
         "responses": {
           "202": {
-            "description": "Accepted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "Accepted.",
-                  "nullable": true,
-                  "enum": [
-                    null
-                  ]
-                }
-              }
-            }
+            "description": "Accepted."
           }
         }
       }
@@ -4168,6 +4299,7 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
         "summary": "A plain JSON body.",
         "operationId": "postJsonBody",
         "requestBody": {
+          "description": "The widget to create.",
           "required": true,
           "content": {
             "application/json": {
@@ -4260,11 +4392,13 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
           },
           "int": {
             "type": "integer",
+            "format": "int32",
             "minimum": 0,
             "maximum": 2147483647
           },
           "num": {
             "type": "number",
+            "format": "float",
             "minimum": 0,
             "exclusiveMinimum": true
           },
@@ -4387,16 +4521,20 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
       "MapObject": {
         "description": "A free-form map declared through additionalProperties.",
         "type": "object",
-        "properties": {}
+        "additionalProperties": {
+          "type": "string"
+        }
       },
       "ReadWriteOnly": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "readOnly": true
           },
           "password": {
-            "type": "string"
+            "type": "string",
+            "writeOnly": true
           }
         }
       },
@@ -4569,7 +4707,8 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
           "arrayOfNullable": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "nullable": true
             }
           }
         },
@@ -4766,60 +4905,31 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
 `;
 
 exports[`openapi exhaustive: roundtrip differences against the source spec match the known set 1`] = `
-"missing /externalDocs  {"url":"https://example.test/docs","description":"Full handbook"}
-missing /tags  [{"name":"primitives","description":"Scalar types, formats and constraints."},{"name":"composition","descripti…
-missing /security  [{"bearerAuth":[]}]
-missing /paths//primitives/get/parameters/query:singleEnumString/description  "A one-value enum, i.e. a literal."
-missing /paths//primitives/get/parameters/query:boundedInteger/schema/format  "int32"
-missing /paths//primitives/get/parameters/query:exclusiveInteger/schema/format  "int64"
-missing /paths//primitives/get/parameters/query:boundedNumber/schema/format  "double"
-missing /paths//primitives/get/parameters/query:multipleOfNumber/schema/multipleOf  0.25
-missing /paths//primitives/get/parameters/query:enumIntegerList/schema/items/enum  [1,2,3]
-added   /paths//primitives/{id}/put/requestBody/description  "One property per scalar shape."
-missing /paths//primitives/{id}/patch/requestBody/description  "Sparse patch document."
-added   /paths//primitives/{id}/head/responses/200/content  {"application/json":{"schema":{"description":"Exists.","nullable":true,"enum":[null]}}}
-missing /paths//composition/post/requestBody/content/application/json/schema/properties/singleAllOf/allOf  [{"$ref":"#/components/schemas/Identified"}]
+"missing /paths//composition/post/requestBody/content/application/json/schema/properties/singleAllOf/allOf  [{"$ref":"#/components/schemas/Identified"}]
 added   /paths//composition/post/requestBody/content/application/json/schema/properties/singleAllOf/$ref  "#/components/schemas/Identified"
 missing /paths//composition/post/requestBody/content/application/json/schema/properties/singleOneOf/oneOf  [{"type":"string"}]
 added   /paths//composition/post/requestBody/content/application/json/schema/properties/singleOneOf/type  "string"
 missing /paths//composition/post/requestBody/content/application/json/schema/properties/negated/not  {"type":"string"}
-missing /paths//bodies/json/post/requestBody/description  "The widget to create."
-missing /paths//bodies/multi/post/requestBody/content/multipart/form-data/encoding  {"file":{"contentType":"application/octet-stream"},"tags":{"style":"form","explode":true}}
-added   /paths//bodies/multi/post/responses/202/content  {"application/json":{"schema":{"description":"Accepted.","nullable":true,"enum":[null]}}}
-added   /paths//bodies/optional/post/responses/200/content  {"application/json":{"schema":{"description":"Fine either way.","nullable":true,"enum":[null]}}}
-added   /paths//responses/statuses/get/responses/301/content  {"application/json":{"schema":{"description":"Moved, no body.","nullable":true,"enum":[null]}}}
-missing /paths//responses/range/get/responses/5XX  {"description":"Any server error.","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error…
-added   /paths//responses/range/get/responses/default  {"description":"Any server error.","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error…
-missing /paths//responses/headers/get/responses/200/headers/X-Ref-Header  {"$ref":"#/components/headers/RateLimit"}
+missing /paths//responses/headers/get/responses/200/headers/X-Ref-Header/$ref  "#/components/headers/RateLimit"
+added   /paths//responses/headers/get/responses/200/headers/X-Ref-Header/description  "Remaining calls in the current window."
+added   /paths//responses/headers/get/responses/200/headers/X-Ref-Header/schema  {"type":"integer"}
 missing /paths//responses/examples/get/responses/409/content/application/json/examples/fromComponents/$ref  "#/components/examples/ErrorExample"
 added   /paths//responses/examples/get/responses/409/content/application/json/examples/fromComponents/summary  "A shared error example"
 added   /paths//responses/examples/get/responses/409/content/application/json/examples/fromComponents/value  {"code":"shared","message":"referenced through components.examples"}
-missing /paths//responses/links/post/responses/201/links  {"GetWidget":{"$ref":"#/components/links/GetWidgetById"}}
+missing /paths//responses/links/post/responses/201/links/GetWidget/$ref  "#/components/links/GetWidgetById"
+added   /paths//responses/links/post/responses/201/links/GetWidget/operationId  "getPrimitive"
+added   /paths//responses/links/post/responses/201/links/GetWidget/parameters  {"id":"$response.body#/id"}
 missing /paths//params/{group}/items/{itemId}/get/parameters/query:expand/style  "form"
 missing /paths//params/{group}/items/{itemId}/get/parameters/query:expand/explode  true
-missing /paths//params/{group}/items/{itemId}/get/parameters/query:legacy/deprecated  true
 missing /paths//params/{group}/items/{itemId}/get/parameters/query:legacy/allowEmptyValue  true
-missing /paths//params/{group}/items/{itemId}/get/parameters/cookie:session  {"name":"session","in":"cookie","description":"Session cookie.","schema":{"type":"string"}}
 missing /paths//params/{group}/items/{itemId}/get/parameters/query:contentParam/content  {"application/json":{"schema":{"type":"object","properties":{"lat":{"type":"number"},"lon":{"type":"number"}}}…
-added   /paths//params/{group}/items/{itemId}/get/parameters/query:contentParam/schema  {}
-missing /paths//meta/deprecated/get/externalDocs  {"url":"https://example.test/docs/deprecated","description":"Migration guide"}
-changed /paths//meta/description-only/get/summary
-           spec: ""
-           gen:  "An operation with a description but no summary."
-missing /paths//meta/description-only/get/description  "An operation with a description but no summary."
+added   /paths//params/{group}/items/{itemId}/get/parameters/query:contentParam/schema  {"type":"object","properties":{"lat":{"type":"number"},"lon":{"type":"number"}}}
 missing /paths//meta/bare/trace  {"tags":["meta"],"summary":"A method Galbe has no route builder for.","operationId":"traceBare","responses":{"…
-missing /components/schemas/PrimitiveBag/properties/int/format  "int32"
-missing /components/schemas/PrimitiveBag/properties/num/format  "float"
 missing /components/schemas/Pet/type  "object"
 missing /components/schemas/Pet/required  ["petType"]
 missing /components/schemas/Pet/discriminator  {"propertyName":"petType","mapping":{"cat":"#/components/schemas/Cat","dog":"#/components/schemas/Dog"}}
 missing /components/schemas/Pet/properties  {"petType":{"type":"string"}}
 added   /components/schemas/Pet/anyOf  [{"allOf":[{"type":"object","properties":{"petType":{"type":"string","enum":["cat"]}},"required":["petType"]},…
-missing /components/schemas/NullableBag/properties/arrayOfNullable/items/nullable  true
-missing /components/schemas/MapObject/additionalProperties  {"type":"string"}
-added   /components/schemas/MapObject/properties  {}
-missing /components/schemas/ReadWriteOnly/properties/id/readOnly  true
-missing /components/schemas/ReadWriteOnly/properties/password/writeOnly  true
 missing /components/headers  {"RateLimit":{"description":"Remaining calls in the current window.","schema":{"type":"integer"}}}
 missing /components/examples  {"ErrorExample":{"summary":"A shared error example","value":{"code":"shared","message":"referenced through com…
 missing /components/links  {"GetWidgetById":{"operationId":"getPrimitive","parameters":{"id":"$response.body#/id"}}}"

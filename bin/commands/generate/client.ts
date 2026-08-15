@@ -94,6 +94,28 @@ type _OKStatus = ${[...OKS].join('|')}
 type _HttpStatus = ${HTTP_CODES.join('|')}
 `.trim()
 
+/**
+ * Expand `1XX`…`5XX` range keys into the concrete statuses they cover, so the
+ * generated types stay per-status. An exact declaration always wins over the
+ * range containing it; `default` is left alone as the fallback arm.
+ */
+const expandRanges = (response: STResponse): Array<[string, STResponseEntry]> => {
+  const exact = new Set(Object.keys(response).filter(k => /^\d+$/.test(k)))
+  const out: Array<[string, STResponseEntry]> = []
+  for (const [key, entry] of Object.entries(response)) {
+    if (!entry) continue
+    const range = key.match(/^([1-5])XX$/)
+    if (!range) {
+      out.push([key, entry])
+      continue
+    }
+    const hundred = Number(range[1]) * 100
+    for (const code of HTTP_CODES)
+      if (code >= hundred && code < hundred + 100 && !exact.has(String(code))) out.push([String(code), entry])
+  }
+  return out
+}
+
 // Convert operationId to a safe TypeScript identifier (for type names)
 const safeTypeId = (id: string) => id.replace(/[^a-zA-Z0-9_$]/g, '_')
 // Quote a property key if it is not a valid bare identifier
@@ -121,7 +143,7 @@ const buildRawResponseType = (operationId: string, response: STResponse | null):
   const declared: string[] = []
   const arms: string[] = []
 
-  for (const [rawKey, entry] of Object.entries(response)) {
+  for (const [rawKey, entry] of expandRanges(response)) {
     if (!entry) continue
     const status = rawKey === 'default' ? null : Number(rawKey)
     if (status === null) continue // handled as fallback
@@ -147,7 +169,7 @@ const buildRawResponseType = (operationId: string, response: STResponse | null):
 const buildSuccessType = (response: STResponse | null): string => {
   if (!response) return 'unknown'
   const types: string[] = []
-  for (const [rawKey, entry] of Object.entries(response)) {
+  for (const [rawKey, entry] of expandRanges(response)) {
     if (!entry) continue
     const status = rawKey === 'default' ? null : Number(rawKey)
     if (status === null || !OKS.has(status)) continue
@@ -167,7 +189,7 @@ const buildErrorType = (operationId: string, response: STResponse | null): strin
   const declared: string[] = []
   const arms: string[] = []
 
-  for (const [rawKey, entry] of Object.entries(response)) {
+  for (const [rawKey, entry] of expandRanges(response)) {
     if (!entry) continue
     const status = rawKey === 'default' ? null : Number(rawKey)
     if (status === null || OKS.has(status)) continue
@@ -180,9 +202,9 @@ const buildErrorType = (operationId: string, response: STResponse | null): strin
   const defaultEntry = (response as any)['default'] as STResponseEntry | undefined
   const fallbackBody = defaultEntry ? responseBodyInfo(defaultEntry).typeStr : 'any'
   // also exclude all declared 2xx
-  const declared2xx = Object.keys(response)
+  const declared2xx = expandRanges(response)
+    .map(([k]) => k)
     .filter(k => k !== 'default' && OKS.has(Number(k)))
-    .map(String)
   const allDeclared = [...declared, ...declared2xx]
   const errExcludeStr = allDeclared.length ? `Exclude<_HttpStatus,${allDeclared.join('|')}>` : '_HttpStatus'
   arms.push(`{status:${errExcludeStr};headers:Headers;body:${fallbackBody}}`)

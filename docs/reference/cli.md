@@ -482,6 +482,20 @@ Re-run with one of:
 
 Use `--dry-run` at any point to preview the diff without touching the filesystem.
 
+#### Unsupported constructs
+
+A spec may declare things Galbe's schema model cannot express. Rather than dropping them silently — which is how a quietly widened validator reaches production — the command reports each one:
+
+```bash
+$ galbe generate code petstore.spec.json
+Not carried into the generated sources (3):
+  ! GET /items          parameter 'legacy': allowEmptyValue is not modelled (OpenAPI deprecates it) and is dropped
+  ! POST /items         `not` has no equivalent in Galbe — the constraint is dropped and the value validates as `any`
+  ! TRACE /debug        method 'TRACE' has no Galbe route builder — the operation is skipped
+```
+
+The warnings describe the spec, not the diff: they appear on every run, including `--dry-run`, and never stop the generation. Reported today: `not`, `allowEmptyValue`, non-default parameter `style`/`explode`, methods with no route builder (`TRACE`), a response key that is neither a status, a `1XX`–`5XX` range nor `default`, a parameter typed by several `content` media types, and response headers on a `components.responses` entry.
+
 #### Example
 
 For that example, we will generate the Galbe source code from the [Swagger Petstore Openapi spec](https://petstore3.swagger.io/).

@@ -1,6 +1,66 @@
 import { describe, expect, it, test, beforeAll, afterAll } from 'bun:test'
 import { parseCookie, stringifyCookie, readCookies } from '../src/cookies'
-import { Galbe, BadRequestError } from '../src'
+import { Galbe, BadRequestError, $T } from '../src'
+
+describe('cookies schema', () => {
+    const port = 7373
+    const g = new Galbe()
+
+    g.get(
+        '/typed',
+        {
+            cookies: {
+                session: $T.string({ minLength: 3 }),
+                visits: $T.integer({ min: 0 }),
+                beta: $T.optional($T.boolean()),
+            },
+        },
+        ctx => {
+            // declared cookies come back parsed and typed
+            const visits: number = ctx.cookies.visits
+            const session: string = ctx.cookies.session
+            return { session, visits, beta: ctx.cookies.beta, extra: (ctx.cookies as any).extra }
+        }
+    )
+
+    beforeAll(async () => {
+        await g.listen(port)
+    })
+    afterAll(() => {
+        g.stop()
+    })
+
+    const get = (cookie: string) => fetch(`http://localhost:${port}/typed`, { headers: { cookie } })
+
+    test('declared cookies are parsed to their schema type', async () => {
+        const resp = await get('session=abcdef; visits=3')
+        expect(resp.status).toBe(200)
+        expect(await resp.json()).toEqual({ session: 'abcdef', visits: 3, beta: undefined, extra: undefined })
+    })
+
+    test('undeclared cookies survive as raw strings', async () => {
+        const resp = await get('session=abcdef; visits=3; extra=kept')
+        expect(await resp.json()).toMatchObject({ extra: 'kept' })
+    })
+
+    test('a cookie that violates its schema is a 400', async () => {
+        const resp = await get('session=ab; visits=3')
+        expect(resp.status).toBe(400)
+        expect(await resp.json()).toEqual({ cookies: { session: 'Length is too small (3 char min)' } })
+    })
+
+    test('a missing required cookie is a 400', async () => {
+        const resp = await get('visits=3')
+        expect(resp.status).toBe(400)
+        expect(await resp.json()).toEqual({ cookies: { session: 'Required' } })
+    })
+
+    test('an optional cookie may be absent', async () => {
+        const resp = await get('session=abcdef; visits=0')
+        expect(resp.status).toBe(200)
+        expect(await resp.json()).toMatchObject({ visits: 0 })
+    })
+})
 
 describe('Cookies', () => {
     describe('readCookies', () => {

@@ -40,6 +40,9 @@ describe('validator.compile: parity with the interpreter', () => {
     // fails exclusiveMin and max at once: the interpreter throws an array of messages
     expectParity($T.integer({ exclusiveMin: 5, max: 1 }), [3], { parse: true })
     expectParity($T.integer({ exclusiveMax: 5 }), [5, 4])
+    expectParity($T.integer({ multipleOf: 5 }), [5, 7, 0, -10])
+    expectParity($T.integer({ format: 'int32' }), [0, 2147483647, 2147483648, -2147483649])
+    expectParity($T.integer({ format: 'uint32', min: 10 }), [-1, 5, 20])
   })
 
   test('number', () => {
@@ -47,6 +50,8 @@ describe('validator.compile: parity with the interpreter', () => {
     expectParity($T.number(), inputs)
     expectParity($T.number(), inputs, { parse: true })
     expectParity($T.number({ min: 2, max: 5 }), inputs, { parse: true })
+    expectParity($T.number({ multipleOf: 0.25 }), [0.75, 0.3, 0, -1.5])
+    expectParity($T.number({ format: 'float' }), [0.1, 1e300])
   })
 
   test('string', () => {
@@ -82,6 +87,13 @@ describe('validator.compile: parity with the interpreter', () => {
     ]
     expectParity(schema, inputs)
     expectParity(schema, ['{"name":"a","age":"1"}', '{"name":5}', 'not json', ...inputs], { parse: true })
+  })
+
+  test('object: additionalProperties', () => {
+    const inputs: any[] = [{ id: 'a' }, { id: 'a', extra: 1 }, { id: 'a', extra: 'x' }, { extra: 1 }, { toString: 'x' }]
+    expectParity($T.record($T.integer()), inputs)
+    expectParity($T.object({ id: $T.string() }, { additionalProperties: $T.integer() }), inputs)
+    expectParity($T.object({ id: $T.string() }, { additionalProperties: false }), inputs)
   })
 
   test('object: nested errors keep their shape', () => {

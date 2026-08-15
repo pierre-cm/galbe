@@ -16,6 +16,8 @@ type SchemaEntry = {
   responseExample?: any
   /** Response-only: content-level multi-key examples. */
   responseExamples?: Record<string, any>
+  /** Response-only: the response's `links`, with component refs already inlined. */
+  responseLinks?: Record<string, any>
   /**
    * Response-only: the response's bodies as `[mediaType, schema]` pairs. Kept
    * even for a single media type so the component can be emitted in the
@@ -37,6 +39,19 @@ type EndpointEntry = {
   path?: string
   schema?: { imports: Record<string, string>; name: string; def: string }
   endpoint?: { meta?: string; def?: string }
+}
+
+/**
+ * A construct the spec declares and the generated Galbe sources cannot carry.
+ * Collected while planning and reported by `generate code`: a silently widened
+ * validator is a security-adjacent surprise, a warning makes it a choice.
+ */
+export type GenerationWarning = { at: string; message: string }
+let warnings: GenerationWarning[] = []
+// where the walk currently is, so a warning raised deep in a schema can say so
+let warnAt = ''
+const warn = (message: string, at = warnAt) => {
+  if (!warnings.some(w => w.at === at && w.message === message)) warnings.push({ at, message })
 }
 
 // Util
@@ -87,14 +102,21 @@ const orderDeps = (deps: Record<string, SchemaEntry>) => {
   }
   return Object.fromEntries([...l].map(k => [k, deps[k]]))
 }
+/**
+ * Marks a value that is already Galbe source — a nested `$T.…` builder — so it
+ * comes back out of `serialize` as code instead of a quoted string.
+ */
+const raw = (code: string) => `__RAW__${code}__ENDRAW__`
 const serialize = (obj: any) => {
   return JSON.stringify(obj, (k, value) => {
     if (k === 'pattern' && value) return `__PATTERN__${value}__ENDPATTERN__`
     return value
-  }).replace(/"__PATTERN__([\s\S]*?)__ENDPATTERN__"/g, (_, body) => {
-    const decoded = JSON.parse(`"${body}"`) as string
-    return `/${decoded.replace(/\//g, '\\/')}/`
   })
+    .replace(/"__PATTERN__([\s\S]*?)__ENDPATTERN__"/g, (_, body) => {
+      const decoded = JSON.parse(`"${body}"`) as string
+      return `/${decoded.replace(/\//g, '\\/')}/`
+    })
+    .replace(/"__RAW__([\s\S]*?)__ENDRAW__"/g, (_, body) => JSON.parse(`"${body}"`) as string)
 }
 
 const writeCodeFile = async (path: string, content: string, target: 'js' | 'ts') => {
@@ -115,8 +137,8 @@ const writeCodeFile = async (path: string, content: string, target: 'js' | 'ts')
 
 const parseOapiSchema = (
   os?: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject,
-  details: { id?: string; title?: string; description?: string } = {},
-  extra?: { media?: string }
+  details: { id?: string; title?: string; description?: string; deprecated?: boolean } = {},
+  extra?: { media?: string; skipNullable?: boolean; encoding?: Record<string, any> }
 ): string => {
   if (!os) {
     return `$T.any(${details && Object.keys(details).length ? JSON.stringify(details) : ''})`
@@ -125,6 +147,11 @@ const parseOapiSchema = (
   const ref: string | undefined = os?.$ref
   if (ref) return `%ref:${ref}%`
   os = os as OpenAPIV3.SchemaObject
+  // `nullable` is valid on any schema, not only on an object's properties, so
+  // it is applied once here — array items, component schemas and composition
+  // members included. The object branch opts out through `skipNullable`: it
+  // folds nullability together with optionality into `$T.nullish`.
+  const nullable = !extra?.skipNullable && os.nullable === true
   let options: typeof details & {
     min?: number
     max?: number
@@ -132,6 +159,7 @@ const parseOapiSchema = (
     exclusiveMax?: number
     minLength?: number
     maxLength?: number
+    multipleOf?: number
     pattern?: string
     format?: string
     minItems?: number
@@ -139,11 +167,18 @@ const parseOapiSchema = (
     unique?: boolean
     default?: any
     examples?: any
+    readOnly?: boolean
+    writeOnly?: boolean
+    encoding?: Record<string, any>
+    /** already-rendered source, injected through `raw()` */
+    additionalProperties?: string
   } = {
     ...details,
     title: os.title,
     description: details.description || os.description,
     default: os.default,
+    ...(os.readOnly ? { readOnly: true } : {}),
+    ...(os.writeOnly ? { writeOnly: true } : {}),
     ...(os.example !== undefined ? { examples: os.example } : {}),
   }
 
@@ -178,7 +213,21 @@ const parseOapiSchema = (
       )})`
     }
   } else if (!os?.type) {
-    return `$T.any(${hasOptions ? optArg : ''})`
+    if (os.not) warn('`not` has no equivalent in Galbe — the constraint is dropped and the value validates as `any`')
+    resp = `$T.any(${hasOptions ? optArg : ''})`
+  } else if (
+    os.enum?.length &&
+    os.format !== 'binary' &&
+    ['string', 'integer', 'number', 'boolean'].includes(os.type as string)
+  ) {
+    // An `enum` closes the value set for any primitive type, not just strings:
+    // one value is a literal, several are a union of literals. Both carry the
+    // options — a literal that drops them loses its description.
+    const literals = os.enum.map(v => `$T.literal(${JSON.stringify(v)})`)
+    resp =
+      literals.length === 1
+        ? `$T.literal(${JSON.stringify(os.enum[0])}${optArg ? `, ${optArg}` : ''})`
+        : `$T.union([${literals.join(', ')}]${optArg ? `, ${optArg}` : ''})`
   } else if (os.type === 'boolean') resp = `$T.boolean(${hasOptions ? serialize(options) : ''})`
   else if (os.type === 'number') {
     let { max, min, exclusiveMax, exclusiveMin } = {
@@ -187,7 +236,7 @@ const parseOapiSchema = (
       exclusiveMax: os.maximum !== undefined && os.exclusiveMaximum ? os.maximum : undefined,
       exclusiveMin: os.minimum !== undefined && os.exclusiveMinimum ? os.minimum : undefined,
     }
-    options = { ...options, min, max, exclusiveMax, exclusiveMin }
+    options = { ...options, min, max, exclusiveMax, exclusiveMin, multipleOf: os.multipleOf, format: os.format }
     hasOptions = Object.values(options).some(v => v !== undefined)
     resp = `$T.number(${hasOptions ? serialize(options) : ''})`
   } else if (os.type === 'integer') {
@@ -195,17 +244,12 @@ const parseOapiSchema = (
     let min = os.minimum !== undefined && !os.exclusiveMinimum ? os.minimum : undefined
     let exclusiveMax = os.maximum !== undefined && os.exclusiveMaximum ? os.maximum : undefined
     let exclusiveMin = os.minimum !== undefined && os.exclusiveMinimum ? os.minimum : undefined
-    options = { ...options, min, max, exclusiveMax, exclusiveMin }
+    options = { ...options, min, max, exclusiveMax, exclusiveMin, multipleOf: os.multipleOf, format: os.format }
     hasOptions = Object.values(options).some(v => v !== undefined)
     resp = `$T.integer(${hasOptions ? serialize(options) : ''})`
   } else if (os.type === 'string') {
     if (os.format === 'binary') resp = `$T.byteArray(${hasOptions ? serialize(options) : ''})`
-    else if (os.enum?.length === 1) {
-      resp = `$T.literal("${os.enum[0]}")`
-    } else if (os.enum?.length) {
-      const literals = os.enum.map(v => `$T.literal("${v}")`).join(', ')
-      resp = `$T.union([${literals}]${optArg ? `, ${optArg}` : ''})`
-    } else {
+    else {
       let minLength = os.minLength
       let maxLength = os.maxLength
       let pattern = os.pattern
@@ -236,19 +280,38 @@ const parseOapiSchema = (
           else if (v.nullable) return `$T.nullable(${s})`
           return s
         }
-        return `"${k}":${w(parseOapiSchema(v))}`
+        // `w` owns this property's nullability, so the recursive call must not
+        // also wrap it — otherwise a nullable property comes back doubly wrapped.
+        return `"${k}":${w(parseOapiSchema(v, {}, { skipNullable: true }))}`
       })
       .join(',')
+    // `additionalProperties: true` is the OpenAPI default — only the two
+    // constraining forms carry information worth emitting.
+    const apDef = os.additionalProperties
+    const ap =
+      apDef === false ? 'false' : apDef && apDef !== true ? parseOapiSchema(apDef as OpenAPIV3.SchemaObject) : undefined
+
     if (extra?.media === 'multipart/form-data') {
+      // `encoding` sits on the media type in the spec; Galbe carries it on the
+      // multipartForm schema, which is the only place it can live
+      if (extra.encoding && Object.keys(extra.encoding).length) {
+        options = { ...options, encoding: extra.encoding }
+        optArg = serialize(options)
+      }
       resp = `$T.multipartForm({${props}}${optArg ? `, ${optArg}` : ''})`
-    } else if (extra?.media === 'application/x-www-form-urlencoded') {
-      resp = `$T.object({${props}}${optArg ? `, ${optArg}` : ''})`
+    } else if (ap !== undefined && ap !== 'false' && !props) {
+      // a free-form map: no declared properties, one schema for every value
+      resp = `$T.record(${ap}${optArg ? `, ${optArg}` : ''})`
     } else {
+      if (ap !== undefined) {
+        options = { ...options, additionalProperties: raw(ap) }
+        optArg = serialize(options)
+      }
       resp = `$T.object({${props}}${optArg ? `, ${optArg}` : ''})`
     }
   } else throw new Error(`Unknown schema type ${JSON.stringify(os)}`)
 
-  return resp
+  return nullable ? `$T.nullable(${resp})` : resp
 }
 
 const buildSchemaIndex = (def: OpenAPIV3.Document) => {
@@ -259,14 +322,24 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
     let dependsOn = new Set<string>()
     let responseExample: any = undefined
     let responseExamples: Record<string, any> | undefined = undefined
+    let responseLinks: Record<string, any> | undefined = undefined
     let responseContent: [string, string][] | undefined = undefined
     let requestContent: [string, string][] | undefined = undefined
     if (kind === 'schemas') schema = parseOapiSchema(s, { id: k })
     else if (kind === 'requestBodies') {
       const contentMap = (s as OpenAPIV3.RequestBodyObject)?.content
-      requestContent = Object.entries(contentMap || {}).map(([media, v]) => [media, parseOapiSchema(v.schema, {}, { media })])
+      requestContent = Object.entries(contentMap || {}).map(([media, v]) => [
+        media,
+        parseOapiSchema(v.schema, {}, { media, encoding: (v as any).encoding }),
+      ])
       schema = `{${requestContent.map(([m, v]) => `"${m}": ${v}`).join(',')}}`
     } else if (kind === 'responses') {
+      responseLinks = resolveLinks((s as OpenAPIV3.ResponseObject)?.links as any, def.components)
+      if (s.headers && Object.keys(s.headers).length)
+        warn(
+          `component response '${k}': response headers on a components.responses entry are not carried`,
+          `#/components/responses/${k}`
+        )
       if (!s.content) {
         // a bodiless component response: no media types, description only
         responseContent = []
@@ -323,6 +396,7 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
         : {}),
       ...(kind === 'responses' && responseExample !== undefined ? { responseExample } : {}),
       ...(kind === 'responses' && responseExamples ? { responseExamples } : {}),
+      ...(kind === 'responses' && responseLinks && Object.keys(responseLinks).length ? { responseLinks } : {}),
     }
   }
   for (let [k, v] of Object.entries(def.components?.schemas || {})) initSchema(k, v, 'schemas')
@@ -350,6 +424,60 @@ const resolveExample = (ex: any, components: OpenAPIV3.ComponentsObject | undefi
   if (!target) return ex
   seen.add(ref)
   return resolveExample(target, components, seen)
+}
+
+/**
+ * Resolve a `#/components/headers/*` reference. Galbe carries response headers
+ * inline on the response, with nowhere to keep a components entry, so the
+ * header is inlined — the component's identity is lost but its shape is not,
+ * which beats the silent skip this replaces.
+ */
+const resolveHeaderRef = (
+  ref: string,
+  components: OpenAPIV3.ComponentsObject | undefined,
+  seen = new Set<string>()
+): OpenAPIV3.HeaderObject | undefined => {
+  if (seen.has(ref)) return undefined
+  let match = ref.match(/^#\/components\/headers\/(.+)$/)
+  if (!match) return undefined
+  let target = components?.headers?.[match[1]!]
+  if (!target) return undefined
+  seen.add(ref)
+  if ('$ref' in target) return resolveHeaderRef(target.$ref, components, seen)
+  return target
+}
+
+/**
+ * Resolve a `#/components/links/*` reference. Galbe carries links inline on the
+ * response, with nowhere to keep a components entry, so the link is inlined —
+ * the component's name is lost, its content is not.
+ */
+const resolveLinkRef = (
+  ref: string,
+  components: OpenAPIV3.ComponentsObject | undefined,
+  seen = new Set<string>()
+): any => {
+  if (seen.has(ref)) return undefined
+  let match = ref.match(/^#\/components\/links\/(.+)$/)
+  if (!match) return undefined
+  let target = (components?.links as Record<string, any> | undefined)?.[match[1]!]
+  if (!target) return undefined
+  seen.add(ref)
+  if ('$ref' in target) return resolveLinkRef(target.$ref, components, seen)
+  return target
+}
+
+/** Every link on a response, with `$ref`s inlined. Empty when the response declares none. */
+const resolveLinks = (
+  links: Record<string, any> | undefined,
+  components: OpenAPIV3.ComponentsObject | undefined
+): Record<string, any> => {
+  const out: Record<string, any> = {}
+  for (const [name, link] of Object.entries(links ?? {})) {
+    const resolved = link && '$ref' in link ? resolveLinkRef(link.$ref, components) : link
+    if (resolved) out[name] = resolved
+  }
+  return out
 }
 
 const resolveParamRef = (
@@ -384,11 +512,26 @@ const parseEndpointDef = (
         .replaceAll(/[^$\w\d_]+([$\w\d_])/g, (_, $1) => $1.toUpperCase())
       }`.replace(/^\w/, c => c.toUpperCase())
 
+  warnAt = `${method.toUpperCase()} ${path}`
   let meta = '/**\n'
-  if (def.summary) meta += ` * ${def.summary}\n *\n`
-  if (def.description) meta += ` * ${def.description.replace(/\n/g, '\n * ')}\n`
+  // The JSDoc head expresses "summary, then description" and nothing else, so a
+  // description with no summary needs the explicit tags: a bare `@summary`
+  // declares the empty one the head convention cannot write down.
+  const headExpressible = !def.description || !!def.summary
+  if (headExpressible) {
+    if (def.summary) meta += ` * ${def.summary}\n *\n`
+    if (def.description) meta += ` * ${def.description.replace(/\n/g, '\n * ')}\n`
+  } else {
+    if (typeof def.summary === 'string') meta += ` * @summary\n`
+    for (const line of def.description!.split('\n')) meta += ` * @description ${line}\n`
+  }
   if (def.operationId) meta += ` * @operationId ${def.operationId}\n`
-  if (def.externalDocs?.url) meta += ` * @externalDocs ${def.externalDocs.url}\n`
+  // `@externalDocs <url> [description]` — the serializer splits it back on the
+  // first whitespace, so the description survives the roundtrip.
+  if (def.externalDocs?.url)
+    meta += ` * @externalDocs ${def.externalDocs.url}${
+      def.externalDocs.description ? ` ${def.externalDocs.description}` : ''
+    }\n`
   if (def.tags) meta += ` * @tags ${def.tags.join(' ')}\n`
   if (Array.isArray(def.security)) {
     if (def.security.length === 0) {
@@ -411,7 +554,14 @@ const parseEndpointDef = (
   meta += ' */'
   let endpoint = `${method}("${p}", ${schemaName}, ctx => {\n  throw new NotImplementedError()\n})`
 
-  let sp: Record<string, Record<string, string>> = { path: {}, query: {}, header: {}, body: {}, formData: {} } // TODO handle body and formData cases
+  let sp: Record<string, Record<string, string>> = {
+    path: {},
+    query: {},
+    header: {},
+    cookie: {},
+    body: {},
+    formData: {},
+  } // TODO handle body and formData cases
 
   for (let _p of def?.parameters || []) {
     let p: OpenAPIV3.ParameterObject | undefined
@@ -425,8 +575,25 @@ const parseEndpointDef = (
       s = so ?? s
       return p.in !== 'path' && !p.required ? `$T.optional(${s})` : s
     }
+    // A parameter is typed either by `schema` or by `content` (a single media
+    // type). Galbe cannot record *which* media type it was serialized as, so
+    // the roundtrip stays lossy there — but keeping the shape beats `$T.any()`.
+    const pSchema = p.schema ?? Object.values(p.content ?? {})[0]?.schema
+    if ((p as any).allowEmptyValue)
+      warn(`parameter '${p.name}': allowEmptyValue is not modelled (OpenAPI deprecates it) and is dropped`)
+    // only a non-default serialization is worth reporting: 'form'/'simple' and
+    // the explode that goes with them are what Galbe's parsers already do
+    const defaultStyle = p.in === 'query' || p.in === 'cookie' ? 'form' : 'simple'
+    const style = (p as any).style as string | undefined
+    const explode = (p as any).explode as boolean | undefined
+    if (style && style !== defaultStyle)
+      warn(`parameter '${p.name}': style '${style}' is not modelled — the generated route parses it as '${defaultStyle}'`)
+    if (explode !== undefined && explode !== (defaultStyle === 'form'))
+      warn(`parameter '${p.name}': explode ${explode} is not modelled — the generated route parses it as ${defaultStyle === 'form'}`)
+    if (p.content && Object.keys(p.content).length > 1)
+      warn(`parameter '${p.name}': only the first of ${Object.keys(p.content).length} content media types is kept`)
     sp[p.in][p.name] = o(
-      unref(parseOapiSchema(p.schema, { description: p.description }), m => {
+      unref(parseOapiSchema(pSchema, { description: p.description, deprecated: p.deprecated }), m => {
         let l = m.split('/')
         imports[l[l.length - 1]] = m
         return l[l.length - 1]
@@ -434,10 +601,11 @@ const parseEndpointDef = (
     )
   }
 
-  let [schemaParams, schemaQuery, schemaHeaders] = [
+  let [schemaParams, schemaQuery, schemaHeaders, schemaCookies] = [
     { g: 'params', o: 'path' },
     { g: 'query', o: 'query' },
     { g: 'headers', o: 'header' },
+    { g: 'cookies', o: 'cookie' },
   ].map(({ g, o }) =>
     Object.keys(sp[o]).length
       ? `  ${g}: {${Object.entries(sp[o])
@@ -462,7 +630,7 @@ const parseEndpointDef = (
         ...new Set(
           Object.entries(rb?.content || { null: {} }).map(([media, v]) => [
             media,
-            unref(parseOapiSchema(v.schema, undefined, { media }), m => {
+            unref(parseOapiSchema(v.schema, undefined, { media, encoding: (v as any).encoding }), m => {
               let l = m.split('/')
               imports[l[l.length - 1]] = m
               return l[l.length - 1]
@@ -470,7 +638,13 @@ const parseEndpointDef = (
           ])
         ),
       ]
-      body = bs.length ? `  body: {${bs.map(([k, v]) => `"${k}":${o(v)}`).join(',')}}` : ''
+      // The body's own description sits beside the media types, never spread
+      // onto a body schema — a spread over a schema carrying an `id` leaks it
+      // into the shared component (same failure mode as response metadata).
+      const parts = bs.map(([k, v]) => `"${k}":${o(v)}`)
+      if (typeof rb?.description === 'string' && rb.description)
+        parts.push(`description:${JSON.stringify(rb.description)}`)
+      body = parts.length ? `  body: {${parts.join(',')}}` : ''
     }
   }
 
@@ -478,7 +652,15 @@ const parseEndpointDef = (
   let r = def?.responses
   let rs = Object.fromEntries(
     Object.entries(r || {}).map(([status, sv]) => {
-      let s: string = Number.isInteger(Number(status)) ? status : 'default'
+      // `1XX`…`5XX` are status keys of their own — Galbe carries them verbatim.
+      // Anything else that is not an integer collapses onto `default`.
+      let s: string = Number.isInteger(Number(status))
+        ? status
+        : /^[1-5]XX$/i.test(status)
+          ? status.toUpperCase()
+          : 'default'
+      if (s === 'default' && status !== 'default')
+        warn(`response '${status}' is not a status Galbe can express and collapses onto 'default'`)
 
       //@ts-ignore
       let rootRef = sv?.$ref
@@ -496,8 +678,11 @@ const parseEndpointDef = (
       // Collect response-level headers
       const headerEntries: string[] = []
       for (const [hName, hVal] of Object.entries(respObj?.headers || {})) {
-        if ('$ref' in (hVal as any)) continue
-        const h = hVal as OpenAPIV3.HeaderObject
+        let h: OpenAPIV3.HeaderObject | undefined
+        if ('$ref' in (hVal as any)) {
+          h = resolveHeaderRef((hVal as any).$ref, components)
+          if (!h) continue
+        } else h = hVal as OpenAPIV3.HeaderObject
         const headerSchema = unref(
           parseOapiSchema(h.schema || ({ type: 'string' } as any), { description: h.description }),
           m => {
@@ -509,10 +694,16 @@ const parseEndpointDef = (
         headerEntries.push(`${JSON.stringify(hName)}:${h.required ? headerSchema : `$T.optional(${headerSchema})`}`)
       }
       const description = typeof respObj?.description === 'string' && respObj.description ? respObj.description : undefined
+      const links = resolveLinks((respObj as any)?.links, components)
+      const hasLinks = Object.keys(links).length > 0
 
       if (Object.keys(content).length === 0) {
         let nullSchema = description ? `$T.null({description:${JSON.stringify(description)}})` : `$T.null()`
-        if (headerEntries.length) nullSchema = `({...${nullSchema}, responseHeaders:{${headerEntries.join(',')}}})`
+        const extras = [
+          ...(headerEntries.length ? [`responseHeaders:{${headerEntries.join(',')}}`] : []),
+          ...(hasLinks ? [`responseLinks:${JSON.stringify(links)}`] : []),
+        ]
+        if (extras.length) nullSchema = `({...${nullSchema}, ${extras.join(', ')}})`
         return [s, nullSchema]
       }
 
@@ -547,6 +738,7 @@ const parseEndpointDef = (
         }
         if (description) parts.push(`description: ${JSON.stringify(description)}`)
         if (headerEntries.length) parts.push(`responseHeaders: {${headerEntries.join(',')}}`)
+        if (hasLinks) parts.push(`responseLinks: ${JSON.stringify(links)}`)
         if (exampleParts.length) parts.push(`examples: {${exampleParts.join(',')}}`)
         if (singleExample !== undefined) parts.push(`example: ${JSON.stringify(singleExample)}`)
         return [s, `{${parts.join(',')}}`]
@@ -562,6 +754,7 @@ const parseEndpointDef = (
         if (key) parts.push(`"${key}":${schemaStr}`)
         if (description) parts.push(`description:${JSON.stringify(description)}`)
         if (headerEntries.length) parts.push(`responseHeaders:{${headerEntries.join(',')}}`)
+        if (hasLinks) parts.push(`responseLinks:${JSON.stringify(links)}`)
         if (exampleParts.length) parts.push(`examples:{${exampleParts.join(',')}}`)
         if (singleExample !== undefined) parts.push(`example:${JSON.stringify(singleExample)}`)
         return [s, `{${parts.join(',')}}`]
@@ -572,11 +765,12 @@ const parseEndpointDef = (
   if (Object.keys(rs).length) {
     resp = `  response: {${Object.entries(rs)
       .filter(([_, v]) => v)
-      .map(([s, v]) => `${s}: ${v}`)
+      // a range key is not a valid bare property name — `5XX:` does not parse
+      .map(([s, v]) => `${/^\d+$/.test(s) ? s : JSON.stringify(s)}: ${v}`)
       .join(',')}}`
   } else resp = ''
 
-  let schema = [schemaHeaders, schemaParams, schemaQuery, body, resp].filter(s => s)
+  let schema = [schemaHeaders, schemaParams, schemaQuery, schemaCookies, body, resp].filter(s => s)
 
   return {
     schema: {
@@ -605,6 +799,11 @@ const parseEndpoints = (def: OpenAPIV3.Document) => {
     const scope = segments.slice(0, nLit)
     const emitPath = `/${segments.slice(Math.max(nLit - 1, 0)).join('/')}`
     let methods = ['get', 'put', 'patch', 'post', 'delete', 'options', 'head'] as const
+    // 'trace' is deliberately absent: it is disabled across most infrastructure
+    // and Galbe has no builder for it. Say so rather than dropping it silently.
+    for (const m of Object.keys(pathVal))
+      if (!(methods as readonly string[]).includes(m) && m !== 'parameters' && m !== 'summary' && m !== 'description' && m !== 'servers')
+        warn(`method '${m.toUpperCase()}' has no Galbe route builder — the operation is skipped`, `${m.toUpperCase()} ${fullPath}`)
     let pathParams = pathVal.parameters || []
     for (let m of methods) {
       let endpointDef = pathVal?.[m]
@@ -685,6 +884,7 @@ const renderComponentSchemaFile = (
       if (isResp) {
         if (s.responseExample !== undefined) extras.push(`example: ${JSON.stringify(s.responseExample)}`)
         if (s.responseExamples) extras.push(`examples: ${JSON.stringify(s.responseExamples)}`)
+        if (s.responseLinks) extras.push(`responseLinks: ${JSON.stringify(s.responseLinks)}`)
       } else if (s.requestRequired !== undefined) extras.push(`required: ${s.requestRequired}`)
       const body = [...content.map(([media, sc]) => `${JSON.stringify(media)}: ${sc}`), ...extras].join(', ')
       // the exported type is the body type, read back off the const
@@ -740,6 +940,8 @@ export type GenerationPlan = {
   componentFiles: { path: string; content: string }[]
   scopes: ScopePlan[]
   target: 'js' | 'ts'
+  /** Constructs the spec declared that the generated sources cannot carry. */
+  warnings?: GenerationWarning[]
 }
 
 export const buildPlan = (
@@ -887,10 +1089,12 @@ export const planFromOapi = async (
   let v = def?.openapi
   if (!v || !semver.satisfies(v, version)) throw new Error('Invalid openapi version')
 
+  warnings = []
+  warnAt = ''
   let schemaIndex = buildSchemaIndex(def)
   let endpointDefs = parseEndpoints(def)
 
-  return buildPlan(endpointDefs, schemaIndex, target)
+  return { ...buildPlan(endpointDefs, schemaIndex, target), warnings }
 }
 
 export const generateFromOapi = async (

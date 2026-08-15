@@ -44,6 +44,57 @@ export const splitHead = (head?: string): { summary?: string; description?: stri
     description: head.slice(blank + 2).trim() || undefined,
   }
 }
+/**
+ * An operation's `summary` / `description` pair. The JSDoc head is the default
+ * — first paragraph is the summary, whatever follows the first blank line is
+ * the description — and an explicit `@summary` / `@description` tag overrides
+ * its half of it. A bare `@summary` with no text means "explicitly no summary",
+ * which is the one way to write a description without one.
+ *
+ * Repeated `@description` lines join into a multi-line description; a repeated
+ * `@summary` keeps the first.
+ */
+export const routeHead = (meta?: Record<string, any>): { summary?: string; description?: string } => {
+  const split = splitHead(meta?.head)
+  const first = (v: unknown) => (Array.isArray(v) ? v[0] : v)
+  const summaryTag = first(meta?.summary)
+  const descriptionTag = meta?.description
+  // a bare tag carries `true`: the author named the field and left it empty
+  const summary = summaryTag === true ? '' : typeof summaryTag === 'string' ? summaryTag.trim() : split.summary
+  const description =
+    descriptionTag === true
+      ? ''
+      : Array.isArray(descriptionTag)
+        ? descriptionTag.filter(d => typeof d === 'string').join('\n')
+        : typeof descriptionTag === 'string'
+          ? descriptionTag
+          : split.description
+  return { summary, description }
+}
+
+/** The wildcard status ranges a response map may be keyed by, as OpenAPI spells them. */
+export const RESPONSE_RANGES = ['1XX', '2XX', '3XX', '4XX', '5XX'] as const
+/** The range key covering `status` — `404` → `'4XX'`. */
+export const responseRangeOf = (status: number) => `${Math.floor(status / 100)}XX`
+/** Default descriptions for the range keys, used when a response declares none. */
+export const RESPONSE_RANGE_DESCRIPTION: Record<string, string> = {
+  '1XX': 'Informational',
+  '2XX': 'Successful',
+  '3XX': 'Redirection',
+  '4XX': 'Client error',
+  '5XX': 'Server error',
+}
+/**
+ * The response-map entry that governs `status`. Precedence is OpenAPI's: an
+ * exact status wins over the `NXX` range containing it, which wins over
+ * `default`. Every consumer of a response map resolves through this, so
+ * validation, content-type inference and the spec agree on one answer.
+ */
+export const responseEntryFor = <T>(
+  response: Partial<Record<string | number, T>> | undefined,
+  status: number
+): T | undefined => response?.[status] ?? response?.[responseRangeOf(status)] ?? response?.['default']
+
 export const logRoute = (
   r: { method: string; path: string; static?: { path: string; root: string } },
   meta?: RouteMeta,
@@ -62,7 +113,7 @@ export const logRoute = (
     if (meta?.deprecated) routeLog = `\x1b[0;9m\x1b[38;5;244m${routeLog.replaceAll(ansiRegex, '')}\x1b[0m`
   } else {
     let color = METHOD_COLOR?.[method] || ''
-    const { summary } = splitHead(meta?.head)
+    const { summary } = routeHead(meta)
     routeLog = `[${color}${`${method.toUpperCase()}\x1b[0m]`.padEnd(12, ' ')} ${path
       .padEnd(format?.maxPathLength ?? path.length, ' ')
       .replaceAll(/:([^\/]+)/g, '\x1b[0;33m:$1\x1b[0m')}${summary ? `  ${summary.replaceAll(/\s+/g, ' ')}` : ''}\x1b[0m`

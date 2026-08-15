@@ -60,11 +60,135 @@ describe('openapi serializer', () => {
     expect(param.schema).toMatchObject({ type: 'array', minItems: 1, maxItems: 5, uniqueItems: true })
   })
 
+  test('declared cookies become in: cookie parameters', async () => {
+    const g = new Galbe()
+    g.get(
+      '/session',
+      { cookies: { session: $T.string({ description: 'Session cookie.' }), theme: $T.optional($T.string()) } },
+      () => 'ok'
+    )
+
+    const spec = await OpenAPISerializer(g)
+    const params = (spec.paths!['/session'] as any).get.parameters!
+    expect(params.find((p: any) => p.name === 'session')).toMatchObject({
+      name: 'session',
+      in: 'cookie',
+      description: 'Session cookie.',
+      required: true,
+      schema: { type: 'string' },
+    })
+    // the description belongs to the parameter, not to a copy on its schema
+    expect(params.find((p: any) => p.name === 'session').schema).not.toHaveProperty('description')
+    expect(params.find((p: any) => p.name === 'theme').required).toBeUndefined()
+  })
+
+  test('@summary and @description override the JSDoc head split', async () => {
+    const g = new Galbe()
+    g.meta = [
+      {
+        file: 'f.route.ts',
+        header: {},
+        routes: {
+          '/head': { get: { head: 'A summary\n\nA description.' } },
+          '/override': { get: { head: 'Ignored head', summary: 'Explicit summary', description: 'Explicit body.' } },
+          // the case the head convention cannot express
+          '/description-only': { get: { summary: true, description: 'Only a description.' } },
+          '/multiline': { get: { description: ['first line', 'second line'] } },
+        },
+      },
+    ]
+    for (const p of ['/head', '/override', '/description-only', '/multiline']) g.get(p, () => 'x')
+
+    const spec = await OpenAPISerializer(g)
+    const op = (p: string) => (spec.paths![p] as any).get
+    expect(op('/head')).toMatchObject({ summary: 'A summary', description: 'A description.' })
+    expect(op('/override')).toMatchObject({ summary: 'Explicit summary', description: 'Explicit body.' })
+    expect(op('/description-only')).toMatchObject({ summary: '', description: 'Only a description.' })
+    expect(op('/multiline').description).toBe('first line\nsecond line')
+  })
+
+  test('wildcard status ranges survive as their own response keys', async () => {
+    const g = new Galbe()
+    g.get(
+      '/range',
+      {
+        response: {
+          200: $T.object({ ok: $T.boolean() }),
+          '4XX': $T.object({ code: $T.string() }),
+          '5XX': { 'application/json': $T.object({ code: $T.string() }), description: 'Any server error.' },
+        },
+      },
+      () => ({ ok: true })
+    )
+
+    const spec = await OpenAPISerializer(g)
+    const responses = (spec.paths!['/range'] as any).get.responses
+    expect(Object.keys(responses).sort()).toEqual(['200', '4XX', '5XX'])
+    // no HttpStatus reason phrase exists for a range, so it gets a range description
+    expect(responses['4XX'].description).toBe('Client error')
+    expect(responses['5XX'].description).toBe('Any server error.')
+    expect(responses['4XX'].content['application/json'].schema).toMatchObject({ type: 'object' })
+  })
+
+  test('emits additionalProperties for records, mixed objects and strict objects', async () => {
+    const g = new Galbe()
+    g.post('/maps', {
+      body: {
+        'application/json': $T.object({
+          map: $T.record($T.string()),
+          mixed: $T.object({ id: $T.string() }, { additionalProperties: $T.integer() }),
+          strict: $T.object({ id: $T.string() }, { additionalProperties: false }),
+          open: $T.object({ id: $T.string() }),
+        }),
+      },
+    }, () => null)
+
+    const spec = await OpenAPISerializer(g)
+    const props = (spec.paths!['/maps'] as any).post.requestBody.content['application/json'].schema.properties
+    expect(props.map).toEqual({ type: 'object', additionalProperties: { type: 'string' } })
+    expect(props.mixed).toEqual({
+      type: 'object',
+      properties: { id: { type: 'string' } },
+      required: ['id'],
+      additionalProperties: { type: 'integer' },
+    })
+    expect(props.strict).toEqual({
+      type: 'object',
+      properties: { id: { type: 'string' } },
+      required: ['id'],
+      additionalProperties: false,
+    })
+    // unset stays unset: the OpenAPI default is permissive too
+    expect(props.open).not.toHaveProperty('additionalProperties')
+  })
+
+  test('emits format and multipleOf for numbers and integers', async () => {
+    const g = new Galbe()
+    g.get(
+      '/nums',
+      {
+        query: {
+          count: $T.integer({ format: 'int32', min: 0 }),
+          ratio: $T.number({ format: 'double', multipleOf: 0.25 }),
+        },
+      },
+      () => []
+    )
+
+    const spec = await OpenAPISerializer(g)
+    const params = (spec.paths!['/nums'] as any).get.parameters!
+    const param = (name: string) => params.find((p: any) => p.name === name)!
+    expect(param('count').schema).toEqual({ type: 'integer', format: 'int32', minimum: 0 })
+    expect(param('ratio').schema).toEqual({ type: 'number', format: 'double', multipleOf: 0.25 })
+  })
+
   test('null schema emits OpenAPI 3.0 nullable form', async () => {
+    // A genuine JSON `null` body is spelled through the content map — a bare
+    // `$T.null()` response means "no body" (see the test below).
     const g = new Galbe()
     g.get(
       '/n',
-      { response: { 200: $T.null() } },
+      { response: { 200: { 'application/json': $T.null() } } },
       () => null
     )
 
@@ -74,6 +198,24 @@ describe('openapi serializer', () => {
     expect(schema).toMatchObject({ nullable: true, enum: [null] })
     // No bogus `anyOf: ['null']` (string in array).
     expect(schema.anyOf).toBeUndefined()
+  })
+
+  test('a bare null response schema means "no body", at every status', async () => {
+    // 204 and 304 forbid a body outright, but "no body" is a claim an operation
+    // can make at any status — and the parser emits `$T.null()` for exactly
+    // that. Gating it on the status left 200/202/301 with a JSON `null` body
+    // nobody asked for.
+    const g = new Galbe()
+    g.get(
+      '/n',
+      { response: { 200: $T.null({ description: 'Exists.' }), 204: $T.null(), 301: $T.null() } },
+      () => null
+    )
+
+    const spec = await OpenAPISerializer(g)
+    const responses = (spec.paths!['/n'] as any).get.responses
+    for (const status of ['200', '204', '301']) expect(responses[status].content).toBeUndefined()
+    expect(responses['200'].description).toBe('Exists.')
   })
 
   test('basePath is stripped from paths and surfaced via servers', async () => {

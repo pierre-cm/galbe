@@ -15,6 +15,7 @@ import type {
   STParams,
   STHeaders,
   STQuery,
+  STCookies,
   StaticEndpoint,
   Route,
   StaticEndpointOptions,
@@ -39,19 +40,20 @@ const overloadDiscriminer = <
   Q extends STQuery,
   B extends STBody,
   R extends STResponse,
+  C extends STCookies,
 >(
   galbe: Galbe,
   method: M,
   path: Path,
   arg2:
-    | RequestSchema<M, Path, H, P, Q, B, R>
-    | Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[]
-    | Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>,
+    | RequestSchema<M, Path, H, P, Q, B, R, C>
+    | Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R, C>>[]
+    | Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R, C>>,
   arg3?:
-    | Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[]
-    | Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>,
-  arg4?: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-): Route<M, Path, P, H, Q, B, R> => {
+    | Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R, C>>[]
+    | Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R, C>>,
+  arg4?: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R, C>>
+): Route<M, Path, P, H, Q, B, R, C> => {
   const defaultSchema = {}
   if (typeof arg2 === 'function') {
     return galbeMethod(galbe, method, path, defaultSchema, undefined, arg2)
@@ -123,14 +125,15 @@ const galbeMethod = <
   Q extends STQuery,
   B extends STBody,
   R extends STResponse,
+  C extends STCookies,
 >(
   _galbe: Galbe,
   method: M,
   path: Path,
-  schema: RequestSchema<M, Path, H, P, Q, B, R> | undefined,
-  hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>[] | undefined,
-  handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R>>
-): Route<M, Path, P, H, Q, B, R> => {
+  schema: RequestSchema<M, Path, H, P, Q, B, R, C> | undefined,
+  hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R, C>>[] | undefined,
+  handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R, C>>
+): Route<M, Path, P, H, Q, B, R, C> => {
   schema = schema ?? {}
   hooks = hooks || []
   //@ts-ignore
@@ -337,16 +340,17 @@ export class Galbe {
     Q extends STQuery,
     B extends STBody,
     R extends STResponse,
+    C extends STCookies,
   >(
     path: Path,
     arg2:
-      | RequestSchema<'get', Path, H, P, Q, B, R>
-      | Hook<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R>>[]
-      | Handler<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R>>,
+      | RequestSchema<'get', Path, H, P, Q, B, R, C>
+      | Hook<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R, C>>[]
+      | Handler<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R, C>>,
     arg3?:
-      | Hook<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R>>[]
-      | Handler<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R>>,
-    arg4?: Handler<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R>>
+      | Hook<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R, C>>[]
+      | Handler<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R, C>>,
+    arg4?: Handler<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R, C>>
     //@ts-ignore
   ) => this.add(overloadDiscriminer(this, 'get', path, arg2, arg3, arg4))
   post: Endpoint<'post'> = <
@@ -356,16 +360,17 @@ export class Galbe {
     Q extends STQuery,
     B extends STBody,
     R extends STResponse,
+    C extends STCookies,
   >(
     path: Path,
     arg2:
-      | RequestSchema<'post', Path, H, P, Q, B, R>
-      | Hook<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R>>[]
-      | Handler<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R>>,
+      | RequestSchema<'post', Path, H, P, Q, B, R, C>
+      | Hook<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R, C>>[]
+      | Handler<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R, C>>,
     arg3?:
-      | Hook<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R>>[]
-      | Handler<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R>>,
-    arg4?: Handler<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R>>
+      | Hook<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R, C>>[]
+      | Handler<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R, C>>,
+    arg4?: Handler<'post', Path, RequestSchema<'post', Path, H, P, Q, B, R, C>>
   ) => this.add(overloadDiscriminer(this, 'post', path, arg2, arg3, arg4))
   put: Endpoint<'put'> = <
     Path extends string,
@@ -374,16 +379,17 @@ export class Galbe {
     Q extends STQuery,
     B extends STBody,
     R extends STResponse,
+    C extends STCookies,
   >(
     path: Path,
     arg2:
-      | RequestSchema<'put', Path, H, P, Q, B, R>
-      | Hook<'put', Path, RequestSchema<'put', Path, H, P, Q, B, R>>[]
-      | Handler<'put', Path, RequestSchema<'put', Path, H, P, Q, B, R>>,
+      | RequestSchema<'put', Path, H, P, Q, B, R, C>
+      | Hook<'put', Path, RequestSchema<'put', Path, H, P, Q, B, R, C>>[]
+      | Handler<'put', Path, RequestSchema<'put', Path, H, P, Q, B, R, C>>,
     arg3?:
-      | Hook<'put', Path, RequestSchema<'put', Path, H, P, Q, B, R>>[]
-      | Handler<'put', Path, RequestSchema<'put', Path, H, P, Q, B, R>>,
-    arg4?: Handler<'put', Path, RequestSchema<'put', Path, H, P, Q, B, R>>
+      | Hook<'put', Path, RequestSchema<'put', Path, H, P, Q, B, R, C>>[]
+      | Handler<'put', Path, RequestSchema<'put', Path, H, P, Q, B, R, C>>,
+    arg4?: Handler<'put', Path, RequestSchema<'put', Path, H, P, Q, B, R, C>>
   ) => this.add(overloadDiscriminer(this, 'put', path, arg2, arg3, arg4))
   patch: Endpoint<'patch'> = <
     Path extends string,
@@ -392,16 +398,17 @@ export class Galbe {
     Q extends STQuery,
     B extends STBody,
     R extends STResponse,
+    C extends STCookies,
   >(
     path: Path,
     arg2:
-      | RequestSchema<'patch', Path, H, P, Q, B, R>
-      | Hook<'patch', Path, RequestSchema<'patch', Path, H, P, Q, B, R>>[]
-      | Handler<'patch', Path, RequestSchema<'patch', Path, H, P, Q, B, R>>,
+      | RequestSchema<'patch', Path, H, P, Q, B, R, C>
+      | Hook<'patch', Path, RequestSchema<'patch', Path, H, P, Q, B, R, C>>[]
+      | Handler<'patch', Path, RequestSchema<'patch', Path, H, P, Q, B, R, C>>,
     arg3?:
-      | Hook<'patch', Path, RequestSchema<'patch', Path, H, P, Q, B, R>>[]
-      | Handler<'patch', Path, RequestSchema<'patch', Path, H, P, Q, B, R>>,
-    arg4?: Handler<'patch', Path, RequestSchema<'patch', Path, H, P, Q, B, R>>
+      | Hook<'patch', Path, RequestSchema<'patch', Path, H, P, Q, B, R, C>>[]
+      | Handler<'patch', Path, RequestSchema<'patch', Path, H, P, Q, B, R, C>>,
+    arg4?: Handler<'patch', Path, RequestSchema<'patch', Path, H, P, Q, B, R, C>>
   ) => this.add(overloadDiscriminer(this, 'patch', path, arg2, arg3, arg4))
   delete: Endpoint<'delete'> = <
     Path extends string,
@@ -410,16 +417,17 @@ export class Galbe {
     Q extends STQuery,
     B extends STBody,
     R extends STResponse,
+    C extends STCookies,
   >(
     path: Path,
     arg2:
-      | RequestSchema<'delete', Path, H, P, Q, B, R>
-      | Hook<'delete', Path, RequestSchema<'delete', Path, H, P, Q, B, R>>[]
-      | Handler<'delete', Path, RequestSchema<'delete', Path, H, P, Q, B, R>>,
+      | RequestSchema<'delete', Path, H, P, Q, B, R, C>
+      | Hook<'delete', Path, RequestSchema<'delete', Path, H, P, Q, B, R, C>>[]
+      | Handler<'delete', Path, RequestSchema<'delete', Path, H, P, Q, B, R, C>>,
     arg3?:
-      | Hook<'delete', Path, RequestSchema<'delete', Path, H, P, Q, B, R>>[]
-      | Handler<'delete', Path, RequestSchema<'delete', Path, H, P, Q, B, R>>,
-    arg4?: Handler<'delete', Path, RequestSchema<'delete', Path, H, P, Q, B, R>>
+      | Hook<'delete', Path, RequestSchema<'delete', Path, H, P, Q, B, R, C>>[]
+      | Handler<'delete', Path, RequestSchema<'delete', Path, H, P, Q, B, R, C>>,
+    arg4?: Handler<'delete', Path, RequestSchema<'delete', Path, H, P, Q, B, R, C>>
   ) => this.add(overloadDiscriminer(this, 'delete', path, arg2, arg3, arg4))
   options: Endpoint<'options'> = <
     Path extends string,
@@ -428,16 +436,17 @@ export class Galbe {
     Q extends STQuery,
     B extends STBody,
     R extends STResponse,
+    C extends STCookies,
   >(
     path: Path,
     arg2:
-      | RequestSchema<'options', Path, H, P, Q, B, R>
-      | Hook<'options', Path, RequestSchema<'options', Path, H, P, Q, B, R>>[]
-      | Handler<'options', Path, RequestSchema<'options', Path, H, P, Q, B, R>>,
+      | RequestSchema<'options', Path, H, P, Q, B, R, C>
+      | Hook<'options', Path, RequestSchema<'options', Path, H, P, Q, B, R, C>>[]
+      | Handler<'options', Path, RequestSchema<'options', Path, H, P, Q, B, R, C>>,
     arg3?:
-      | Hook<'options', Path, RequestSchema<'options', Path, H, P, Q, B, R>>[]
-      | Handler<'options', Path, RequestSchema<'options', Path, H, P, Q, B, R>>,
-    arg4?: Handler<'options', Path, RequestSchema<'options', Path, H, P, Q, B, R>>
+      | Hook<'options', Path, RequestSchema<'options', Path, H, P, Q, B, R, C>>[]
+      | Handler<'options', Path, RequestSchema<'options', Path, H, P, Q, B, R, C>>,
+    arg4?: Handler<'options', Path, RequestSchema<'options', Path, H, P, Q, B, R, C>>
   ) => this.add(overloadDiscriminer(this, 'options', path, arg2, arg3, arg4))
   head: Endpoint<'head'> = <
     Path extends string,
@@ -446,16 +455,17 @@ export class Galbe {
     Q extends STQuery,
     B extends STBody,
     R extends STResponse,
+    C extends STCookies,
   >(
     path: Path,
     arg2:
-      | RequestSchema<'head', Path, H, P, Q, B, R>
-      | Hook<'head', Path, RequestSchema<'head', Path, H, P, Q, B, R>>[]
-      | Handler<'head', Path, RequestSchema<'head', Path, H, P, Q, B, R>>,
+      | RequestSchema<'head', Path, H, P, Q, B, R, C>
+      | Hook<'head', Path, RequestSchema<'head', Path, H, P, Q, B, R, C>>[]
+      | Handler<'head', Path, RequestSchema<'head', Path, H, P, Q, B, R, C>>,
     arg3?:
-      | Hook<'head', Path, RequestSchema<'head', Path, H, P, Q, B, R>>[]
-      | Handler<'head', Path, RequestSchema<'head', Path, H, P, Q, B, R>>,
-    arg4?: Handler<'head', Path, RequestSchema<'head', Path, H, P, Q, B, R>>
+      | Hook<'head', Path, RequestSchema<'head', Path, H, P, Q, B, R, C>>[]
+      | Handler<'head', Path, RequestSchema<'head', Path, H, P, Q, B, R, C>>,
+    arg4?: Handler<'head', Path, RequestSchema<'head', Path, H, P, Q, B, R, C>>
   ) => this.add(overloadDiscriminer(this, 'head', path, arg2, arg3, arg4))
   static: StaticEndpoint = (path: string, target: string, options?: StaticEndpointOptions) => {
     let { resolve } = options ?? {}

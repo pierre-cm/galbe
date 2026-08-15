@@ -142,6 +142,18 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
             if (error instanceof RequestError) errors.push(error)
             else throw handleInternalError(error)
           }
+          try {
+            // declared cookies are parsed and validated; undeclared ones stay
+            // on the context as the raw strings they arrived as
+            if (schema?.cookies)
+              context.cookies = {
+                ...context.cookies,
+                ...parseEntry(context.cookies, schema.cookies, { name: 'cookies' }),
+              }
+          } catch (error) {
+            if (error instanceof RequestError) errors.push(error)
+            else throw handleInternalError(error)
+          }
           if (errors.length) {
             throw new RequestError({ status: 400, payload: errors.reduce((acc, c) => ({ ...acc, ...c.payload }), {}) })
           }

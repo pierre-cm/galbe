@@ -48,10 +48,11 @@ const readTree = async (root: string): Promise<[string, string][]> => {
 const source = await Bun.file(FIXTURE).text()
 const original = Bun.YAML.parse(source) as any
 
-// `info`, `servers` and `securitySchemes` describe the document, not any single
-// route, so nothing in the generated sources can carry them. A real project
-// declares them in GalbeConfig — which is what this app does, using the
-// fixture's own values. Routes only *name* a scheme, through `@security`.
+// `info`, `servers`, `securitySchemes`, `tags`, `security` and `externalDocs`
+// describe the document, not any single route, so nothing in the generated
+// sources can carry them. A real project declares them in GalbeConfig — which
+// is what this app does, using the fixture's own values. Routes only *name* a
+// scheme (through `@security`) and a tag (through `@tags`).
 const dir = await createApp({
   'package.json': JSON.stringify(
     { name: 'exhaustive', version: '0.0.0', type: 'module', dependencies: { galbe: '*' } },
@@ -64,13 +65,17 @@ const dir = await createApp({
     `  openapi: {\n` +
     `    info: ${JSON.stringify(original.info, null, 4)},\n` +
     `    servers: ${JSON.stringify(original.servers, null, 4)},\n` +
-    `    securitySchemes: ${JSON.stringify(original.components.securitySchemes, null, 4)}\n` +
+    `    securitySchemes: ${JSON.stringify(original.components.securitySchemes, null, 4)},\n` +
+    `    tags: ${JSON.stringify(original.tags, null, 4)},\n` +
+    `    security: ${JSON.stringify(original.security, null, 4)},\n` +
+    `    externalDocs: ${JSON.stringify(original.externalDocs, null, 4)}\n` +
     `  }\n}\n\nexport default config\n`,
   'index.ts': `import { Galbe } from 'galbe'\nimport config from './galbe.config'\n\nexport default new Galbe(config)\n`,
   'openapi.yaml': source,
 })
 
 let setupError: unknown = null
+let generateCodeOutput = ''
 let sources: [string, string][] = []
 let generatedYaml = ''
 let generatedJsonText = ''
@@ -78,7 +83,7 @@ let generatedJson: any = null
 let generated: any = null
 
 try {
-  await cli(dir, ['generate', 'code', 'openapi.yaml'])
+  generateCodeOutput = await cli(dir, ['generate', 'code', 'openapi.yaml'])
   await cli(dir, ['generate', 'spec', './index.ts', '-o', 'generated.yaml'])
   await cli(dir, ['generate', 'spec', './index.ts', '-t', 'openapi:3.0:json', '-o', 'generated.json'])
   sources = await readTree(resolve(dir, 'src'))
@@ -110,6 +115,23 @@ describe('openapi exhaustive: generate code', () => {
       expect(content).toMatchSnapshot()
     })
   }
+
+  // Everything the fixture declares and Galbe cannot express is reported at
+  // generation time. A silently widened validator is the failure mode this
+  // guards against: the omission has to be visible when it happens, not months
+  // later in a diff.
+  test('constructs it cannot carry are reported, not dropped silently', () => {
+    expect(generateCodeOutput).toContain('Not carried into the generated sources')
+    // `not` widens the validator to `any`
+    expect(generateCodeOutput).toContain('`not` has no equivalent in Galbe')
+    // a method with no route builder disappears entirely
+    expect(generateCodeOutput).toContain("method 'TRACE' has no Galbe route builder")
+    // deprecated in OpenAPI itself, undefined behaviour for most serializations
+    expect(generateCodeOutput).toContain('allowEmptyValue is not modelled')
+    // the fixture's style/explode are the OpenAPI defaults — nothing is lost,
+    // so nothing is reported
+    expect(generateCodeOutput).not.toContain('is not modelled — the generated route parses it as')
+  })
 
   test('every source file parses as TypeScript', async () => {
     const transpiler = new Bun.Transpiler({ loader: 'ts' })
@@ -178,7 +200,7 @@ describe('openapi exhaustive: generate spec', () => {
     const dangling: string[] = []
     const resolve = (ref: string) =>
       ref.replace(/^#\//, '').split('/').reduce<any>((c, s) => c?.[s.replaceAll('~1', '/').replaceAll('~0', '~')], generated)
-    const walk = (n: any, at: string) => {
+    const walk = (n: any, at: string): void => {
       if (Array.isArray(n)) return n.forEach((v, i) => walk(v, `${at}/${i}`))
       if (!n || typeof n !== 'object') return
       for (const [k, v] of Object.entries(n)) {
@@ -203,7 +225,7 @@ describe('openapi exhaustive: generate spec', () => {
 
   test('exclusive bounds use the 3.0 boolean form', () => {
     const wrong: string[] = []
-    const walk = (n: any, at: string) => {
+    const walk = (n: any, at: string): void => {
       if (Array.isArray(n)) return n.forEach((v, i) => walk(v, `${at}/${i}`))
       if (!n || typeof n !== 'object') return
       for (const side of ['Minimum', 'Maximum'] as const) {
@@ -223,6 +245,9 @@ describe('openapi exhaustive: generate spec', () => {
     expect(generated.openapi).toBe('3.0.3')
     expect(generated.info).toEqual(original.info)
     expect(generated.servers).toEqual(original.servers)
+    expect(generated.tags).toEqual(original.tags)
+    expect(generated.security).toEqual(original.security)
+    expect(generated.externalDocs).toEqual(original.externalDocs)
   })
 })
 
@@ -285,16 +310,16 @@ describe('openapi exhaustive: roundtrip', () => {
     for (const { path, method, op } of operations(normalize(original))) {
       const genParams: any[] = normGenerated.paths[path]?.[method]?.parameters || []
       for (const p of op.parameters || []) {
-        // cookie parameters and `content`-typed parameters are known gaps
+        // Cookie parameters have no slot in RequestSchema. A `content`-typed
+        // parameter keeps its shape but is re-emitted under `schema`, so there
+        // is no source-side `schema` to compare against here.
         if (p.in === 'cookie' || !p.schema) continue
         const gen = genParams.find(g => g.name === p.name && g.in === p.in)
         expect(gen, `${method} ${path} parameter ${p.in}:${p.name} is missing`).toBeDefined()
         if (p.in === 'path') expect(gen.required, `${method} ${path} ${p.name}`).toBe(true)
         else expect(gen.required, `${method} ${path} ${p.name}`).toBe(p.required || undefined)
-        // a single-value enum becomes `$T.literal()`, which carries no options,
-        // so its description is dropped — see the roundtrip-diff snapshot
-        if (p.schema.enum?.length === 1) continue
         expect(gen.description, `${method} ${path} ${p.name}`).toBe(p.description)
+        expect(gen.deprecated, `${method} ${path} ${p.name}`).toBe(p.deprecated)
       }
     }
   })

@@ -1,6 +1,7 @@
 import { describe, test, expect } from 'bun:test'
 import { $T } from '../src'
-import type { STSchema, STArray, STString, STUnion, STIntersection, STObject } from '../src/schema'
+import type { STSchema, STArray, STString, STUnion, STIntersection, STObject, Static } from '../src/schema'
+import { Kind } from '../src/schema'
 import type { STBodyContent, STBodyType } from '../src/types'
 
 // Type-level regression tests for the dropped `[key: string]: any` index
@@ -26,6 +27,22 @@ describe('schema typing', () => {
     expect(arr.minLength).toBe(1)
     expect(arr.maxLength).toBe(3)
     expect(arr.unique).toBe(true)
+  })
+
+  test('$T.record infers Record<string, Static<V>>', () => {
+    const r = $T.record($T.integer())
+    type _rec = Expect<Equal<Static<typeof r>, Record<string, number>>>
+    const nested = $T.object({ meta: $T.record($T.string()) })
+    type _nested = Expect<Equal<Static<typeof nested>, { meta: Record<string, string> }>>
+    expect(r.additionalProperties).toMatchObject({ [Kind]: 'integer' })
+  })
+
+  test('an object with additionalProperties still types only its declared props', () => {
+    // intersecting the value schema in would resolve every declared key to
+    // `declared & value` — usually `never`
+    const o = $T.object({ id: $T.string() }, { additionalProperties: $T.integer() })
+    type _o = Expect<Equal<Static<typeof o>, { id: string }>>
+    expect(o.additionalProperties).toMatchObject({ [Kind]: 'integer' })
   })
 
   test('STString exposes StringOptions on its type', () => {

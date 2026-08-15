@@ -12,7 +12,14 @@ import type {
 } from '../../../src/schema'
 
 import { Galbe } from '../../../src'
-import { walkRoutes, HttpStatus, matchMiddleware, parseMiddlewarePattern, splitHead } from '../../../src/util'
+import {
+  walkRoutes,
+  HttpStatus,
+  matchMiddleware,
+  parseMiddlewarePattern,
+  routeHead,
+  RESPONSE_RANGE_DESCRIPTION,
+} from '../../../src/util'
 import { Kind, Optional } from '../../../src/schema'
 
 import type { OpenAPIV3 } from 'openapi-types'
@@ -27,6 +34,30 @@ const schemaToMedia = ({ type, format, isJson }: SchemaType, hasComposite = fals
       : type === 'string'
         ? 'text/plain'
         : 'application/json'
+
+/**
+ * `{type, enum}` for a set of literals that share one primitive type — the
+ * idiomatic OpenAPI spelling for both a lone literal and a union of them.
+ * `STLiteral` accepts `string | number | boolean`, so the type is read off the
+ * value rather than assumed to be `string`. Returns null for a mixed-type set,
+ * which has to stay in its `anyOf`/`oneOf` form.
+ */
+const literalEnum = (members: STSchema[]): { type: string; enum: any[] } | null => {
+  if (!members.length || !members.every(m => m[Kind] === 'literal')) return null
+  const values = members.map(m => (m as STLiteral).value)
+  const types = new Set(values.map(v => typeof v))
+  if (types.size !== 1) return null
+  switch ([...types][0]) {
+    case 'string':
+      return { type: 'string', enum: values }
+    case 'boolean':
+      return { type: 'boolean', enum: values }
+    case 'number':
+      return { type: values.every(v => Number.isInteger(v)) ? 'integer' : 'number', enum: values }
+    default:
+      return null
+  }
+}
 
 export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<OpenAPIV3.Document> => {
   // OpenAPI 3.0 schemas follow JSON Schema draft-4, where `exclusiveMinimum` /
@@ -79,8 +110,10 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       }
       s = {
         type: kind,
+        ...(n.format ? { format: n.format } : {}),
         ...bound(lower, 'minimum'),
         ...bound(upper, 'maximum'),
+        ...(n.multipleOf !== undefined ? { multipleOf: n.multipleOf } : {}),
       }
     } else if (kind === 'string') {
       const str = schema as STString
@@ -95,8 +128,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       }
     } else if (kind === 'any') s = {}
     else if (kind === 'literal') {
-      let value = (schema as STLiteral).value
-      s = { type: 'string', enum: [value] }
+      s = literalEnum([schema]) ?? {}
     } else if (kind === 'array') {
       const arr = schema as STArray
       // ArrayOptions exposes minLength/maxLength (matching the schema-builder API);
@@ -113,10 +145,17 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       let required = Object.entries(props)
         .filter(([_, v]) => !v?.[Optional])
         .map(([k, _]) => k)
+      // `$T.object()` with no props means "any object"; `properties: {}` reads
+      // to most tooling as "an object with no known properties" instead, so an
+      // empty map is omitted rather than emitted.
+      const ap = (schema as STObject).additionalProperties
       s = {
         type: 'object',
-        properties: Object.fromEntries(Object.entries(props).map(([k, v]) => [k, schemaToOpenapi(v).schema])),
+        ...(Object.keys(props).length
+          ? { properties: Object.fromEntries(Object.entries(props).map(([k, v]) => [k, schemaToOpenapi(v).schema])) }
+          : {}),
         ...(required.length ? { required } : {}),
+        ...(ap === undefined ? {} : { additionalProperties: ap === false ? false : schemaToOpenapi(ap).schema }),
       }
     } else if (kind === 'json') {
       const inner = (schema as STJson).value as STSchema | undefined
@@ -127,16 +166,18 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       let nullable = members.some(s => s[Kind] === 'null')
       members = members.filter(s => s[Kind] !== 'null')
 
-      const allStringLiterals =
-        members.length > 0 && members.every(e => e[Kind] === 'literal' && typeof (e as STLiteral).value === 'string')
       const useOneOf = kind === 'oneOf'
+      // `oneOf` keeps its explicit form — the author asked for "exactly one of
+      // these", and an `enum` does not say that. `anyOf` over literals is just
+      // a closed value set, which is what `enum` means.
+      const asEnum = useOneOf ? null : literalEnum(members)
 
       if (members.length === 0) {
         s = {}
       } else if (members.length === 1) {
         s = schemaToOpenapi(members[0]!).schema
-      } else if (allStringLiterals && !useOneOf) {
-        s = { type: 'string', enum: members.map(e => (e as STLiteral).value) }
+      } else if (asEnum) {
+        s = asEnum
       } else if (members.length > 1) {
         const variants = members.map(e => schemaToOpenapi(e).schema)
         s = useOneOf ? { oneOf: variants } : { anyOf: variants }
@@ -163,6 +204,9 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       ...s,
       ...(schema?.default !== undefined ? { default: schema.default } : {}),
       ...(schema?.examples !== undefined ? { example: schema.examples } : {}),
+      // documentation-only access annotations, valid on any schema
+      ...(schema?.readOnly ? { readOnly: true } : {}),
+      ...(schema?.writeOnly ? { writeOnly: true } : {}),
     }
     if (components.schemas && schema.id) {
       components.schemas[schema.id] = s
@@ -279,8 +323,10 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
           })
           .filter(p => p)
       : []
-    // TODO cookieParam
-    let parameters = [...pathParam, ...queryParam, ...headerParam]
+    let cookieParam = r.schema?.cookies
+      ? Object.entries(r.schema?.cookies as Record<string, STSchema>).map(([k, v]) => parseParam(k, v, 'cookie'))
+      : []
+    let parameters = [...pathParam, ...queryParam, ...headerParam, ...cookieParam]
 
     let requestBody
     if (r.schema.body) {
@@ -288,29 +334,31 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       // other key (`description`, `required`, `_requestBodyId`) is metadata
       // about the request body itself.
       const bodyMap = r.schema.body as Record<string, any>
-      let description: string | undefined
-      let conflictDescription = false
       let required = false
       let content = Object.fromEntries(
         Object.entries(bodyMap)
           .filter(([bodyType, schema]) => bodyType.includes('/') && schema)
           .map(([bodyType, schema]) => {
-            const s = schema.description
-            const isDefined = typeof s === 'string' && s !== ''
             if (!schema?.[Optional]) required = true
-            if (isDefined) {
-              if (description === undefined) {
-                description = s
-              } else if (description !== s) {
-                conflictDescription = true
-              }
-            }
-            description = conflictDescription ? undefined : (description ?? undefined)
-            return [bodyType, { schema: schemaToOpenapi(schema).schema }]
+            // `encoding` belongs to the media type, not to the schema under it
+            const encoding = (schema as any)?.encoding
+            return [
+              bodyType,
+              {
+                schema: schemaToOpenapi(schema).schema,
+                ...(encoding && Object.keys(encoding).length ? { encoding } : {}),
+              },
+            ]
           })
       )
+      // The body's own description comes from the body map and nowhere else.
+      // Deriving it from a body schema's `description` is wrong the moment the
+      // schema is a `$ref` to a documented component: that description belongs
+      // to the component, not to this operation's request body.
       requestBody = {
-        description: typeof bodyMap.description === 'string' ? bodyMap.description : description,
+        ...(typeof bodyMap.description === 'string' && bodyMap.description
+          ? { description: bodyMap.description }
+          : {}),
         required: typeof bodyMap.required === 'boolean' ? bodyMap.required : required,
         content,
       }
@@ -326,6 +374,9 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
         Object.entries(r.schema.response).map(([status, v]) => {
           if (!v) return []
           let s = status as keyof typeof HttpStatus | 'default'
+          // `1XX`…`5XX` are status keys in their own right in OpenAPI; they
+          // carry no HttpStatus reason phrase, so they get a range description.
+          const statusDescription = HttpStatus[s as keyof typeof HttpStatus] ?? RESPONSE_RANGE_DESCRIPTION[status]
           const isContentMap = !(v as any)[Kind]
           const explicitHeaders = (v as any)?.responseHeaders as Record<string, STSchema> | undefined
           let response: OpenAPIV3.ResponseObject
@@ -336,7 +387,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
             // `_responseId`) is response-level metadata. Media types always
             // contain a '/', which is what separates the two.
             const cm = v as any
-            const desc = cm.description || HttpStatus[s as keyof typeof HttpStatus] || 'Response'
+            const desc = cm.description || statusDescription || 'Response'
             const content: Record<string, { schema: any; example?: any; examples?: Record<string, any> }> = {}
             for (const [key, bodySchema] of Object.entries(cm)) {
               if (!key.includes('/') || !bodySchema) continue
@@ -350,12 +401,15 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
             }
             response = { description: desc, ...(Object.keys(content).length ? { content } : {}) }
           } else {
-            const statusNum = Number(s)
-            const noBodyStatus = statusNum === 204 || statusNum === 304 || (statusNum >= 100 && statusNum < 200)
-            const noContent = noBodyStatus && (v as any)[Kind] === 'null'
+            // A bare `null`-kind response schema means "this response has no
+            // body", at every status — not just the ones where HTTP forbids
+            // one. A genuine JSON `null` body stays expressible, and reads
+            // unambiguously, through the content-map form
+            // `{'application/json': $T.null()}`.
+            const noContent = (v as any)[Kind] === 'null'
             if (noContent) {
               response = {
-                description: (v as any).description || HttpStatus[s as keyof typeof HttpStatus] || 'Response',
+                description: (v as any).description || statusDescription || 'Response',
               }
             } else {
               let { schema, isJson } = schemaToOpenapi(v as STSchema)
@@ -371,7 +425,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
               if (explicitExamples && Object.keys(explicitExamples).length) content[mediaType]!.examples = explicitExamples
               if (explicitExample !== undefined) content[mediaType]!.example = explicitExample
               response = {
-                description: (v as any).description || HttpStatus[s as keyof typeof HttpStatus] || 'Response',
+                description: (v as any).description || statusDescription || 'Response',
                 content,
               }
             }
@@ -393,6 +447,11 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
             }
           }
 
+          // `links` is carried verbatim: Galbe models no operation graph, so
+          // there is nothing to derive it from and nothing to validate it against.
+          const explicitLinks = (v as any)?.responseLinks as Record<string, any> | undefined
+          if (explicitLinks && Object.keys(explicitLinks).length) response.links = explicitLinks
+
           // `_responseId` marks a response that came from components.responses.
           // Register the fully-built response — headers included — and refer to
           // it: a Reference Object tolerates no sibling keys in 3.0.
@@ -410,11 +469,21 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
         default: { description: HttpStatus[200] },
       }
     }
-    const { summary, description } = splitHead(meta?.head)
+    const { summary, description } = routeHead(meta)
+    // `@externalDocs <url> [description]` — the url runs to the first
+    // whitespace, everything after it is the docs' description.
+    const extDocsRaw = Array.isArray(meta?.externalDocs) ? meta.externalDocs[0] : meta?.externalDocs
+    let externalDocs: OpenAPIV3.ExternalDocumentationObject | undefined
+    if (typeof extDocsRaw === 'string' && extDocsRaw.trim()) {
+      const [url, ...rest] = extDocsRaw.trim().split(/\s+/)
+      const docsDescription = rest.join(' ')
+      externalDocs = { url: url!, ...(docsDescription ? { description: docsDescription } : {}) }
+    }
     paths[path][r.method] = {
       tags: tags.length ? tags : undefined,
       summary,
       description,
+      externalDocs,
       operationId: meta?.operationId,
       parameters: parameters.length ? parameters : undefined,
       requestBody,
@@ -497,6 +566,10 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       : prefix
         ? { servers: [{ url: prefix }] }
         : {}),
+    // document-level blocks belong to no route: they are declared in GalbeConfig
+    ...(g.config?.openapi?.tags ? { tags: g.config.openapi.tags } : {}),
+    ...(g.config?.openapi?.security ? { security: g.config.openapi.security } : {}),
+    ...(g.config?.openapi?.externalDocs ? { externalDocs: g.config.openapi.externalDocs } : {}),
     paths,
     components: Object.keys(components)?.length ? components : undefined,
   }

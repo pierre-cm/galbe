@@ -6,7 +6,7 @@ import { readFile } from 'fs/promises'
 import { existsSync } from 'fs'
 
 import { CWD, fmtList, fmtVal } from '../../util'
-import { applyPlan, planFromOapi, type GenerationPlan } from './code/openapi.parser'
+import { applyPlan, planFromOapi, type GenerationPlan, type GenerationWarning } from './code/openapi.parser'
 import { mergeRouteFile, type MergeOptions, type RouteId } from './code/route-merge'
 
 const srcTargets = ['ts', 'js']
@@ -24,6 +24,18 @@ const parseRename = (raw: string): [RouteId, RouteId] => {
 }
 
 type ScopedDiff = { scope: string; id: RouteId }
+
+/**
+ * Report what the spec declared and the generated sources cannot carry. A
+ * dropped construct that nobody is told about is how a silently widened
+ * validator reaches production; printing it makes it a decision.
+ */
+const printWarnings = (warnings: GenerationWarning[] = []) => {
+  if (!warnings.length) return
+  console.log(`\x1b[33mNot carried into the generated sources\x1b[0m (${warnings.length}):`)
+  for (const w of warnings) console.log(`  \x1b[33m!\x1b[0m ${w.at}  \x1b[2m${w.message}\x1b[0m`)
+  console.log()
+}
 
 const printDiff = (diff: {
   added: ScopedDiff[]
@@ -152,6 +164,7 @@ export default (cmd: Command) => {
 
       if (dryRun) {
         console.log('\x1b[1;30mDry run — no files will be written.\x1b[0m')
+        printWarnings(plan.warnings)
         printDiff(diff)
         return
       }
@@ -166,6 +179,7 @@ export default (cmd: Command) => {
         process.exit(1)
       }
       Bun.write(Bun.stdout, ' : \x1b[1;30m\x1b[32mdone\x1b[0m\n')
+      printWarnings(plan.warnings)
       printDiff(diff)
     })
 }

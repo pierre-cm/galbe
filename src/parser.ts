@@ -19,7 +19,7 @@ import type {
 import { Kind, Optional, Stream } from './schema'
 import { runCompiled } from './validator.compile'
 import { InternalServerError, PayloadTooLargeError, RequestError } from './index'
-import { isIterator, inferBodyType, type ParseMode } from './util'
+import { isIterator, inferBodyType, responseEntryFor, type ParseMode } from './util'
 
 const textDecoder = new TextDecoder()
 const textEncoder = new TextEncoder()
@@ -803,7 +803,7 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
   }
   else if (typeof response === 'string') {
     if (!details?.headers?.has('content-type')) {
-      const statusEntry: any = schema?.[details.status]
+      const statusEntry: any = responseEntryFor(schema as Partial<Record<string | number, any>>, details.status)
       const isJson = statusEntry?.[Kind]
         ? statusEntry[Kind] === 'json'
         : statusEntry?.['application/json'] && !statusEntry?.['text/plain']

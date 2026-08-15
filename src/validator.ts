@@ -1,4 +1,4 @@
-import { InternalServerError, type STResponse } from './index'
+import { InternalServerError, type STResponse, type STResponseEntry } from './index'
 import type {
   STSchema,
   STProps,
@@ -13,9 +13,22 @@ import type {
   STString,
   STObject,
 } from './schema'
-import { Kind, Optional, Stream } from './schema'
-import { isIterator } from './util'
+import { Kind, Optional, Stream, NUMBER_FORMAT_RANGES } from './schema'
+import { isIterator, responseEntryFor } from './util'
 import { runCompiled } from './validator.compile'
+
+/**
+ * JSON Schema's `multipleOf`: the quotient must be a whole number. Compared with
+ * a relative tolerance because `0.3 / 0.1` is `2.9999999999999996` in binary
+ * floating point — an exact `%` test would make the keyword unusable on the
+ * decimals it is most often written for.
+ */
+export const isMultipleOf = (value: number, multipleOf: number): boolean => {
+  if (!(multipleOf > 0)) return true
+  const q = value / multipleOf
+  if (!Number.isFinite(q)) return false
+  return Math.abs(q - Math.round(q)) <= 1e-9 * Math.max(1, Math.abs(q))
+}
 
 // Renders a value for inclusion in an error message, capped so large
 // attacker-controlled input cannot be reflected verbatim into a 400 response.
@@ -69,7 +82,8 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
     if (elt === null || typeof elt !== 'object') throw `Not a valid object`
     if (Array.isArray(elt)) throw `Expected an object, not an array`
     const err: ValidationError = {}
-    Object.entries((schema as STObject).props ?? {}).forEach(([k, s]) => {
+    const props = (schema as STObject).props ?? {}
+    Object.entries(props).forEach(([k, s]) => {
       if (!(k in elt)) {
         if (!s?.[Optional]) err[k] = 'Required'
         return
@@ -80,6 +94,24 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
         err[k] = e as ValidationError
       }
     })
+    // `additionalProperties` governs everything the props map does not declare:
+    // a schema validates each of them, `false` rejects them outright.
+    const ap = (schema as STObject).additionalProperties
+    if (ap !== undefined) {
+      for (const k of Object.keys(elt)) {
+        // hasOwn, not `in`: a payload key named `toString` must not read as declared
+        if (Object.hasOwn(props, k)) continue
+        if (ap === false) {
+          err[k] = 'Unexpected property'
+          continue
+        }
+        try {
+          validate(elt[k], ap, opt)
+        } catch (e) {
+          err[k] = e as ValidationError
+        }
+      }
+    }
     if (Object.keys(err).length) errors.push(err)
   } else if (schema[Kind] === 'json') {
     elt = validate(elt, (schema as STJson).value, opt)
@@ -128,7 +160,7 @@ export const validate = (elt: any, schema: STSchema, opt?: { parse?: boolean }):
 }
 
 export const validateResponse = (response: any, schema: STResponse, status: number) => {
-  const entry = schema?.[status] ?? schema?.['default']
+  const entry = responseEntryFor(schema as Partial<Record<string | number, STResponseEntry>>, status)
   if (!entry) return
   let s: STSchema | undefined
   if ((entry as STSchema)[Kind]) {
@@ -168,6 +200,11 @@ const schemaValidation = (value: any, schema: STSchema) => {
       if ((value as number) >= n.exclusiveMax) errors.push(`Is greater or equal to ${n.exclusiveMax}`)
     if (n.min !== undefined) if ((value as number) < n.min) errors.push(`Is less than ${n.min}`)
     if (n.max !== undefined) if ((value as number) > n.max) errors.push(`Is greater than ${n.max}`)
+    if (n.multipleOf !== undefined && !isMultipleOf(value as number, n.multipleOf))
+      errors.push(`Is not a multiple of ${n.multipleOf}`)
+    const range = n.format ? NUMBER_FORMAT_RANGES[n.format] : undefined
+    if (range && ((value as number) < range[0] || (value as number) > range[1]))
+      errors.push(`Is out of ${n.format} range`)
   } else if (schema[Kind] === 'string') {
     const str = schema as STString
     if (str.minLength !== undefined && (value as string).length < str.minLength)

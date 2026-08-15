@@ -21,10 +21,26 @@ export interface Options {
   /** Marks the schema as deprecated. Surfaced by spec generators (e.g. OpenAPI). */
   deprecated?: boolean
   /**
+   * Documentation only: marks the value as sent by the server and never by the
+   * client (OpenAPI `readOnly`). Galbe does not enforce it — a `readOnly`
+   * property in a request body is still validated like any other.
+   */
+  readOnly?: boolean
+  /**
+   * Documentation only: marks the value as sent by the client and never
+   * returned by the server (OpenAPI `writeOnly`). Not enforced at runtime.
+   */
+  writeOnly?: boolean
+  /**
    * Response-only: declares response headers emitted in the OpenAPI `responses` object.
    * Distinct from the request-level `headers` field.
    */
   responseHeaders?: Record<string, any>
+  /**
+   * Response-only, documentation only: the OpenAPI `links` object — operations
+   * reachable from this response, keyed by name. Carried verbatim.
+   */
+  responseLinks?: Record<string, any>
 }
 export interface ByteArrayOptions extends Options {
   minLength?: number
@@ -41,11 +57,61 @@ export interface NumberOptions extends Options {
   max?: number
   exclusiveMin?: number
   exclusiveMax?: number
+  /** The value must be an exact multiple of this number. */
+  multipleOf?: number
+  /**
+   * The numeric format, surfaced as OpenAPI's `format`. The four machine-integer
+   * formats (`int32`, `uint32`, `int64`, `uint64`) also constrain the value's
+   * range at runtime; every other format — `float` and `double` included — is
+   * documentation only, since any finite JSON number is a valid double.
+   */
+  format?: NumberFormat | (string & {})
+}
+export type NumberFormat = 'int32' | 'uint32' | 'int64' | 'uint64' | 'float' | 'double' | 'decimal'
+/**
+ * Ranges for the integer formats, as `[min, max]`. The 64-bit bounds are not
+ * exactly representable as doubles, so they land on ±2^63 / 2^64: the check
+ * catches an overflow by orders of magnitude, which is what it is for, and
+ * never rejects a value a double could have held.
+ */
+export const NUMBER_FORMAT_RANGES: Record<string, [number, number]> = {
+  int32: [-2147483648, 2147483647],
+  uint32: [0, 4294967295],
+  int64: [-(2 ** 63), 2 ** 63 - 1],
+  uint64: [0, 2 ** 64 - 1],
 }
 export interface ArrayOptions extends Options {
   minLength?: number
   maxLength?: number
   unique?: boolean
+}
+/** Per-part serialization details for a multipart body, as OpenAPI's `encoding`. */
+export type EncodingProperty = {
+  contentType?: string
+  style?: string
+  explode?: boolean
+  allowReserved?: boolean
+  headers?: Record<string, any>
+}
+export interface MultipartFormOptions extends Options {
+  /**
+   * Documentation only: how each part is serialized, keyed by property name.
+   * Emitted as the media type's `encoding` object — Galbe's multipart parser
+   * validates parts from the schema alone and does not read this.
+   */
+  encoding?: Record<string, EncodingProperty>
+}
+export interface ObjectOptions extends Options {
+  /**
+   * What may appear beside the declared properties, mirroring OpenAPI's
+   * `additionalProperties`. A schema validates every undeclared property against
+   * it — `$T.record` is the sugar for the property-less case. `false` rejects
+   * undeclared properties outright. Unset (the default) accepts and ignores them.
+   *
+   * `Static<>` only ever surfaces the declared properties: an object that mixes
+   * both would otherwise index every declared key through the value schema too.
+   */
+  additionalProperties?: STSchema | false
 }
 export interface STSchema extends Options {
   [Kind]:
@@ -209,6 +275,18 @@ export interface STObject<T extends STProps = STProps> extends STSchema {
   [Kind]: 'object'
   static: ObjectStatic<T, this['params']>
   props: T
+  additionalProperties?: STSchema | false
+}
+/**
+ * A free-form map: no declared properties, every value validated against one
+ * schema. Kind stays `'object'` — a record *is* an object with
+ * `additionalProperties`, so every consumer that walks objects keeps working.
+ */
+export interface STRecord<V extends STSchema = STSchema> extends STSchema {
+  [Kind]: 'object'
+  static: Record<string, Static<V, this['params']>>
+  props: STProps
+  additionalProperties: V
 }
 export interface STJson<T extends STBoolean | STNumber | STString | STObject = any> extends STSchema {
   [Kind]: 'json'
@@ -223,7 +301,7 @@ type RequiredPropertyKeys<T extends STProps> = keyof Omit<T, OptionalPropertyKey
 type ObjectStaticProps<T extends STProps, R extends Record<keyof any, unknown>> = Evaluate<
   Partial<Pick<R, OptionalPropertyKeys<T>>> & Required<Pick<R, RequiredPropertyKeys<T>>>
 >
-function _Object<T extends STProps>(properties?: T, options: Options = {}): STObject<T> {
+function _Object<T extends STProps>(properties?: T, options: ObjectOptions = {}): STObject<T> {
   if (!properties) return { ...options, [Kind]: 'object' } as unknown as STObject<T>
   const propertyKeys = globalThis.Object.getOwnPropertyNames(properties)
   const optionalKeys = propertyKeys.filter(key => properties[key]?.[Optional])
@@ -251,7 +329,7 @@ export interface MultipartFormData<K extends string = string, V extends Static<S
   headers: { type?: string; name: K; filename?: string }
   content: V
 }
-export interface STMultipartForm<T extends STProps = STProps> extends STSchema {
+export interface STMultipartForm<T extends STProps = STProps> extends STSchema, MultipartFormOptions {
   [Kind]: 'multipartForm'
   static: T extends undefined
     ? {
@@ -268,7 +346,7 @@ export interface STMultipartForm<T extends STProps = STProps> extends STSchema {
       }
   props: T
 }
-function _MultipartForm<T extends STProps>(properties?: T, options: Options = {}): STMultipartForm<T> {
+function _MultipartForm<T extends STProps>(properties?: T, options: MultipartFormOptions = {}): STMultipartForm<T> {
   if (!properties) return { ...options, [Kind]: 'multipartForm' } as unknown as STMultipartForm<T>
   const propertyKeys = globalThis.Object.getOwnPropertyNames(properties)
   const optionalKeys = propertyKeys.filter(key => properties[key]?.[Optional])
@@ -403,8 +481,17 @@ export class SchemaType {
     return _Any(options)
   }
   /** Creates an Object Schema Type */
-  public object<T extends STProps>(properties?: T, options: Options = {}): STObject<T> {
+  public object<T extends STProps>(properties?: T, options: ObjectOptions = {}): STObject<T> {
     return _Object(properties, options)
+  }
+  /**
+   * Creates a Record Schema Type: an object with no declared properties whose
+   * every value validates against `value`. Sugar for
+   * `$T.object(undefined, { additionalProperties: value })`, typed as
+   * `Record<string, Static<V>>`.
+   */
+  public record<V extends STSchema>(value: V, options: Options = {}): STRecord<V> {
+    return _Object(undefined, { ...options, additionalProperties: value }) as unknown as STRecord<V>
   }
   /** Creates a JSON Schema Type */
   public json<T extends STString | STBoolean | STNumber | STObject<STProps>>(
@@ -414,7 +501,7 @@ export class SchemaType {
     return _Json(value, options)
   }
   /** Creates a MultipartForm Schema Type */
-  public multipartForm<T extends STProps>(properties?: T, options: Options = {}): STMultipartForm<T> {
+  public multipartForm<T extends STProps>(properties?: T, options: MultipartFormOptions = {}): STMultipartForm<T> {
     return _MultipartForm(properties, options)
   }
   /** Creates an Array Schema Type */
@@ -537,12 +624,17 @@ export const schemaToTypeStr = (schema: STSchema): string => {
     type = `Array<${schemaToTypeStr((schema as STArray).items)}>`
   } else if (kind === 'object') {
     let entries = Object.entries((schema as STObject).props ?? {})
+    const ap = (schema as STObject).additionalProperties
     // prop-less object accepts any object at runtime, so `{}` would be too loose
     type = entries.length
-      ? `{${entries
+      ? // declared properties win: intersecting them with the record type would
+        // resolve every declared key to `declared & value`, i.e. usually `never`
+        `{${entries
           .map(([k, v]) => `${typeof k === 'string' ? `'${k}'` : k}${v?.[Optional] ? '?' : ''}:${schemaToTypeStr(v)}`)
           .join(';')}}`
-      : 'Record<string, unknown>'
+      : ap
+        ? `Record<string, ${schemaToTypeStr(ap)}>`
+        : 'Record<string, unknown>'
   } else if (kind === 'json') {
     type = `Json<${schemaToTypeStr((schema as STJson).value)}>`
   } else if (kind === 'anyOf' || kind === 'oneOf') {

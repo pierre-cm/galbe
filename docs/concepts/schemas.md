@@ -17,6 +17,8 @@ Every schema type accepts an optional `options` object as its last argument. The
 - **description** (`string`) — A description of the schema.
 - **default** (`any`) — A default value used when the input is omitted.
 - **example** / **examples** (`any`) — Example value(s), surfaced by spec generators (e.g. OpenAPI).
+- **deprecated** (`boolean`) — Marks the value as deprecated.
+- **readOnly** / **writeOnly** (`boolean`) — Documentation only: the value is only ever sent by the server, or only ever by the client. Surfaced by spec generators; **not enforced at runtime**.
 
 Type-specific options are listed alongside each type below.
 
@@ -51,9 +53,20 @@ Schema Type matching `number` values.
 
 ```ts
 const numSchema = $T.number({ min: 0, max: 10, exclusiveMin: 0, exclusiveMax: 10 })
+const priceSchema = $T.number({ format: 'double', multipleOf: 0.25 })
 ```
 
-Options: **min**, **max**, **exclusiveMin**, **exclusiveMax**.
+Options:
+
+- **min** / **max** (`number`) — Inclusive bounds.
+- **exclusiveMin** / **exclusiveMax** (`number`) — Exclusive bounds.
+- **multipleOf** (`number`) — The value must be an exact multiple of this number. Compared with a small relative tolerance, so `0.3` passes `multipleOf: 0.1` despite binary floating point.
+- **format** (`string`) — The numeric format, surfaced as OpenAPI's `format`. The four machine-integer formats — `int32`, `uint32`, `int64`, `uint64` — also **constrain the range at runtime**; every other format, `float` and `double` included, is documentation only, since any finite JSON number is a valid double.
+
+```ts
+$T.integer({ format: 'int32' }) // 2147483648 → "Is out of int32 range"
+$T.number({ format: 'float' })  // 0.1 → accepted; the format only reaches the spec
+```
 
 #### integer
 
@@ -124,6 +137,28 @@ const objSchema = $T.object({
 })
 ```
 
+Options:
+
+- **additionalProperties** (`Schema | false`) — Governs the properties the schema does not declare. A schema validates every undeclared property against it; `false` rejects them outright. Unset (the default) accepts and ignores them.
+
+```ts
+// declared props validate normally, everything else must be an integer
+$T.object({ id: $T.string() }, { additionalProperties: $T.integer() })
+// a strict object: an undeclared property is a 400
+$T.object({ id: $T.string() }, { additionalProperties: false })
+```
+
+`Static<>` only ever surfaces the declared properties — an object mixing both would otherwise index every declared key through the value schema too.
+
+#### record
+
+Schema Type matching a free-form map: no declared properties, one schema for every value. Sugar for `$T.object(undefined, { additionalProperties: value })`, typed as `Record<string, Static<V>>`.
+
+```ts
+const headers = $T.record($T.string())
+//    ^? Record<string, string>
+```
+
 #### multipartForm
 
 Schema Type for `multipart/form-data` request bodies. Each property describes a form part.
@@ -133,6 +168,17 @@ const formSchema = $T.multipartForm({
   username: $T.string(),
   avatar: $T.byteArray()
 })
+```
+
+Options:
+
+- **encoding** (`Record<string, EncodingProperty>`) — Documentation only: how each part is serialized, keyed by property name. Emitted as the media type's OpenAPI `encoding` object. Parts are validated from the schema alone; this is never read at runtime.
+
+```ts
+$T.multipartForm(
+  { avatar: $T.byteArray() },
+  { encoding: { avatar: { contentType: 'image/png' } } }
+)
 ```
 
 #### json
@@ -203,7 +249,7 @@ const schema = {}
 galbe.get('/foo/:bar', schema, ctx => {})
 ```
 
-The Request Schema has six optional properties: `headers`, `params`, `query`, `body`, `response`, and `bodyLimit`.
+The Request Schema has seven optional properties: `headers`, `params`, `query`, `cookies`, `body`, `response`, and `bodyLimit`.
 
 ### headers
 
@@ -269,6 +315,37 @@ const schema = {
 
 > [!NOTE]
 > Array query parameters can be provided either by repeating the key (`?list=1&list=2`) or as a comma-separated value (`?list=1,2`).
+
+### cookies
+
+```ts
+cookies: { [key: string]: STString | STBoolean | STNumber | STInteger | STLiteral | STUnion }
+```
+
+Defines request cookies with their respective Schema types. Each one is parsed out of the `Cookie` header and validated like a query parameter, so `ctx.cookies` comes back typed and coerced.
+
+**Example:**
+
+```ts
+const schema = {
+  cookies: {
+    session: $T.string({ minLength: 16 }),
+    visits: $T.optional($T.integer({ min: 0 }))
+  }
+}
+```
+
+```ts
+galbe.get('/me', schema, ctx => {
+  ctx.cookies.session // string
+  ctx.cookies.visits // number | undefined
+})
+```
+
+A declared cookie that is missing or invalid is a `400`, reported under a `cookies` key. Cookies the schema does not declare are still on `ctx.cookies`, as the raw strings they arrived as.
+
+> [!NOTE]
+> Cookie names are matched case-sensitively, unlike headers.
 
 ### body
 
@@ -433,10 +510,10 @@ galbe.post(
 
 <!-- prettier-ignore -->
 ```ts
-response: Record<number | 'default', STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | STObject | STArray | STUnion | STIntersection | STStream | STAny | STNull>
+response: Record<number | '1XX' | '2XX' | '3XX' | '4XX' | '5XX' | 'default', STByteArray | STString | STBoolean | STNumber | STInteger | STLiteral | STObject | STArray | STUnion | STIntersection | STStream | STAny | STNull>
 ```
 
-Defines response validation by associating schema types with specific HTTP status codes. The special key `default` matches any status code that doesn't have an explicit entry.
+Defines response validation by associating schema types with specific HTTP status codes. A key may be an exact status, a wildcard range (`'4XX'` covers every 4xx status), or `default`.
 
 **Example:**
 
@@ -444,11 +521,29 @@ Defines response validation by associating schema types with specific HTTP statu
 const response = {
   200: $T.object({ data: $T.array($T.number()) }),
   404: $T.literal('Not found'),
+  '5XX': $T.object({ code: $T.string() }),
   default: $T.string()
 }
 ```
 
 This ensures every response adheres to the defined schema.
+
+**Precedence.** An exact status wins over the range containing it, which wins over `default` — for response validation, for the content type inferred on a string response, and for the generated OpenAPI document alike. With the schema above, a `404` validates against the literal, a `503` against the `5XX` object, and a `301` against `default`.
+
+A response entry may also be written in its content-map form, which carries the response's own metadata beside its media types:
+
+```ts
+const response = {
+  201: {
+    'application/json': Widget,
+    description: 'Created.',
+    responseHeaders: { Location: $T.string({ format: 'uri' }) },
+    responseLinks: { GetWidget: { operationId: 'getWidget', parameters: { id: '$response.body#/id' } } }
+  }
+}
+```
+
+`responseLinks` is the OpenAPI `links` object, carried verbatim into the spec — documentation only, nothing reads it at runtime. A bare `$T.null()` response means "no body", at every status.
 
 > [!NOTE]
 > Response validation is enabled by default: any endpoint response with a matching schema is validated at runtime. To disable runtime validation, set `responseValidator.enabled` to `false` in the [Configuration](../reference/configuration.md#responsevalidatorenabled).

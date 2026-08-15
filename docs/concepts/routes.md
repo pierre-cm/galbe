@@ -174,6 +174,21 @@ export default galbe => {
 
 The first paragraph of a comment is captured as the route's description (its first line is used as a summary). Lines starting with `@tag` are stored as tag metadata; tags repeated multiple times are exposed as arrays.
 
+The head convention expresses "summary, then description" and nothing else. Two annotations override it, each on its own half:
+
+```js
+/**
+ * @summary
+ * @description An operation with a description but no summary.
+ */
+galbe.get('/foo', ctx => {})
+```
+
+- `@summary <text>` replaces the summary the head would have produced. Written bare, with no text, it declares an explicitly empty summary — the one way to write a description with no summary.
+- `@description <text>` replaces the description. Repeat the annotation for a multi-line one.
+
+Both fall back to the head split when absent, so existing comments are unaffected.
+
 > [!TIP]
 > To exclude a route or a whole route file from analysis, add a `@galbe-ignore` comment immediately before its definition (or before the file's default export). Use `@galbe-hide` instead to keep the route registered but hide it from generated artifacts (e.g. OpenAPI specs, generated clients).
 

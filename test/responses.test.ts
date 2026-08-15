@@ -602,3 +602,78 @@ describe('raw Response return parity with ctx.set', () => {
     expect(cookies.some((c: string) => c.startsWith('a=b'))).toBe(true)
   })
 })
+
+describe('wildcard status ranges', () => {
+  const portRange = 7371
+
+  beforeAll(async () => {
+    const galbe = new Galbe()
+
+    // exact status > the range containing it > default
+    galbe.get(
+      '/range/:kind',
+      {
+        response: {
+          404: $T.object({ notFound: $T.boolean() }),
+          '4XX': $T.object({ code: $T.string() }),
+          default: $T.object({ fallback: $T.boolean() }),
+        },
+      },
+      (ctx: Context) => {
+        const kind = (ctx.params as Record<string, string>).kind
+        if (kind === 'exact') {
+          ctx.set.status = 404
+          return { notFound: true }
+        }
+        if (kind === 'range') {
+          ctx.set.status = 418
+          return { code: 'teapot' }
+        }
+        if (kind === 'bad-range') {
+          ctx.set.status = 418
+          return { code: 42 }
+        }
+        ctx.set.status = 500
+        return { fallback: true }
+      }
+    )
+
+    // a string response takes its content type from the matching range entry
+    galbe.get(
+      '/range-json-string',
+      { response: { '2XX': { 'application/json': $T.string() } } },
+      () => 'ranged'
+    )
+
+    await galbe.listen(portRange)
+  })
+
+  test('a range entry validates every status in its hundred', async () => {
+    const resp = await fetch(`http://localhost:${portRange}/range/range`)
+    expect(resp.status).toBe(418)
+    expect(await resp.json()).toEqual({ code: 'teapot' })
+  })
+
+  test('a response that violates its range entry fails validation', async () => {
+    const resp = await fetch(`http://localhost:${portRange}/range/bad-range`)
+    expect(resp.status).toBe(500)
+  })
+
+  test('an exact status wins over the range containing it', async () => {
+    const resp = await fetch(`http://localhost:${portRange}/range/exact`)
+    expect(resp.status).toBe(404)
+    expect(await resp.json()).toEqual({ notFound: true })
+  })
+
+  test('a status outside every range falls through to default', async () => {
+    const resp = await fetch(`http://localhost:${portRange}/range/other`)
+    expect(resp.status).toBe(500)
+    expect(await resp.json()).toEqual({ fallback: true })
+  })
+
+  test('content type is inferred through the matching range', async () => {
+    const resp = await fetch(`http://localhost:${portRange}/range-json-string`)
+    expect(resp.headers.get('content-type')).toContain('application/json')
+    expect(await resp.json()).toBe('ranged')
+  })
+})
