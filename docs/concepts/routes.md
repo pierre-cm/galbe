@@ -174,6 +174,23 @@ export default galbe => {
 
 The first paragraph of a comment is captured as the route's description (its first line is used as a summary). Lines starting with `@tag` are stored as tag metadata; tags repeated multiple times are exposed as arrays.
 
+**File header annotations apply to every route in the file.** `@tags` and `@security` above the default export are inherited by each route the file declares, exactly as a [middleware file's header](middleware.md) is inherited by its scope:
+
+```js
+/**
+ * @tags admin
+ * @security apiKey
+ */
+export default galbe => {
+  galbe.get('/stats', ctx => {}) // tags: ['admin'], security: [{ apiKey: [] }]
+
+  /** @security none */
+  galbe.get('/health', ctx => {}) // tags: ['admin'], security: []
+}
+```
+
+Precedence runs from the nearest scope outwards — the route, then its file's header, then the middleware files covering it. `@security` takes the first one that names anything (`none` being the explicit "no security" escape); `@tags` accumulate across all three.
+
 The head convention expresses "summary, then description" and nothing else. Two annotations override it, each on its own half:
 
 ```js

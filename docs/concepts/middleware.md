@@ -122,7 +122,7 @@ export default auditHook
 2. middleware files, sorted by directory depth (shallowest first) then path — outer scopes wrap inner ones;
 3. registrations inside route files, in file import order.
 
-A `@galbe-ignore` comment above the default export skips the file. Header annotations (`/** @security bearerAuth */`, `@tags`) apply to every operation in the file's scope in the generated OpenAPI spec; route-level metadata wins on conflict.
+A `@galbe-ignore` comment above the default export skips the file. Header annotations (`/** @security bearerAuth */`, `@tags`) apply to every operation in the file's scope in the generated OpenAPI spec. Precedence runs from the nearest scope outwards: the route's own metadata, then its [route file's header](routes.md#route-files), then the middleware files covering it.
 
 ### Scoping Summary
 

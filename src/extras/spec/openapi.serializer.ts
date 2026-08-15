@@ -264,11 +264,19 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     return p
   }
 
-  const metaRoutes = g.meta?.reduce(
-    (routes, c) => ({ ...routes, ...c.routes }),
-    {} as Record<string, Record<string, Record<string, any>>>
-  )
-  let metaStatic = Object.fromEntries(Object.entries(metaRoutes || {}).filter(([_, d]) => d?.static))
+  const metaRoutes: Record<string, Record<string, Record<string, any>>> = {}
+  // A route file's own header meta applies to every route the file declares —
+  // the same contract a middleware file's header has over its scope. Kept
+  // beside the route meta rather than merged into it so route-level metadata
+  // can still win.
+  const metaFileHeaders: Record<string, Record<string, any>> = {}
+  for (const c of g.meta ?? []) {
+    for (const [routePath, methods] of Object.entries(c.routes ?? {})) {
+      metaRoutes[routePath] = { ...metaRoutes[routePath], ...methods }
+      if (c.header && Object.keys(c.header).length) metaFileHeaders[routePath] = c.header
+    }
+  }
+  let metaStatic = Object.fromEntries(Object.entries(metaRoutes).filter(([_, d]) => d?.static))
 
   // middleware-file header meta applies to every operation in the file's scope
   const mwMeta = (g.metaMiddleware ?? [])
@@ -282,6 +290,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
   walkRoutes(g.router.routes, r => {
     const rPath = relPath(r.path)
     let meta = metaRoutes?.[rPath]?.[r.method]
+    const fileHeader = metaFileHeaders[rPath]
     if (r.static?.root) meta = metaStatic[r.static?.root]?.static
     if (meta?.hide) return
     const inherited = mwMeta.filter(m => matchMiddleware(m.segments, rPath.split('/').filter(s => s !== '')))
@@ -291,12 +300,17 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       ...(m?.tags?.split?.(' ')?.map((t: string) => t.trim()) || []),
       ...(typeof m?.tag === 'string' ? [m?.tag] : m?.tag || []),
     ]
-    let tags = [...new Set([...metaTags(meta), ...inherited.flatMap(m => metaTags(m.header))])]
+    // tags accumulate from every scope that names one, nearest first
+    let tags = [
+      ...new Set([...metaTags(meta), ...metaTags(fileHeader), ...inherited.flatMap(m => metaTags(m.header))]),
+    ]
     let security: Record<string, any> = []
     let securityExplicitlyEmpty = false
 
-    // route-level @security wins over the middleware files' scope-level one
-    const metaSecRaw = meta?.security ?? inherited.find(m => m.header.security !== undefined)?.header.security
+    // nearest scope wins outright: the route, then its file's header, then the
+    // middleware files covering it
+    const metaSecRaw =
+      meta?.security ?? fileHeader?.security ?? inherited.find(m => m.header.security !== undefined)?.header.security
     if (metaSecRaw !== undefined) {
       const entries = Array.isArray(metaSecRaw) ? metaSecRaw : [metaSecRaw]
       for (const e of entries) {

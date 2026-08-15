@@ -287,6 +287,56 @@ describe('openapi serializer', () => {
     expect(spec.paths).not.toHaveProperty('/internal')
   })
 
+  test('route-file @security and @tags apply to every route the file declares', async () => {
+    const g = new Galbe()
+    g.meta = [
+      {
+        file: 'admin.route.ts',
+        header: { tags: 'admin', security: 'apiKey' },
+        routes: {
+          '/admin/items': { get: {} },
+          '/admin/open': { get: { security: 'none' } },
+          '/admin/tagged': { get: { tags: 'reports' } },
+        },
+      },
+      // a second file with no header must not inherit the first one's
+      { file: 'public.route.ts', header: {}, routes: { '/public': { get: {} } } },
+    ]
+    for (const p of ['/admin/items', '/admin/open', '/admin/tagged', '/public']) g.get(p, () => 'x')
+
+    const spec = await OpenAPISerializer(g)
+    const op = (p: string) => (spec.paths![p] as any).get
+    expect(op('/admin/items')).toMatchObject({ tags: ['admin'], security: [{ apiKey: [] }] })
+    // route-level metadata still wins, including the 'none' escape
+    expect(op('/admin/open').security).toEqual([])
+    // tags accumulate, nearest first
+    expect(op('/admin/tagged').tags).toEqual(['reports', 'admin'])
+    // another file's header does not leak
+    expect(op('/public').tags).toBeUndefined()
+    expect(op('/public').security).toBeUndefined()
+  })
+
+  test('a route file header loses to the route and wins over the middleware scope', async () => {
+    const g = new Galbe()
+    g.metaMiddleware.push({ file: 'auth.middleware.ts', scope: '/api/*', header: { security: 'bearerAuth', tags: 'api' } })
+    g.meta = [
+      {
+        file: 'f.route.ts',
+        header: { security: 'apiKey', tags: 'file' },
+        routes: { '/api/a': { get: {} }, '/api/b': { get: { security: 'oauth2' } } },
+      },
+    ]
+    g.get('/api/a', () => 'a')
+    g.get('/api/b', () => 'b')
+
+    const spec = await OpenAPISerializer(g)
+    const op = (p: string) => (spec.paths![p] as any).get
+    expect(op('/api/a').security).toEqual([{ apiKey: [] }])
+    expect(op('/api/b').security).toEqual([{ oauth2: [] }])
+    // tags are a union across all three scopes
+    expect(op('/api/a').tags).toEqual(['file', 'api'])
+  })
+
   test('middleware-file @security and @tags apply to the file scope', async () => {
     const g = new Galbe()
     g.metaMiddleware.push({ file: 'auth.middleware.ts', scope: '/api/*', header: { security: 'bearerAuth', tags: 'api' } })

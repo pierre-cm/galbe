@@ -18,6 +18,8 @@ type SchemaEntry = {
   responseExamples?: Record<string, any>
   /** Response-only: the response's `links`, with component refs already inlined. */
   responseLinks?: Record<string, any>
+  /** Response-only: the response's headers as `[name, schema source]` pairs. */
+  responseHeaders?: [string, string][]
   /**
    * Response-only: the response's bodies as `[mediaType, schema]` pairs. Kept
    * even for a single media type so the component can be emitted in the
@@ -324,6 +326,7 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
     let responseExample: any = undefined
     let responseExamples: Record<string, any> | undefined = undefined
     let responseLinks: Record<string, any> | undefined = undefined
+    let responseHeaders: [string, string][] | undefined = undefined
     let responseContent: [string, string][] | undefined = undefined
     let requestContent: [string, string][] | undefined = undefined
     if (kind === 'schemas') schema = parseOapiSchema(s, { id: k })
@@ -336,11 +339,7 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
       schema = `{${requestContent.map(([m, v]) => `"${m}": ${v}`).join(',')}}`
     } else if (kind === 'responses') {
       responseLinks = resolveLinks((s as OpenAPIV3.ResponseObject)?.links as any, def.components)
-      if (s.headers && Object.keys(s.headers).length)
-        warn(
-          `component response '${k}': response headers on a components.responses entry are not carried`,
-          `#/components/responses/${k}`
-        )
+      responseHeaders = responseHeaderEntries((s as OpenAPIV3.ResponseObject)?.headers, def.components)
       if (!s.content) {
         // a bodiless component response: no media types, description only
         responseContent = []
@@ -378,6 +377,7 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
     schema = deref(schema)
     responseContent = responseContent?.map(([media, sc]) => [media, deref(sc)])
     requestContent = requestContent?.map(([media, sc]) => [media, deref(sc)])
+    responseHeaders = responseHeaders?.map(([name, sc]) => [name, deref(sc)])
     index[`#/components/${kind}/${k}`] = {
       key: k,
       prefix: '',
@@ -398,6 +398,7 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
       ...(kind === 'responses' && responseExample !== undefined ? { responseExample } : {}),
       ...(kind === 'responses' && responseExamples ? { responseExamples } : {}),
       ...(kind === 'responses' && responseLinks && Object.keys(responseLinks).length ? { responseLinks } : {}),
+      ...(kind === 'responses' && responseHeaders?.length ? { responseHeaders } : {}),
     }
   }
   for (let [k, v] of Object.entries(def.components?.schemas || {})) initSchema(k, v, 'schemas')
@@ -481,6 +482,30 @@ const resolveLinks = (
   return out
 }
 
+/**
+ * A response's headers as `[name, schema source]` pairs, with
+ * `#/components/headers/*` references resolved and `%ref:%` markers left in
+ * place. Deliberately strategy-free: a route file resolves those markers
+ * through its import map and a component file through its dependency set, and
+ * baking either one in is what kept component responses from carrying headers.
+ */
+const responseHeaderEntries = (
+  headers: OpenAPIV3.ResponseObject['headers'],
+  components: OpenAPIV3.ComponentsObject | undefined
+): [string, string][] => {
+  const out: [string, string][] = []
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    let h: OpenAPIV3.HeaderObject | undefined
+    if ('$ref' in (value as any)) {
+      h = resolveHeaderRef((value as any).$ref, components)
+      if (!h) continue
+    } else h = value as OpenAPIV3.HeaderObject
+    const code = parseOapiSchema(h.schema || ({ type: 'string' } as any), { description: h.description })
+    out.push([name, h.required ? code : `$T.optional(${code})`])
+  }
+  return out
+}
+
 const resolveParamRef = (
   ref: string,
   components: OpenAPIV3.ComponentsObject | undefined
@@ -502,6 +527,13 @@ const parseEndpointDef = (
 ) => {
   if (!def) return {}
   let imports: Record<string, string> = {}
+  // every `%ref:%` in this operation resolves to a name the route file imports
+  const deref = (code: string): string =>
+    unref(code, m => {
+      const l = m.split('/')
+      imports[l[l.length - 1]!] = m
+      return l[l.length - 1]!
+    })
   // the emitted path is relative to the file's directory prefix; the schema
   // name derives from the full path so it stays unique across scopes
   let p = emitPath.replaceAll(/\{([^\}]*)\}/g, ':$1')
@@ -602,11 +634,7 @@ const parseEndpointDef = (
     if (p.content && Object.keys(p.content).length > 1)
       warn(`parameter '${p.name}': only the first of ${Object.keys(p.content).length} content media types is kept`)
     sp[p.in][p.name] = o(
-      unref(parseOapiSchema(pSchema, { description: p.description, deprecated: p.deprecated }, { split }), m => {
-        let l = m.split('/')
-        imports[l[l.length - 1]] = m
-        return l[l.length - 1]
-      })
+      deref(parseOapiSchema(pSchema, { description: p.description, deprecated: p.deprecated }, { split }))
     )
   }
 
@@ -627,11 +655,7 @@ const parseEndpointDef = (
   if (!['get', 'delete', 'options', 'head'].includes(method)) {
     let _rb = def?.requestBody as OpenAPIV3.ReferenceObject
     if (_rb?.$ref) {
-      body = unref(`  body: %ref:${_rb.$ref}%`, m => {
-        let l = m.split('/')
-        imports[l[l.length - 1]] = m
-        return l[l.length - 1]
-      })
+      body = deref(`  body: %ref:${_rb.$ref}%`)
     } else {
       let rb = def?.requestBody as OpenAPIV3.RequestBodyObject
       let o = (s: string) => (!rb?.required ? `$T.optional(${s})` : s)
@@ -639,11 +663,7 @@ const parseEndpointDef = (
         ...new Set(
           Object.entries(rb?.content || { null: {} }).map(([media, v]) => [
             media,
-            unref(parseOapiSchema(v.schema, undefined, { media, encoding: (v as any).encoding }), m => {
-              let l = m.split('/')
-              imports[l[l.length - 1]] = m
-              return l[l.length - 1]
-            }),
+            deref(parseOapiSchema(v.schema, undefined, { media, encoding: (v as any).encoding })),
           ])
         ),
       ]
@@ -672,36 +692,15 @@ const parseEndpointDef = (
         warn(`response '${status}' is not a status Galbe can express and collapses onto 'default'`)
 
       //@ts-ignore
-      let rootRef = sv?.$ref
-        ? unref(parseOapiSchema(sv), m => {
-            let l = m.split('/')
-            imports[l[l.length - 1]] = m
-            return l[l.length - 1]
-          })
-        : null
+      let rootRef = sv?.$ref ? deref(parseOapiSchema(sv)) : null
       if (rootRef) return [s, rootRef]
 
       const respObj = sv as OpenAPIV3.ResponseObject
       const content = respObj?.content || {}
 
-      // Collect response-level headers
-      const headerEntries: string[] = []
-      for (const [hName, hVal] of Object.entries(respObj?.headers || {})) {
-        let h: OpenAPIV3.HeaderObject | undefined
-        if ('$ref' in (hVal as any)) {
-          h = resolveHeaderRef((hVal as any).$ref, components)
-          if (!h) continue
-        } else h = hVal as OpenAPIV3.HeaderObject
-        const headerSchema = unref(
-          parseOapiSchema(h.schema || ({ type: 'string' } as any), { description: h.description }),
-          m => {
-            let l = m.split('/')
-            imports[l[l.length - 1]] = m
-            return l[l.length - 1]
-          }
-        )
-        headerEntries.push(`${JSON.stringify(hName)}:${h.required ? headerSchema : `$T.optional(${headerSchema})`}`)
-      }
+      const headerEntries = responseHeaderEntries(respObj?.headers, components).map(
+        ([hName, code]) => `${JSON.stringify(hName)}:${deref(code)}`
+      )
       const description = typeof respObj?.description === 'string' && respObj.description ? respObj.description : undefined
       const links = resolveLinks((respObj as any)?.links, components)
       const hasLinks = Object.keys(links).length > 0
@@ -727,11 +726,7 @@ const parseEndpointDef = (
           for (const [k, ex] of Object.entries(tv.examples))
             exampleParts.push(`${JSON.stringify(k)}:${JSON.stringify(resolveExample(ex, components))}`)
         }
-        const schemaStr = unref(parseOapiSchema(tv.schema), m => {
-          let l = m.split('/')
-          imports[l[l.length - 1]] = m
-          return l[l.length - 1]
-        })
+        const schemaStr = deref(parseOapiSchema(tv.schema))
         if (!keyGroups[galbeKey]) keyGroups[galbeKey] = []
         keyGroups[galbeKey].push(schemaStr)
       }
@@ -894,6 +889,10 @@ const renderComponentSchemaFile = (
         if (s.responseExample !== undefined) extras.push(`example: ${JSON.stringify(s.responseExample)}`)
         if (s.responseExamples) extras.push(`examples: ${JSON.stringify(s.responseExamples)}`)
         if (s.responseLinks) extras.push(`responseLinks: ${JSON.stringify(s.responseLinks)}`)
+        if (s.responseHeaders?.length)
+          extras.push(
+            `responseHeaders: {${s.responseHeaders.map(([n, sc]) => `${JSON.stringify(n)}: ${sc}`).join(', ')}}`
+          )
       } else if (s.requestRequired !== undefined) extras.push(`required: ${s.requestRequired}`)
       const body = [...content.map(([media, sc]) => `${JSON.stringify(media)}: ${sc}`), ...extras].join(', ')
       // the exported type is the body type, read back off the const

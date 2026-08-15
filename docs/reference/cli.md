@@ -494,7 +494,7 @@ Not carried into the generated sources (3):
   ! TRACE /debug        method 'TRACE' has no Galbe route builder — the operation is skipped
 ```
 
-The warnings describe the spec, not the diff: they appear on every run, including `--dry-run`, and never stop the generation. Reported today: `not`, `allowEmptyValue`, a parameter `style` Galbe's parsers do not implement (`label`, `matrix`, or `form` on an object), methods with no route builder (`TRACE`), a response key that is neither a status, a `1XX`–`5XX` range nor `default`, a parameter typed by several `content` media types, and response headers on a `components.responses` entry.
+The warnings describe the spec, not the diff: they appear on every run, including `--dry-run`, and never stop the generation. Reported today: `not`, `allowEmptyValue`, a parameter `style` Galbe's parsers do not implement (`label`, `matrix`, or `form` on an object), methods with no route builder (`TRACE`), a response key that is neither a status, a `1XX`–`5XX` range nor `default`, and a parameter typed by several `content` media types.
 
 `form` (either `explode`), `deepObject`, `pipeDelimited` and `spaceDelimited` are implemented and pass through silently — see [query parameters](../concepts/schemas.md#query).
 

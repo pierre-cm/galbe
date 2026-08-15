@@ -1221,6 +1221,14 @@ components:
 
     Unauthorized:
       description: Missing or invalid credentials.
+      headers:
+        WWW-Authenticate:
+          description: The authentication scheme to use.
+          required: true
+          schema:
+            type: string
+        Retry-After:
+          $ref: "#/components/headers/RateLimit"
       content:
         application/json:
           schema:

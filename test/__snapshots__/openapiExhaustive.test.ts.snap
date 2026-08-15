@@ -1192,6 +1192,14 @@ export const Unauthorized = {
   "application/json": Error,
   _responseId: "Unauthorized",
   description: "Missing or invalid credentials.",
+  responseHeaders: {
+    "WWW-Authenticate": $T.string({
+      description: "The authentication scheme to use.",
+    }),
+    "Retry-After": $T.optional(
+      $T.integer({ description: "Remaining calls in the current window." }),
+    ),
+  },
 };
 export type Unauthorized = Static<(typeof Unauthorized)["application/json"]>;
 
@@ -2892,7 +2900,17 @@ components:
       content: 
         application/json: 
           schema: 
-            $ref: "#/components/schemas/Error""
+            $ref: "#/components/schemas/Error"
+      headers: 
+        WWW-Authenticate: 
+          description: The authentication scheme to use.
+          required: true
+          schema: 
+            type: string
+        Retry-After: 
+          description: Remaining calls in the current window.
+          schema: 
+            type: integer"
 `;
 
 exports[`openapi exhaustive: generate spec regenerated json spec matches the snapshot 1`] = `
@@ -4963,6 +4981,21 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
               "$ref": "#/components/schemas/Error"
             }
           }
+        },
+        "headers": {
+          "WWW-Authenticate": {
+            "description": "The authentication scheme to use.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          "Retry-After": {
+            "description": "Remaining calls in the current window.",
+            "schema": {
+              "type": "integer"
+            }
+          }
         }
       }
     }
@@ -4998,6 +5031,9 @@ missing /components/schemas/Pet/required  ["petType"]
 missing /components/schemas/Pet/discriminator  {"propertyName":"petType","mapping":{"cat":"#/components/schemas/Cat","dog":"#/components/schemas/Dog"}}
 missing /components/schemas/Pet/properties  {"petType":{"type":"string"}}
 added   /components/schemas/Pet/anyOf  [{"allOf":[{"type":"object","properties":{"petType":{"type":"string","enum":["cat"]}},"required":["petType"]},…
+missing /components/responses/Unauthorized/headers/Retry-After/$ref  "#/components/headers/RateLimit"
+added   /components/responses/Unauthorized/headers/Retry-After/description  "Remaining calls in the current window."
+added   /components/responses/Unauthorized/headers/Retry-After/schema  {"type":"integer"}
 missing /components/headers  {"RateLimit":{"description":"Remaining calls in the current window.","schema":{"type":"integer"}}}
 missing /components/examples  {"ErrorExample":{"summary":"A shared error example","value":{"code":"shared","message":"referenced through com…
 missing /components/links  {"GetWidgetById":{"operationId":"getPrimitive","parameters":{"id":"$response.body#/id"}}}"
