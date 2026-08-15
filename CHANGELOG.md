@@ -14,6 +14,7 @@
 - `galbe generate code` emits the directory-convention layout with relative paths, so generated trees round-trip through the analyzer; route identity in merges is prefix-aware.
 
 ### Fixes
+- The route listing printed by `galbe dev`/`galbe build` shows a route's description again: a single-paragraph JSDoc head (the common `/** Greeting endpoint */` case) was analyzed correctly but dropped from the log, which only printed heads carrying a blank line. Log and OpenAPI spec now share one summary/description rule.
 - The Automatic Route Analyzer no longer scans `node_modules` and `.git`: an app-wide pattern such as `routes: '**/*.route.ts'` used to import route and middleware files shipped by dependencies, and a dependency directory that isn't a valid route segment aborted boot (`galbe dev` and `galbe build` alike). A pattern that names one of those directories explicitly still opts back in.
 - `galbe dev --watch` no longer reloads on `.git` writes (a `git checkout` or `git commit` used to respawn the app), and `--watchignore` now *adds* to the built-in ignores (`node_modules`, `.git`, `.galbe`) instead of replacing them.
 - `galbe build` no longer swallows boot errors: a single thrown error (invalid directory name, failed import) was reported as `TypeError: {} is not iterable` instead of itself.

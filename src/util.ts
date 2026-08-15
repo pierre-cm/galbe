@@ -26,6 +26,24 @@ export const softMerge = <T>(base: T, override: T): T => {
   }
   return base
 }
+/**
+ * Split a route's JSDoc head into its `summary`/`description` pair: the first
+ * paragraph is the summary, whatever follows the first blank line is the
+ * description. A head with no blank line is a summary alone — the single
+ * source of truth for every consumer (route log, OpenAPI spec).
+ */
+export const splitHead = (head?: string): { summary?: string; description?: string } => {
+  if (!head) return {}
+  const blank = head.indexOf('\n\n')
+  if (blank === -1) {
+    const nl = head.indexOf('\n')
+    return { summary: (nl === -1 ? head : head.slice(0, nl)).trim() || undefined }
+  }
+  return {
+    summary: head.slice(0, blank).trim() || undefined,
+    description: head.slice(blank + 2).trim() || undefined,
+  }
+}
 export const logRoute = (
   r: { method: string; path: string; static?: { path: string; root: string } },
   meta?: RouteMeta,
@@ -44,11 +62,10 @@ export const logRoute = (
     if (meta?.deprecated) routeLog = `\x1b[0;9m\x1b[38;5;244m${routeLog.replaceAll(ansiRegex, '')}\x1b[0m`
   } else {
     let color = METHOD_COLOR?.[method] || ''
-    let [_, summary, _description] = meta?.head?.match(/^([^\n]*)\n\n(.*)/) || []
-    if (!summary) _description = meta?.head || ''
+    const { summary } = splitHead(meta?.head)
     routeLog = `[${color}${`${method.toUpperCase()}\x1b[0m]`.padEnd(12, ' ')} ${path
       .padEnd(format?.maxPathLength ?? path.length, ' ')
-      .replaceAll(/:([^\/]+)/g, '\x1b[0;33m:$1\x1b[0m')}${(summary ? `  ${summary}` : '').replace(/\n/, '')}\x1b[0m`
+      .replaceAll(/:([^\/]+)/g, '\x1b[0;33m:$1\x1b[0m')}${summary ? `  ${summary.replaceAll(/\s+/g, ' ')}` : ''}\x1b[0m`
     if (meta?.deprecated) routeLog = `\x1b[0;9m\x1b[38;5;244m${routeLog.replaceAll(ansiRegex, '')}\x1b[0m`
   }
 

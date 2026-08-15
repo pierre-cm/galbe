@@ -12,7 +12,7 @@ import type {
 } from '../../../src/schema'
 
 import { Galbe } from '../../../src'
-import { walkRoutes, HttpStatus, matchMiddleware, parseMiddlewarePattern } from '../../../src/util'
+import { walkRoutes, HttpStatus, matchMiddleware, parseMiddlewarePattern, splitHead } from '../../../src/util'
 import { Kind, Optional } from '../../../src/schema'
 
 import type { OpenAPIV3 } from 'openapi-types'
@@ -371,19 +371,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
         default: { description: HttpStatus[200] },
       }
     }
-    const head: string = meta?.head ?? ''
-    let summary: string | undefined
-    let description: string | undefined
-    if (head) {
-      const firstBlank = head.indexOf('\n\n')
-      if (firstBlank === -1) {
-        const nl = head.indexOf('\n')
-        summary = (nl === -1 ? head : head.slice(0, nl)).trim() || undefined
-      } else {
-        summary = head.slice(0, firstBlank).trim() || undefined
-        description = head.slice(firstBlank + 2).trim() || undefined
-      }
-    }
+    const { summary, description } = splitHead(meta?.head)
     paths[path][r.method] = {
       tags: tags.length ? tags : undefined,
       summary,

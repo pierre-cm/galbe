@@ -32,6 +32,7 @@ describe('galbe build', () => {
       })
       const running: CliProc = {
         output: () => 'built app produced no output',
+        plain: () => 'built app produced no output',
         exited: proc.exited,
         stop: async () => {
           proc.kill()

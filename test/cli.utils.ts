@@ -34,9 +34,14 @@ export const freePort = async (): Promise<number> => {
 
 export type CliProc = {
   output: () => string
+  /** output with the CLI's colors stripped, for asserting on printed lines */
+  plain: () => string
   exited: Promise<number>
   stop: () => Promise<void>
 }
+
+const ANSI = /[][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g
+export const stripAnsi = (s: string) => s.replaceAll(ANSI, '')
 
 /** run a galbe CLI command in `dir`, capturing its interleaved output */
 export const runCli = (dir: string, args: string[]): CliProc => {
@@ -55,6 +60,7 @@ export const runCli = (dir: string, args: string[]): CliProc => {
   drain(proc.stderr as ReadableStream<Uint8Array>)
   return {
     output: () => output,
+    plain: () => stripAnsi(output),
     exited: proc.exited,
     stop: async () => {
       proc.kill()
