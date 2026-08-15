@@ -125,6 +125,7 @@ Options:
 - **minLength** (`number`) — Minimum number of items.
 - **maxLength** (`number`) — Maximum number of items.
 - **unique** (`boolean`) — When `true`, all items must be unique.
+- **split** (`string | false`) — Query parameters only: the delimiter that splits a single value into several items (`','` by default). `false` disables splitting, so a value containing the delimiter stays one item; repeated keys are accepted either way. See [query](#query).
 
 #### object
 
@@ -297,7 +298,7 @@ const schema = {
 ### query
 
 ```ts
-query: { [key: string]: STString | STBoolean | STNumber | STInteger | STLiteral | STUnion | STArray }
+query: { [key: string]: STString | STBoolean | STNumber | STInteger | STLiteral | STUnion | STArray | STObject }
 ```
 
 Defines query parameters with their respective Schema types.
@@ -308,13 +309,30 @@ Defines query parameters with their respective Schema types.
 const schema = {
   query: {
     name: $T.literal('Galbe'),
-    list: $T.array($T.number())
+    list: $T.array($T.number()),
+    filter: $T.object({ lat: $T.number(), lon: $T.number() })
   }
 }
 ```
 
+**Arrays.** An array parameter can be provided by repeating the key (`?list=1&list=2`) or as a single delimited value (`?list=1,2`). Both are always accepted. The delimiter is the array's [`split`](#array) option — `','` by default, `'|'` and `' '` for OpenAPI's `pipeDelimited` and `spaceDelimited`, and `false` to turn splitting off:
+
+```ts
+// without split: false, a single item containing a comma is unreachable
+$T.array($T.string(), { split: false }) // ?tags=a,b → ['a,b']
+$T.array($T.string(), { split: '|' })   // ?tags=a|b → ['a', 'b']
+```
+
+**Objects.** An object parameter is read from bracketed keys — OpenAPI's `deepObject`:
+
+```ts
+// ?filter[lat]=1.5&filter[lon]=-2  →  { lat: 1.5, lon: -2 }
+```
+
+Each property is parsed and validated against the schema that governs it, `additionalProperties` included, so `$T.record()` works as a query parameter too. A JSON-encoded value (`?filter={"lat":1.5}`) is accepted for the same parameter. Only one level of nesting is read — OpenAPI leaves nested `deepObject` undefined.
+
 > [!NOTE]
-> Array query parameters can be provided either by repeating the key (`?list=1&list=2`) or as a comma-separated value (`?list=1,2`).
+> Spec generation emits `style` only where Galbe departs from the OpenAPI defaults: `deepObject` for an object parameter, `pipeDelimited` / `spaceDelimited` for a custom `split`. An array parameter accepts both the repeated and the delimited form, which is what the default `form` pair already describes.
 
 ### cookies
 

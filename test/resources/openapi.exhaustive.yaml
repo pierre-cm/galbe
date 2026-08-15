@@ -698,6 +698,26 @@ paths:
             type: array
             items:
               type: string
+        - name: filter
+          in: query
+          description: An object parameter serialized as deepObject.
+          style: deepObject
+          explode: true
+          schema:
+            type: object
+            properties:
+              lat:
+                type: number
+              lon:
+                type: number
+        - name: pipes
+          in: query
+          description: A pipe-delimited array parameter.
+          style: pipeDelimited
+          schema:
+            type: array
+            items:
+              type: string
         - name: legacy
           in: query
           description: On the way out.

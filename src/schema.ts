@@ -84,6 +84,16 @@ export interface ArrayOptions extends Options {
   minLength?: number
   maxLength?: number
   unique?: boolean
+  /**
+   * Query parameters only: the delimiter that splits a single value into
+   * several items — `?tags=a,b` with the default `','`. Repeated keys
+   * (`?tags=a&tags=b`) are always accepted regardless.
+   *
+   * `false` disables splitting, so a value containing the delimiter stays one
+   * item. `'|'` and `' '` are OpenAPI's `pipeDelimited` and `spaceDelimited`,
+   * and are emitted as such by spec generators.
+   */
+  split?: string | false
 }
 /** Per-part serialization details for a multipart body, as OpenAPI's `encoding`. */
 export type EncodingProperty = {

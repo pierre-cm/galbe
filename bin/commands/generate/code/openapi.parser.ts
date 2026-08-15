@@ -138,7 +138,7 @@ const writeCodeFile = async (path: string, content: string, target: 'js' | 'ts')
 const parseOapiSchema = (
   os?: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject,
   details: { id?: string; title?: string; description?: string; deprecated?: boolean } = {},
-  extra?: { media?: string; skipNullable?: boolean; encoding?: Record<string, any> }
+  extra?: { media?: string; skipNullable?: boolean; encoding?: Record<string, any>; split?: string }
 ): string => {
   if (!os) {
     return `$T.any(${details && Object.keys(details).length ? JSON.stringify(details) : ''})`
@@ -165,6 +165,7 @@ const parseOapiSchema = (
     minItems?: number
     maxItems?: number
     unique?: boolean
+    split?: string
     default?: any
     examples?: any
     readOnly?: boolean
@@ -264,7 +265,7 @@ const parseOapiSchema = (
     let minLength = os.minItems
     let maxLength = os.maxItems
     let unique = os.uniqueItems
-    options = { ...options, minLength, maxLength, unique }
+    options = { ...options, minLength, maxLength, unique, split: extra?.split }
     hasOptions = Object.values(options).some(v => v !== undefined)
     optArg = hasOptions ? serialize(options) : ''
     resp = `$T.array(${parseOapiSchema(os?.items)}${optArg ? `, ${optArg}` : ''})`
@@ -581,19 +582,27 @@ const parseEndpointDef = (
     const pSchema = p.schema ?? Object.values(p.content ?? {})[0]?.schema
     if ((p as any).allowEmptyValue)
       warn(`parameter '${p.name}': allowEmptyValue is not modelled (OpenAPI deprecates it) and is dropped`)
-    // only a non-default serialization is worth reporting: 'form'/'simple' and
-    // the explode that goes with them are what Galbe's parsers already do
+    // Only a serialization Galbe's parsers do not implement is worth reporting.
+    // A query array accepts the repeated *and* the comma form, so both explode
+    // variants of 'form' are honoured; 'pipeDelimited' and 'spaceDelimited'
+    // become the array's `split`, and 'deepObject' is an object parameter.
     const defaultStyle = p.in === 'query' || p.in === 'cookie' ? 'form' : 'simple'
-    const style = (p as any).style as string | undefined
-    const explode = (p as any).explode as boolean | undefined
-    if (style && style !== defaultStyle)
-      warn(`parameter '${p.name}': style '${style}' is not modelled — the generated route parses it as '${defaultStyle}'`)
-    if (explode !== undefined && explode !== (defaultStyle === 'form'))
-      warn(`parameter '${p.name}': explode ${explode} is not modelled — the generated route parses it as ${defaultStyle === 'form'}`)
+    const style = ((p as any).style as string | undefined) ?? defaultStyle
+    const pType = (p.schema as OpenAPIV3.SchemaObject | undefined)?.type
+    const split = style === 'pipeDelimited' ? '|' : style === 'spaceDelimited' ? ' ' : undefined
+    const honoured =
+      style === defaultStyle
+        ? p.in !== 'query' || pType !== 'object' // form-on-object is `a,b,c,d`, not implemented
+        : p.in === 'query' &&
+          (style === 'deepObject' ? pType === 'object' : !!split && pType === 'array')
+    if (!honoured)
+      warn(
+        `parameter '${p.name}': style '${style}'${pType ? ` on a ${pType}` : ''} is not implemented — the generated route parses it as '${defaultStyle}'`
+      )
     if (p.content && Object.keys(p.content).length > 1)
       warn(`parameter '${p.name}': only the first of ${Object.keys(p.content).length} content media types is kept`)
     sp[p.in][p.name] = o(
-      unref(parseOapiSchema(pSchema, { description: p.description, deprecated: p.deprecated }), m => {
+      unref(parseOapiSchema(pSchema, { description: p.description, deprecated: p.deprecated }, { split }), m => {
         let l = m.split('/')
         imports[l[l.length - 1]] = m
         return l[l.length - 1]

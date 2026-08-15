@@ -919,6 +919,18 @@ export const GetParamMatrix = {
     expand: $T.optional(
       $T.array($T.string(), { description: "Repeated query parameter." }),
     ),
+    filter: $T.optional(
+      $T.object(
+        { lat: $T.optional($T.number()), lon: $T.optional($T.number()) },
+        { description: "An object parameter serialized as deepObject." },
+      ),
+    ),
+    pipes: $T.optional(
+      $T.array($T.string(), {
+        description: "A pipe-delimited array parameter.",
+        split: "|",
+      }),
+    ),
     legacy: $T.optional(
       $T.string({ description: "On the way out.", deprecated: true }),
     ),
@@ -1981,6 +1993,26 @@ paths:
             type: array
             items: 
               type: string
+        - name: filter
+          in: query
+          description: An object parameter serialized as deepObject.
+          style: deepObject
+          explode: true
+          schema: 
+            type: object
+            properties: 
+              lat: 
+                type: number
+              lon: 
+                type: number
+        - name: pipes
+          in: query
+          description: A pipe-delimited array parameter.
+          style: pipeDelimited
+          schema: 
+            type: array
+            items: 
+              type: string
         - name: legacy
           in: query
           description: On the way out.
@@ -1990,6 +2022,8 @@ paths:
         - name: contentParam
           in: query
           description: "A parameter typed through \`content\` rather than \`schema\`."
+          style: deepObject
+          explode: true
           schema: 
             type: object
             properties: 
@@ -3548,6 +3582,36 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
             }
           },
           {
+            "name": "filter",
+            "in": "query",
+            "description": "An object parameter serialized as deepObject.",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "lat": {
+                  "type": "number"
+                },
+                "lon": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          {
+            "name": "pipes",
+            "in": "query",
+            "description": "A pipe-delimited array parameter.",
+            "style": "pipeDelimited",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "legacy",
             "in": "query",
             "description": "On the way out.",
@@ -3560,6 +3624,8 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
             "name": "contentParam",
             "in": "query",
             "description": "A parameter typed through \`content\` rather than \`schema\`.",
+            "style": "deepObject",
+            "explode": true,
             "schema": {
               "type": "object",
               "properties": {
@@ -4923,6 +4989,8 @@ missing /paths//params/{group}/items/{itemId}/get/parameters/query:expand/style 
 missing /paths//params/{group}/items/{itemId}/get/parameters/query:expand/explode  true
 missing /paths//params/{group}/items/{itemId}/get/parameters/query:legacy/allowEmptyValue  true
 missing /paths//params/{group}/items/{itemId}/get/parameters/query:contentParam/content  {"application/json":{"schema":{"type":"object","properties":{"lat":{"type":"number"},"lon":{"type":"number"}}}…
+added   /paths//params/{group}/items/{itemId}/get/parameters/query:contentParam/style  "deepObject"
+added   /paths//params/{group}/items/{itemId}/get/parameters/query:contentParam/explode  true
 added   /paths//params/{group}/items/{itemId}/get/parameters/query:contentParam/schema  {"type":"object","properties":{"lat":{"type":"number"},"lon":{"type":"number"}}}
 missing /paths//meta/bare/trace  {"tags":["meta"],"summary":"A method Galbe has no route builder for.","operationId":"traceBare","responses":{"…
 missing /components/schemas/Pet/type  "object"

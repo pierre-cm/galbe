@@ -228,6 +228,24 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     }, components[kind])
   }
 
+  /**
+   * The `style`/`explode` pair, emitted only where Galbe's parser does something
+   * other than the OpenAPI default. A query array accepts both the repeated and
+   * the comma form, which is the default pair — nothing to say. A custom
+   * `split` is `pipeDelimited`/`spaceDelimited`, and an object query parameter
+   * is `deepObject`, both of which the parser implements.
+   */
+  const paramSerialization = (param: STSchema, kind: 'query' | 'header' | 'path' | 'cookie') => {
+    if (kind !== 'query') return {}
+    if (param[Kind] === 'object') return { style: 'deepObject', explode: true }
+    if (param[Kind] === 'array') {
+      const split = (param as STArray).split
+      if (split === '|') return { style: 'pipeDelimited' }
+      if (split === ' ') return { style: 'spaceDelimited' }
+    }
+    return {}
+  }
+
   const parseParam = (key: string, param: STSchema, kind: 'query' | 'header' | 'path' | 'cookie') => {
     let { schema } = schemaToOpenapi({ ...param, [Optional]: false })
     // A Galbe schema has one `description`, which is where a parameter's own
@@ -240,6 +258,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       description: param?.description,
       required: kind === 'path' ? true : !param[Optional] || undefined,
       deprecated: param.deprecated,
+      ...paramSerialization(param, kind),
       schema,
     }
     return p

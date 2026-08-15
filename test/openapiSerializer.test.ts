@@ -60,6 +60,35 @@ describe('openapi serializer', () => {
     expect(param.schema).toMatchObject({ type: 'array', minItems: 1, maxItems: 5, uniqueItems: true })
   })
 
+  test('query parameters declare only the serialization Galbe actually implements', async () => {
+    const g = new Galbe()
+    g.get(
+      '/q',
+      {
+        query: {
+          filter: $T.object({ lat: $T.number() }),
+          piped: $T.array($T.string(), { split: '|' }),
+          spaced: $T.array($T.string(), { split: ' ' }),
+          tags: $T.array($T.string()),
+          exact: $T.array($T.string(), { split: false }),
+          name: $T.string(),
+        },
+      },
+      () => []
+    )
+
+    const spec = await OpenAPISerializer(g)
+    const params = (spec.paths!['/q'] as any).get.parameters!
+    const param = (name: string) => params.find((p: any) => p.name === name)!
+    expect(param('filter')).toMatchObject({ in: 'query', style: 'deepObject', explode: true })
+    expect(param('piped')).toMatchObject({ style: 'pipeDelimited' })
+    expect(param('spaced')).toMatchObject({ style: 'spaceDelimited' })
+    // form/explode:true is the default *and* both forms are accepted: nothing to say
+    expect(param('tags')).not.toHaveProperty('style')
+    expect(param('exact')).not.toHaveProperty('style')
+    expect(param('name')).not.toHaveProperty('style')
+  })
+
   test('declared cookies become in: cookie parameters', async () => {
     const g = new Galbe()
     g.get(

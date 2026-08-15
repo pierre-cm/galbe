@@ -1158,3 +1158,78 @@ describe('body limit', () => {
     expect(resp.status).toBe(413)
   })
 })
+
+describe('query serialization', () => {
+  const port = 7374
+  const galbe = new Galbe()
+
+  beforeAll(async () => {
+    galbe.get(
+      '/deep',
+      { query: { filter: $T.object({ lat: $T.number(), lon: $T.number() }), tag: $T.optional($T.string()) } },
+      ctx => ctx.query
+    )
+    galbe.get('/deep/record', { query: { meta: $T.record($T.string()) } }, ctx => ctx.query)
+    galbe.get(
+      '/arrays',
+      {
+        query: {
+          tags: $T.optional($T.array($T.string())),
+          exact: $T.optional($T.array($T.string(), { split: false })),
+          piped: $T.optional($T.array($T.string(), { split: '|' })),
+        },
+      },
+      ctx => ctx.query
+    )
+    await galbe.listen(port)
+  })
+  afterAll(() => galbe.stop())
+
+  const get = (path: string, qs: string) => fetch(`http://localhost:${port}${path}?${qs}`)
+
+  test('an object query parameter is parsed from its bracketed keys', async () => {
+    const resp = await get('/deep', 'filter[lat]=1.5&filter[lon]=-2')
+    expect(resp.status).toBe(200)
+    expect(await resp.json()).toEqual({ filter: { lat: 1.5, lon: -2 } })
+  })
+
+  test('the JSON-encoded spelling still works', async () => {
+    const resp = await get('/deep', `filter=${encodeURIComponent('{"lat":1.5,"lon":-2}')}`)
+    expect(resp.status).toBe(200)
+    expect(await resp.json()).toEqual({ filter: { lat: 1.5, lon: -2 } })
+  })
+
+  test('each property is validated against its own schema', async () => {
+    const resp = await get('/deep', 'filter[lat]=nope&filter[lon]=-2')
+    expect(resp.status).toBe(400)
+    expect(await resp.json()).toEqual({ query: { filter: { lat: 'Not a valid number' } } })
+  })
+
+  test('a missing property of an object parameter is reported', async () => {
+    const resp = await get('/deep', 'filter[lat]=1')
+    expect(resp.status).toBe(400)
+    expect(await resp.json()).toEqual({ query: { filter: { lon: 'Required' } } })
+  })
+
+  test('a record query parameter takes every bracketed key', async () => {
+    const resp = await get('/deep/record', 'meta[a]=1&meta[b]=2')
+    expect(await resp.json()).toEqual({ meta: { a: '1', b: '2' } })
+  })
+
+  test('an array query parameter accepts both the repeated and the delimited form', async () => {
+    expect(await (await get('/arrays', 'tags=a&tags=b')).json()).toEqual({ tags: ['a', 'b'] })
+    expect(await (await get('/arrays', 'tags=a,b')).json()).toEqual({ tags: ['a', 'b'] })
+  })
+
+  test('split: false keeps a delimiter-bearing value as one item', async () => {
+    // the lossy default: without it, a single element containing a comma is unreachable
+    expect(await (await get('/arrays', 'exact=a,b')).json()).toEqual({ exact: ['a,b'] })
+    expect(await (await get('/arrays', 'exact=a&exact=b')).json()).toEqual({ exact: ['a', 'b'] })
+  })
+
+  test('a custom split delimiter is honoured', async () => {
+    expect(await (await get('/arrays', 'piped=a|b')).json()).toEqual({ piped: ['a', 'b'] })
+    // and the default delimiter is not special any more
+    expect(await (await get('/arrays', 'piped=a,b')).json()).toEqual({ piped: ['a,b'] })
+  })
+})

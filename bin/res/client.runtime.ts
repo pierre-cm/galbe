@@ -34,6 +34,11 @@ const _buildUrl = (base: string | undefined, path: string, query?: Record<string
     for (const [k, v] of Object.entries(query)) {
       if (v === undefined || v === null) continue
       if (Array.isArray(v)) for (const item of v) params.append(k, String(item))
+      // an object parameter is serialized as deepObject — `?filter[lat]=1`
+      else if (typeof v === 'object')
+        for (const [pk, pv] of Object.entries(v as Record<string, any>)) {
+          if (pv !== undefined && pv !== null) params.append(`${k}[${pk}]`, String(pv))
+        }
       else params.set(k, String(v))
     }
     const qs = params.toString()

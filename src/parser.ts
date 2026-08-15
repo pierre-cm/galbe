@@ -735,6 +735,43 @@ export const requestPathParser = (input: string, path: string) => {
   return params
 }
 
+/**
+ * OpenAPI's `deepObject`: `?filter[lat]=1&filter[lon]=2` is one object
+ * parameter. Gathers the bracketed keys belonging to `key` and coerces each
+ * value against the property schema governing it — `additionalProperties`
+ * included, so a `$T.record` query parameter works too. Returns undefined when
+ * the query carries no bracketed key for `key`, leaving the JSON-encoded
+ * spelling (`?filter={"lat":1}`) to `paramParser`.
+ */
+const deepObjectParser = (params: { [key: string]: any }, key: string, type: STObject) => {
+  const prefix = `${key}[`
+  const out: Record<string, any> = {}
+  const errors: Record<string, any> = {}
+  let found = false
+  for (const k of Object.keys(params)) {
+    if (!k.startsWith(prefix) || !k.endsWith(']')) continue
+    // one level only: OpenAPI leaves nested deepObject undefined
+    const prop = k.slice(prefix.length, -1)
+    if (!prop || prop.includes('[') || prop.includes(']')) continue
+    found = true
+    const ps = (type.props?.[prop] ?? type.additionalProperties) as STMultipartFormValues | undefined
+    // an undeclared property is kept raw: `additionalProperties: false` rejects
+    // it downstream, an open object ignores it, and neither needs a guess here
+    if (!ps) {
+      out[prop] = params[k]
+      continue
+    }
+    try {
+      out[prop] = paramParser(params[k], ps)
+    } catch (error) {
+      errors[prop] = error
+    }
+  }
+  if (!found) return undefined
+  if (Object.keys(errors).length) throw errors
+  return out
+}
+
 export const parseEntry = <T extends STProps>(
   params: { [key: string]: any },
   schema: T,
@@ -753,8 +790,20 @@ export const parseEntry = <T extends STProps>(
   Object.entries(schema).forEach(([key, s]) => {
     const k = options?.i === true ? key.toLowerCase() : key
     let v = params[k]
-    if (s[Kind] === 'array' && options?.name === 'query' && typeof v === 'string') v = v.split(',')
+    if (s[Kind] === 'array' && options?.name === 'query' && typeof v === 'string') {
+      // a single value may carry several items; repeated keys always may too
+      const delimiter = (s as unknown as STArray).split
+      if (delimiter !== false) v = v.split(delimiter || ',')
+    }
     try {
+      if (options?.name === 'query' && s[Kind] === 'object' && v === undefined) {
+        const deep = deepObjectParser(params, k, s as unknown as STObject)
+        if (deep !== undefined) {
+          //@ts-ignore
+          parsedParams[k] = runCompiled(deep, s as unknown as STSchema)
+          return
+        }
+      }
       let p = paramParser(v, s as STMultipartFormValues)
       //@ts-ignore
       if (p !== undefined) parsedParams[k] = p

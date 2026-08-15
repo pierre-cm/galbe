@@ -146,7 +146,9 @@ type STParamsValue = MaybeSTUnion<STParamsPrimaryValue>
 export type STParams<Path extends string = string> = Record<ExtractParams<Path>, STParamsValue>
 
 type STQueryPrimaryValue = STString | STBoolean | STNumber | STInteger | STLiteral
-type STQueryValue = MaybeSTArray<MaybeSTUnion<STQueryPrimaryValue>>
+// An object query parameter is OpenAPI's `deepObject`: `?filter[lat]=1&filter[lon]=2`.
+// A JSON-encoded value is accepted for it too.
+type STQueryValue = MaybeSTArray<MaybeSTUnion<STQueryPrimaryValue>> | STObject
 export type STQuery = Record<string, STQueryValue>
 
 // A cookie arrives as one string; like headers and query params it is parsed
