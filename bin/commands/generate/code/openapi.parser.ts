@@ -16,6 +16,18 @@ type SchemaEntry = {
   responseExample?: any
   /** Response-only: content-level multi-key examples. */
   responseExamples?: Record<string, any>
+  /**
+   * Response-only: the response's bodies as `[mediaType, schema]` pairs. Kept
+   * even for a single media type so the component can be emitted in the
+   * content-map form — decorating a schema by spread would leak the response's
+   * `description`/`example` into the shared component schema it refers to.
+   */
+  responseContent?: [string, string][]
+  /** RequestBody-only: the bodies as `[mediaType, schema]` pairs, same rationale as `responseContent`. */
+  requestContent?: [string, string][]
+  /** RequestBody-only: the component-level description and requiredness. */
+  requestDescription?: string
+  requestRequired?: boolean
 }
 type EndpointEntry = {
   /** leading literal path segments — the last one names the route file, the ones before it the directory */
@@ -247,25 +259,27 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
     let dependsOn = new Set<string>()
     let responseExample: any = undefined
     let responseExamples: Record<string, any> | undefined = undefined
+    let responseContent: [string, string][] | undefined = undefined
+    let requestContent: [string, string][] | undefined = undefined
     if (kind === 'schemas') schema = parseOapiSchema(s, { id: k })
     else if (kind === 'requestBodies') {
-      let schemas = [] as string[]
-      if (!!s.content) {
-        const contentMap = (s as OpenAPIV3.RequestBodyObject)?.content || { null: {} }
-        schemas = [...new Set(Object.entries(contentMap).map(([media, v]) => parseOapiSchema(v.schema, { id: k }, { media })))]
-      } else {
-        schemas = [parseOapiSchema(undefined, { id: k, ...s })]
-      }
-      schema = schemas.length <= 0 ? '' : schemas.length === 1 ? schemas[0] : `$T.union([${schemas.join(',')}])`
+      const contentMap = (s as OpenAPIV3.RequestBodyObject)?.content
+      requestContent = Object.entries(contentMap || {}).map(([media, v]) => [media, parseOapiSchema(v.schema, {}, { media })])
+      schema = `{${requestContent.map(([m, v]) => `"${m}": ${v}`).join(',')}}`
     } else if (kind === 'responses') {
       if (!s.content) {
-        schema = parseOapiSchema(undefined, { id: k, ...s })
+        // a bodiless component response: no media types, description only
+        responseContent = []
       } else {
         const contentMap = s.content as Record<string, { schema?: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject; example?: any; examples?: any }>
         const entries = Object.entries(contentMap)
         for (const [, v] of entries) {
           if (v.example !== undefined && responseExample === undefined) responseExample = v.example
-          if (v.examples && Object.keys(v.examples).length) responseExamples = { ...(responseExamples || {}), ...v.examples }
+          if (v.examples && Object.keys(v.examples).length)
+            responseExamples = {
+              ...(responseExamples || {}),
+              ...Object.fromEntries(Object.entries(v.examples).map(([k, ex]) => [k, resolveExample(ex, def.components)])),
+            }
         }
         const keyGroups: Record<string, string[]> = {}
         for (const [media, v] of entries) {
@@ -274,31 +288,36 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
           if (!keyGroups[galbeKey]) keyGroups[galbeKey] = []
           keyGroups[galbeKey].push(schemaStr)
         }
-        const uniqueKeys = Object.keys(keyGroups)
-        if (uniqueKeys.length <= 1) {
-          const [key] = uniqueKeys
-          const uniqueSchemas = [...new Set(keyGroups[key] || [])]
-          schema = uniqueSchemas.length === 0 ? '' : uniqueSchemas.length === 1 ? uniqueSchemas[0] : `$T.union([${uniqueSchemas.join(',')}])`
-        } else {
-          const parts = Object.entries(keyGroups).map(([k, schemas]) => {
-            const unique = [...new Set(schemas)]
-            return `"${k}": ${unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`}`
-          })
-          schema = `{${parts.join(',')}}`
-        }
+        responseContent = Object.entries(keyGroups).map(([k, schemas]) => {
+          const unique = [...new Set(schemas)]
+          return [k, unique.length === 1 ? unique[0]! : `$T.union([${unique.join(',')}])`]
+        })
+        schema = `{${responseContent.map(([k, v]) => `"${k}": ${v}`).join(',')}}`
       }
     }
-    schema = unref(schema, m => {
-      let l = m.split('/')
-      dependsOn.add(m)
-      return l[l.length - 1]
-    })
+    const deref = (code: string) =>
+      unref(code, m => {
+        let l = m.split('/')
+        dependsOn.add(m)
+        return l[l.length - 1]!
+      })
+    schema = deref(schema)
+    responseContent = responseContent?.map(([media, sc]) => [media, deref(sc)])
+    requestContent = requestContent?.map(([media, sc]) => [media, deref(sc)])
     index[`#/components/${kind}/${k}`] = {
       key: k,
       prefix: '',
       schema,
       dependsOn,
       usedBy: new Set(),
+      ...(kind === 'responses' ? { responseContent: responseContent ?? [] } : {}),
+      ...(kind === 'requestBodies'
+        ? {
+            requestContent: requestContent ?? [],
+            ...(typeof s?.description === 'string' && s.description ? { requestDescription: s.description } : {}),
+            ...(s?.required !== undefined ? { requestRequired: !!s.required } : {}),
+          }
+        : {}),
       ...(kind === 'responses' && typeof s?.description === 'string' && s.description
         ? { responseDescription: s.description }
         : {}),
@@ -315,6 +334,22 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
   })
 
   return index
+}
+
+/**
+ * Inline a `#/components/examples/*` reference. Galbe carries examples as plain
+ * values on the schema, with nowhere to keep a components entry, so a `$ref`
+ * left as-is would dangle in the regenerated spec.
+ */
+const resolveExample = (ex: any, components: OpenAPIV3.ComponentsObject | undefined, seen = new Set<string>()): any => {
+  const ref: unknown = ex?.$ref
+  if (typeof ref !== 'string' || seen.has(ref)) return ex
+  let match = ref.match(/^#\/components\/examples\/(.+)$/)
+  if (!match) return ex
+  let target = components?.examples?.[match[1]!]
+  if (!target) return ex
+  seen.add(ref)
+  return resolveExample(target, components, seen)
 }
 
 const resolveParamRef = (
@@ -489,7 +524,8 @@ const parseEndpointDef = (
         const galbeKey = mediaType
         if ((tv as any).example !== undefined && singleExample === undefined) singleExample = (tv as any).example
         if (tv.examples && Object.keys(tv.examples).length) {
-          for (const [k, ex] of Object.entries(tv.examples)) exampleParts.push(`${JSON.stringify(k)}:${JSON.stringify(ex)}`)
+          for (const [k, ex] of Object.entries(tv.examples))
+            exampleParts.push(`${JSON.stringify(k)}:${JSON.stringify(resolveExample(ex, components))}`)
         }
         const schemaStr = unref(parseOapiSchema(tv.schema), m => {
           let l = m.split('/')
@@ -519,16 +555,15 @@ const parseEndpointDef = (
         const [key] = uniqueKeys
         const unique = [...new Set(keyGroups[key] || [])]
         let schemaStr = unique.length === 0 ? `$T.null()` : unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`
-        // Embed per-media-type example/examples inside the schema spread so the
-        // content-map serializer can read them from the per-key body schema.
-        const perKeyExtras: string[] = []
-        if (exampleParts.length) perKeyExtras.push(`examples:{${exampleParts.join(',')}}`)
-        if (singleExample !== undefined) perKeyExtras.push(`example:${JSON.stringify(singleExample)}`)
-        if (perKeyExtras.length) schemaStr = `({...${schemaStr},${perKeyExtras.join(',')}})`
+        // Examples sit beside the body in the content map, never spread onto the
+        // body schema: a spread carrying `example`/`examples` over a schema with
+        // an `id` leaks them into that shared component (see _responseId above).
         const parts: string[] = []
         if (key) parts.push(`"${key}":${schemaStr}`)
         if (description) parts.push(`description:${JSON.stringify(description)}`)
         if (headerEntries.length) parts.push(`responseHeaders:{${headerEntries.join(',')}}`)
+        if (exampleParts.length) parts.push(`examples:{${exampleParts.join(',')}}`)
+        if (singleExample !== undefined) parts.push(`example:${JSON.stringify(singleExample)}`)
         return [s, `{${parts.join(',')}}`]
       }
     })
@@ -633,32 +668,33 @@ const renderComponentSchemaFile = (
         imports[depOrig].push(depName)
       }
     }
-    // For requestBodies/responses that are just a single ref to another schema,
-    // preserve identity by tagging a _responseId / _requestBodyId rather than
-    // aliasing it (which would lose the original component name in the spec).
-    const isSingleAlias =
-      (type === 'responses' || type === 'requestBodies') &&
-      s.dependsOn.size === 1 &&
-      s.schema.trim() === [...s.dependsOn][0].split('/').pop()
-    const responseExtras: string[] = []
-    if (type === 'responses') {
-      if (s.responseDescription) responseExtras.push(`description: ${JSON.stringify(s.responseDescription)}`)
-      if (s.responseExample !== undefined) responseExtras.push(`example: ${JSON.stringify(s.responseExample)}`)
-      if (s.responseExamples) responseExtras.push(`examples: ${JSON.stringify(s.responseExamples)}`)
+    // Responses and requestBodies are emitted in the content-map form: media
+    // types as keys, the component's own metadata beside them, and an
+    // `_responseId` / `_requestBodyId` preserving the component's name so the
+    // serializer can put it back under `components` and `$ref` it.
+    //
+    // Never a spread onto the body schema: that writes the response's
+    // `description`/`example` into the shared component schema the body refers
+    // to, which the serializer registers by `id`.
+    if (type === 'responses' || type === 'requestBodies') {
+      const isResp = type === 'responses'
+      const content = (isResp ? s.responseContent : s.requestContent) ?? []
+      const extras = [`${isResp ? '_responseId' : '_requestBodyId'}: "${s.key}"`]
+      const description = isResp ? s.responseDescription : s.requestDescription
+      if (description) extras.push(`description: ${JSON.stringify(description)}`)
+      if (isResp) {
+        if (s.responseExample !== undefined) extras.push(`example: ${JSON.stringify(s.responseExample)}`)
+        if (s.responseExamples) extras.push(`examples: ${JSON.stringify(s.responseExamples)}`)
+      } else if (s.requestRequired !== undefined) extras.push(`required: ${s.requestRequired}`)
+      const body = [...content.map(([media, sc]) => `${JSON.stringify(media)}: ${sc}`), ...extras].join(', ')
+      // the exported type is the body type, read back off the const
+      const bodyType = content.length
+        ? content.map(([media]) => `Static<(typeof ${s.key})[${JSON.stringify(media)}]>`).join(' | ')
+        : 'null'
+      decl.push(`export const ${s.key} = { ${body} }\nexport type ${s.key} = ${bodyType}\n`)
+      return
     }
-    if (isSingleAlias) {
-      const tagKey = type === 'responses' ? '_responseId' : '_requestBodyId'
-      const extras = [`${tagKey}: "${s.key}"`, ...responseExtras]
-      decl.push(
-        `export const ${s.key} = { ...${s.schema}, ${extras.join(', ')} } as typeof ${s.schema}\nexport type ${s.key} = Static<typeof ${s.key}>\n`
-      )
-    } else if (type === 'responses' && responseExtras.length) {
-      decl.push(
-        `export const ${s.key} = {...${s.schema}, ${responseExtras.join(', ')}}\nexport type ${s.key} = Static<typeof ${s.key}>\n`
-      )
-    } else {
-      decl.push(`export const ${s.key} = ${s.schema}\nexport type ${s.key} = Static<typeof ${s.key}>\n`)
-    }
+    decl.push(`export const ${s.key} = ${s.schema}\nexport type ${s.key} = Static<typeof ${s.key}>\n`)
   })
   if (decl.length === 0) return ''
   return `import type { Static } from 'galbe/schema'\nimport { $T } from 'galbe'\n${Object.entries(imports)

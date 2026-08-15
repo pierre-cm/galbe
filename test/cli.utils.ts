@@ -69,6 +69,14 @@ export const runCli = (dir: string, args: string[]): CliProc => {
   }
 }
 
+/** run a galbe CLI command to completion; throws with the captured output on failure */
+export const cli = async (dir: string, args: string[]): Promise<string> => {
+  const proc = runCli(dir, args)
+  const code = await proc.exited
+  if (code !== 0) throw new Error(`galbe ${args.join(' ')} exited with ${code}\n--- cli output ---\n${proc.plain()}`)
+  return proc.plain()
+}
+
 /** poll until `fn` returns a value, or throw with the process output on timeout */
 export const until = async <T>(
   proc: CliProc,

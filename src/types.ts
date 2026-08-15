@@ -60,6 +60,24 @@ export type STBodyValue =
 
 export type STBodyContent = Partial<Record<MediaType, STBodyValue>>
 export type STBody = STNull | STBodyContent
+/**
+ * Metadata a request body may carry beside its media types — describing the
+ * body itself rather than any one of its schemas. Kept out of `STBodyContent`
+ * on purpose: `Context` maps over the body's keys to derive `contentType`, so
+ * anything intersected there would surface as a bogus content type. `MediaType`
+ * is a `${string}/${string}` pattern, so these keys never collide with a body.
+ */
+export type STBodyMeta = {
+  /** Describes the request body itself, as opposed to any one of its schemas. */
+  description?: string
+  /** Whether the request body is required. Inferred from the schemas when unset. */
+  required?: boolean
+  /**
+   * Names the `components.requestBodies` entry this body came from, so spec
+   * generators can emit it once and `$ref` it. Set by `galbe generate code`.
+   */
+  _requestBodyId?: string
+}
 export type STBodyType = MediaType
 
 export type STResponseBodyValue =
@@ -81,6 +99,15 @@ export type STResponseBodyValue =
 export type STResponseContent = Partial<Record<MediaType, STResponseBodyValue>> & {
   description?: string
   responseHeaders?: Record<string, STSchema>
+  /** A single example, applied to every media type this response offers. */
+  example?: any
+  /** Named examples (OpenAPI `examples`), applied to every media type offered. */
+  examples?: Record<string, any>
+  /**
+   * Names the `components.responses` entry this response came from, so spec
+   * generators can emit it once and `$ref` it. Set by `galbe generate code`.
+   */
+  _responseId?: string
 }
 export type STResponseBodyKey = MediaType
 export type STResponseEntry = STResponseValue | STResponseContent
@@ -144,6 +171,13 @@ export type OpenAPIConfig = {
   info?: Partial<OpenAPIV3.InfoObject>
   /** The spec's `servers` list. Unset by default. */
   servers?: OpenAPIV3.ServerObject[]
+  /**
+   * The spec's `components.securitySchemes`. Route-level `@security <name>` tags
+   * name a scheme; this is where the scheme itself is defined. A scheme declared
+   * here always wins over the `bearerAuth` the serializer infers from an
+   * `Authorization: Bearer` header.
+   */
+  securitySchemes?: Record<string, OpenAPIV3.SecuritySchemeObject | OpenAPIV3.ReferenceObject>
 }
 
 export type GalbeConfig = {

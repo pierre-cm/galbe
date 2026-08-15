@@ -67,6 +67,13 @@ paths:
         '200': { description: ok }
 `
 
+/**
+ * Every case here spawns the CLI at least once, and `generate code` shells out
+ * to `bunx prettier`, which is well past the 5s default test timeout whenever
+ * bun's package cache is cold.
+ */
+const cliTest = (name: string, fn: () => Promise<void>) => test(name, fn, 120_000)
+
 describe('generate code merge flow', () => {
   let workspace: string
   let dir: string
@@ -97,7 +104,7 @@ describe('generate code merge flow', () => {
     )
   })
 
-  test('fresh generation succeeds without -F flag', async () => {
+  cliTest('fresh generation succeeds without -F flag', async () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     const r = await run(['generate', 'code', 'spec.yaml'], dir)
     expect(r.code).toBe(0)
@@ -106,7 +113,7 @@ describe('generate code merge flow', () => {
     expect(route).toContain('g.get("/users/:id"')
   })
 
-  test('re-run with same spec is idempotent and reports no diff items', async () => {
+  cliTest('re-run with same spec is idempotent and reports no diff items', async () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     await run(['generate', 'code', 'spec.yaml'], dir)
     const before = await readFile(join(dir, 'src/users.route.ts'), 'utf-8')
@@ -116,7 +123,7 @@ describe('generate code merge flow', () => {
     expect(after).toBe(before)
   })
 
-  test('user handler edits survive re-generation', async () => {
+  cliTest('user handler edits survive re-generation', async () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     await run(['generate', 'code', 'spec.yaml'], dir)
 
@@ -137,7 +144,7 @@ describe('generate code merge flow', () => {
     expect(after).toMatch(/return \[\{ id: ["']1["'], name: ["']alice["'] \}\]/)
   })
 
-  test('stale routes block writing without --remove-stale', async () => {
+  cliTest('stale routes block writing without --remove-stale', async () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     await run(['generate', 'code', 'spec.yaml'], dir)
 
@@ -155,7 +162,7 @@ describe('generate code merge flow', () => {
     expect(route).not.toContain('g.post("/users"')
   })
 
-  test('--remove-stale deletes stale routes and prunes import', async () => {
+  cliTest('--remove-stale deletes stale routes and prunes import', async () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     await run(['generate', 'code', 'spec.yaml'], dir)
 
@@ -169,7 +176,7 @@ describe('generate code merge flow', () => {
     expect(route).toContain('g.get("/users"')
   })
 
-  test('--ignore-route keeps stale route untouched', async () => {
+  cliTest('--ignore-route keeps stale route untouched', async () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     await run(['generate', 'code', 'spec.yaml'], dir)
 
@@ -195,7 +202,7 @@ describe('generate code merge flow', () => {
     expect(after).toContain('g.post("/users"')
   })
 
-  test('--rename preserves handler when route id changes', async () => {
+  cliTest('--rename preserves handler when route id changes', async () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     await run(['generate', 'code', 'spec.yaml'], dir)
 
@@ -220,7 +227,7 @@ describe('generate code merge flow', () => {
     expect(after).toContain('fetched: true')
   })
 
-  test('--dry-run prints diff and writes nothing', async () => {
+  cliTest('--dry-run prints diff and writes nothing', async () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     await run(['generate', 'code', 'spec.yaml'], dir)
     const before = await readFile(join(dir, 'src/users.route.ts'), 'utf-8')
@@ -239,7 +246,7 @@ describe('generate code merge flow', () => {
     expect(after).toBe(before)
   })
 
-  test('-F is no longer a recognized flag', async () => {
+  cliTest('-F is no longer a recognized flag', async () => {
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V1)
     const r = await run(['generate', 'code', 'spec.yaml', '-F'], dir)
     expect(r.code).not.toBe(0)

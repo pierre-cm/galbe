@@ -29,14 +29,21 @@ const schemaToMedia = ({ type, format, isJson }: SchemaType, hasComposite = fals
         : 'application/json'
 
 export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<OpenAPIV3.Document> => {
+  // OpenAPI 3.0 schemas follow JSON Schema draft-4, where `exclusiveMinimum` /
+  // `exclusiveMaximum` are booleans modifying `minimum` / `maximum`. 3.1 (JSON
+  // Schema 2020-12) makes them the numeric bound itself.
+  const draft4Bounds = version.startsWith('3.0')
   let paths: any = {}
   let components: OpenAPIV3.ComponentsObject = {
-    securitySchemes: {},
+    securitySchemes: { ...g.config?.openapi?.securitySchemes },
     schemas: {},
     parameters: {},
     requestBodies: {},
     responses: {},
   }
+  // A scheme the app declared is authoritative: never overwrite it with one
+  // inferred from a route's Authorization header.
+  const declaredSchemes = new Set(Object.keys(g.config?.openapi?.securitySchemes ?? {}))
 
   const schemaToOpenapi = (
     schema: STSchema
@@ -58,12 +65,22 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     else if (kind === 'byteArray') s = { type: 'string', format: 'binary' }
     else if (kind === 'number' || kind === 'integer') {
       const n = schema as STNumber | STInteger
+      // An exclusive bound wins over an inclusive one on the same side: draft-4
+      // has a single `minimum`/`maximum` slot, and the exclusive form is the
+      // one the parser emits when the source spec marked the bound exclusive.
+      const lower = n.exclusiveMin !== undefined ? { value: n.exclusiveMin, exclusive: true } : n.min !== undefined ? { value: n.min, exclusive: false } : undefined
+      const upper = n.exclusiveMax !== undefined ? { value: n.exclusiveMax, exclusive: true } : n.max !== undefined ? { value: n.max, exclusive: false } : undefined
+      const bound = (b: typeof lower, key: 'minimum' | 'maximum') => {
+        if (!b) return {}
+        if (!b.exclusive) return { [key]: b.value }
+        return draft4Bounds
+          ? { [key]: b.value, [`exclusive${key[0]!.toUpperCase()}${key.slice(1)}`]: true }
+          : { [`exclusive${key[0]!.toUpperCase()}${key.slice(1)}`]: b.value }
+      }
       s = {
         type: kind,
-        ...(n.exclusiveMin !== undefined ? { exclusiveMinimum: n.exclusiveMin } : {}),
-        ...(n.exclusiveMax !== undefined ? { exclusiveMaximum: n.exclusiveMax } : {}),
-        ...(n.min !== undefined ? { minimum: n.min } : {}),
-        ...(n.max !== undefined ? { maximum: n.max } : {}),
+        ...bound(lower, 'minimum'),
+        ...bound(upper, 'maximum'),
       }
     } else if (kind === 'string') {
       const str = schema as STString
@@ -169,6 +186,10 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
 
   const parseParam = (key: string, param: STSchema, kind: 'query' | 'header' | 'path' | 'cookie') => {
     let { schema } = schemaToOpenapi({ ...param, [Optional]: false })
+    // A Galbe schema has one `description`, which is where a parameter's own
+    // description lives. It belongs on the Parameter Object, so lift it and
+    // drop the copy the schema serializer emitted (same as response headers).
+    if ((schema as any)?.description) delete (schema as any).description
     let p: OpenAPIV3.ParameterObject = {
       name: key,
       in: kind,
@@ -250,7 +271,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
                 if (typeof str.format === 'string') scheme.bearerFormat = str.format
                 if (typeof str.description === 'string') scheme.description = str.description
                 if (!components.securitySchemes) components.securitySchemes = {}
-                components.securitySchemes.bearerAuth = scheme
+                if (!declaredSchemes.has('bearerAuth')) components.securitySchemes.bearerAuth = scheme
                 return null
               }
             }
@@ -263,29 +284,40 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
 
     let requestBody
     if (r.schema.body) {
+      // Like STResponseContent, a body map keys its bodies by media type; any
+      // other key (`description`, `required`, `_requestBodyId`) is metadata
+      // about the request body itself.
+      const bodyMap = r.schema.body as Record<string, any>
       let description: string | undefined
       let conflictDescription = false
       let required = false
       let content = Object.fromEntries(
-        Object.entries(r.schema.body).map(([bodyType, schema]) => {
-          const s = schema.description
-          const isDefined = typeof s === 'string' && s !== ''
-          if (!schema?.[Optional]) required = true
-          if (isDefined) {
-            if (description === undefined) {
-              description = s
-            } else if (description !== s) {
-              conflictDescription = true
+        Object.entries(bodyMap)
+          .filter(([bodyType, schema]) => bodyType.includes('/') && schema)
+          .map(([bodyType, schema]) => {
+            const s = schema.description
+            const isDefined = typeof s === 'string' && s !== ''
+            if (!schema?.[Optional]) required = true
+            if (isDefined) {
+              if (description === undefined) {
+                description = s
+              } else if (description !== s) {
+                conflictDescription = true
+              }
             }
-          }
-          description = conflictDescription ? undefined : (description ?? undefined)
-          return [bodyType, { schema: schemaToOpenapi(schema).schema }]
-        })
+            description = conflictDescription ? undefined : (description ?? undefined)
+            return [bodyType, { schema: schemaToOpenapi(schema).schema }]
+          })
       )
       requestBody = {
-        description,
-        required,
+        description: typeof bodyMap.description === 'string' ? bodyMap.description : description,
+        required: typeof bodyMap.required === 'boolean' ? bodyMap.required : required,
         content,
+      }
+      // a body that came from components.requestBodies is emitted once and referenced
+      if (components.requestBodies && bodyMap._requestBodyId) {
+        components.requestBodies[bodyMap._requestBodyId as string] = requestBody
+        requestBody = { $ref: `#/components/requestBodies/${bodyMap._requestBodyId}` } as any
       }
     }
     let responses
@@ -299,16 +331,20 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
           let response: OpenAPIV3.ResponseObject
 
           if (isContentMap) {
-            // STResponseContent — iterate body-type keys
+            // STResponseContent — every key holding a media type is a body; the
+            // rest (`description`, `example`, `examples`, `responseHeaders`,
+            // `_responseId`) is response-level metadata. Media types always
+            // contain a '/', which is what separates the two.
             const cm = v as any
             const desc = cm.description || HttpStatus[s as keyof typeof HttpStatus] || 'Response'
             const content: Record<string, { schema: any; example?: any; examples?: Record<string, any> }> = {}
             for (const [key, bodySchema] of Object.entries(cm)) {
-              if (key === 'description' || key === 'responseHeaders' || key === 'example' || key === 'examples') continue
+              if (!key.includes('/') || !bodySchema) continue
               const { schema: oaSchema } = schemaToOpenapi(bodySchema as STSchema)
               content[key] = { schema: oaSchema }
-              const ex = (bodySchema as any)?.examples
-              const exSingle = (bodySchema as any)?.example
+              // response-level example(s) apply to every media type offered
+              const ex = (bodySchema as any)?.examples ?? cm.examples
+              const exSingle = (bodySchema as any)?.example ?? cm.example
               if (ex && Object.keys(ex).length) content[key]!.examples = ex
               if (exSingle !== undefined) content[key]!.example = exSingle
             }
@@ -339,13 +375,6 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
                 content,
               }
             }
-            const respSchema = r.schema.response?.[s] as any
-            const respId = respSchema?._responseId
-            if (components.responses && respId) {
-              components.responses[respId as string] = response
-              //@ts-ignore
-              response = { $ref: `#/components/responses/${respId}` }
-            }
           }
 
           if (explicitHeaders && Object.keys(explicitHeaders).length) {
@@ -362,6 +391,16 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
               if ((hSer as any)?.description) delete (hSer as any).description
               response.headers[hName] = headerObj
             }
+          }
+
+          // `_responseId` marks a response that came from components.responses.
+          // Register the fully-built response — headers included — and refer to
+          // it: a Reference Object tolerates no sibling keys in 3.0.
+          const respId = (v as any)?._responseId
+          if (components.responses && respId) {
+            components.responses[respId as string] = response
+            //@ts-ignore
+            response = { $ref: `#/components/responses/${respId}` }
           }
           return [s, response]
         })

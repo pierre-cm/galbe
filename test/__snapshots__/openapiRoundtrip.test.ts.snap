@@ -1,0 +1,51 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`openapi roundtrip differences against the source spec match the known set 1`] = `
+"changed /info/title
+           spec: "Opeco Module Registry API"
+           gen:  "rt"
+changed /info/version
+           spec: "1.0.0-draft"
+           gen:  "0.0.0"
+missing /info/description  "Publish, browse, and download Opeco modules.\\n\\nThe Opeco module registry is a custom REST + JSON service tha…
+missing /info/contact  {"name":"Opeco","url":"https://opeco.io"}
+missing /info/license  {"name":"Proprietary"}
+missing /servers  [{"url":"http://localhost:3001","description":"Local dev (\`bun dev\`, AUTH_MODE=none)"},{"url":"https://store.o…
+missing /tags  [{"name":"System","description":"Health and metadata endpoints."},{"name":"Modules","description":"Public read…
+missing /security  [{},{"bearerAuth":[]}]
+changed /paths//v1/modules/{scope}/{name}/{version}/get/parameters/path:version/description
+           spec: "Exact published version."
+           gen:  "A strict-semver version string."
+changed /paths//v1/modules/{scope}/{name}/{version}/delete/parameters/path:version/description
+           spec: "Exact published version."
+           gen:  "A strict-semver version string."
+changed /paths//v1/modules/{scope}/{name}/{version}/artifact/get/description
+           spec: "Streams the \`.tar.gz\` artifact for the given version. The body is\\nimmutable for the (scope, name, version) t…
+           gen:  "Streams the \`.tar.gz\` artifact for the given version. The body is\\nimmutable for the (scope, name, version) t…
+changed /paths//v1/modules/{scope}/{name}/{version}/artifact/get/parameters/path:version/description
+           spec: "Exact published version."
+           gen:  "A strict-semver version string."
+changed /paths//v1/modules/{scope}/{name}/readme/get/parameters/query:version/description
+           spec: "Specific version. Defaults to latest non-yanked."
+           gen:  "A strict-semver version string."
+changed /paths//v1/publish/post/description
+           spec: "Uploads a single \`.tar.gz\` artifact and registers a new (scope,\\nname, version) tuple in one shot. The server…
+           gen:  "Uploads a single \`.tar.gz\` artifact and registers a new (scope,\\nname, version) tuple in one shot. The server…
+changed /paths//v1/modules/{scope}/{name}/{version}/yank/post/parameters/path:version/description
+           spec: "Exact published version."
+           gen:  "A strict-semver version string."
+missing /components/securitySchemes/bearerAuth/bearerFormat  "JWT"
+missing /components/securitySchemes/bearerAuth/description  "OAuth2 JWT access token issued by Ory Hydra. Validated against the\\nHydra JWKS URL configured at the registry…
+changed /components/schemas/ModuleId/pattern
+           spec: "^@[a-z0-9][a-z0-9-]{0,38}/[a-z0-9][a-z0-9._-]{0,63}$"
+           gen:  "^@[a-z0-9][a-z0-9-]{0,38}\\\\/[a-z0-9][a-z0-9._-]{0,63}$"
+changed /components/schemas/AdvisoryInput/required/2
+           spec: "severity"
+           gen:  "affectedVersions"
+changed /components/schemas/AdvisoryInput/required/3
+           spec: "summary"
+           gen:  "severity"
+changed /components/schemas/AdvisoryInput/required/4
+           spec: "affectedVersions"
+           gen:  "summary""
+`;

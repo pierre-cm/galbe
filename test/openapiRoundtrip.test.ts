@@ -1,47 +1,58 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
-import { mkdtemp, rm, writeFile, mkdir, symlink } from 'fs/promises'
-import { tmpdir } from 'os'
+import { rm } from 'fs/promises'
 import { join, resolve } from 'path'
 
-const PROJECT = resolve(__dirname, '..')
-const CLI = resolve(PROJECT, 'bin/cli.ts')
-const FIXTURE = resolve(PROJECT, 'test/resources/openapi.fixture.yaml')
+import { cli, createApp } from './cli.utils'
+import { diffSpec, normalize, report } from './openapi.diff'
 
-const run = async (args: string[], cwd: string) => {
-  const proc = Bun.spawn(['bun', CLI, ...args], { cwd, stdout: 'pipe', stderr: 'pipe' })
-  await proc.exited
-  if (proc.exitCode !== 0) {
-    const out = await new Response(proc.stdout).text()
-    const err = await new Response(proc.stderr).text()
-    throw new Error(`CLI failed (${proc.exitCode}): ${args.join(' ')}\nstdout:\n${out}\nstderr:\n${err}`)
-  }
-}
+const FIXTURE = resolve(import.meta.dir, 'resources/openapi.fixture.yaml')
 
+/**
+ * Roundtrip over a realistically shaped spec. `openapiExhaustive.test.ts`
+ * covers the construct matrix; this file pins the behaviours that a real API
+ * description depends on, plus the regressions found against it.
+ */
 describe('openapi roundtrip', () => {
   let dir: string
   let original: any
   let generated: any
+  let generatedJson: any
 
+  // three CLI invocations, one of which shells out to prettier: well past the
+  // 5s default hook timeout whenever bun's package cache is cold
   beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'galbe-rt-'))
-    await mkdir(join(dir, 'node_modules'), { recursive: true })
-    await symlink(PROJECT, join(dir, 'node_modules', 'galbe'))
-    await writeFile(
-      join(dir, 'package.json'),
-      JSON.stringify({ name: 'rt', version: '0.0.0', type: 'module', dependencies: { galbe: '*' } }, null, 2)
-    )
-    await Bun.write(join(dir, 'openapi.yaml'), await Bun.file(FIXTURE).text())
-    await writeFile(join(dir, 'index.ts'), `import { Galbe } from 'galbe'\nexport default new Galbe()\n`)
+    const source = await Bun.file(FIXTURE).text()
+    dir = await createApp({
+      'package.json': JSON.stringify(
+        { name: 'rt', version: '0.0.0', type: 'module', dependencies: { galbe: '*' } },
+        null,
+        2
+      ),
+      'index.ts': `import { Galbe } from 'galbe'\nexport default new Galbe()\n`,
+      'openapi.yaml': source,
+    })
 
-    await run(['generate', 'code', 'openapi.yaml'], dir)
-    await run(['generate', 'spec', './index.ts', '-o', 'generated.yaml'], dir)
+    await cli(dir, ['generate', 'code', 'openapi.yaml'])
+    await cli(dir, ['generate', 'spec', './index.ts', '-o', 'generated.yaml'])
+    await cli(dir, ['generate', 'spec', './index.ts', '-t', 'openapi:3.0:json', '-o', 'generated.json'])
 
-    original = Bun.YAML.parse(await Bun.file(FIXTURE).text()) as any
+    original = Bun.YAML.parse(source) as any
     generated = Bun.YAML.parse(await Bun.file(join(dir, 'generated.yaml')).text()) as any
-  })
+    generatedJson = await Bun.file(join(dir, 'generated.json')).json()
+  }, 120_000)
 
   afterAll(async () => {
     if (dir) await rm(dir, { recursive: true, force: true })
+  })
+
+  test('the yaml and json targets carry the same document', () => {
+    expect(generatedJson).toEqual(generated)
+  })
+
+  test('differences against the source spec match the known set', () => {
+    // The inventory of what this roundtrip loses. Growing it is a regression;
+    // shrinking it is the goal. See openapiExhaustive.test.ts for the details.
+    expect(report(diffSpec(normalize(original), normalize(generated)))).toMatchSnapshot()
   })
 
   test('generated layout follows the directory convention with relative paths', async () => {

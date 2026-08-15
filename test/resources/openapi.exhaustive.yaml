@@ -1,0 +1,1311 @@
+## Exhaustive OpenAPI 3.0.3 fixture.
+##
+## Every construct here exists to exercise one part of the
+## `generate code` (OpenAPI -> Galbe sources) / `generate spec`
+## (Galbe sources -> OpenAPI) pipeline. It is intentionally not a
+## realistic API: it is a coverage matrix. Each path is named after the
+## feature it covers, and the operation summary says what is under test.
+##
+## When you add a construct here, run `bun test test/openapiExhaustive.test.ts`
+## and inspect the roundtrip-diff snapshot: anything the pipeline drops shows
+## up there as a `missing`/`changed` entry.
+
+openapi: 3.0.3
+
+info:
+  title: Exhaustive Spec
+  version: 4.2.1
+  description: |
+    Coverage fixture for the OpenAPI parser and serializer.
+
+    It contains one endpoint family per construct family: primitives,
+    composition, bodies, responses, parameters, security and metadata.
+  termsOfService: https://example.test/tos
+  contact:
+    name: Spec Bot
+    url: https://example.test/contact
+    email: spec@example.test
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.example.test/v1
+    description: Production
+  - url: https://{tenant}.staging.example.test/v1
+    description: Staging, per tenant
+    variables:
+      tenant:
+        default: acme
+        enum: [acme, globex]
+        description: Tenant subdomain
+
+externalDocs:
+  url: https://example.test/docs
+  description: Full handbook
+
+tags:
+  - name: primitives
+    description: Scalar types, formats and constraints.
+  - name: composition
+    description: allOf / oneOf / anyOf / discriminator.
+  - name: bodies
+    description: Request body media types.
+  - name: responses
+    description: Status codes, headers, examples, links.
+  - name: params
+    description: Parameter locations and styles.
+  - name: security
+    description: Security schemes and scopes.
+  - name: meta
+    description: Operation metadata.
+  - name: admin
+    description: Deeply nested scope.
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ─────────────────────────────────────────────────────────────────
+  # Primitives: every scalar type, format and constraint
+  # ─────────────────────────────────────────────────────────────────
+  /primitives:
+    get:
+      tags: [primitives]
+      summary: Every scalar type as a query parameter.
+      description: |
+        Covers string/number/integer/boolean/array query parameters with the
+        full set of JSON Schema constraints Galbe knows how to express.
+      operationId: listPrimitives
+      security: []
+      parameters:
+        - name: plainString
+          in: query
+          description: A string with no constraint at all.
+          schema:
+            type: string
+        - name: boundedString
+          in: query
+          description: A string with length bounds and a pattern.
+          required: true
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 24
+            pattern: "^[a-z][a-z0-9_-]*$"
+        - name: formattedString
+          in: query
+          description: A string carrying a format.
+          schema:
+            type: string
+            format: date-time
+        - name: defaultedString
+          in: query
+          schema:
+            type: string
+            default: fallback
+        - name: enumString
+          in: query
+          description: A closed set of string values.
+          schema:
+            type: string
+            enum: [alpha, beta, gamma]
+        - name: singleEnumString
+          in: query
+          description: A one-value enum, i.e. a literal.
+          schema:
+            type: string
+            enum: [only]
+        - name: boundedInteger
+          in: query
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            maximum: 100
+        - name: exclusiveInteger
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 999
+            exclusiveMinimum: true
+            exclusiveMaximum: true
+        - name: boundedNumber
+          in: query
+          schema:
+            type: number
+            format: double
+            minimum: -1.5
+            maximum: 1.5
+        - name: multipleOfNumber
+          in: query
+          schema:
+            type: number
+            multipleOf: 0.25
+        - name: flag
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: stringList
+          in: query
+          description: An array with item bounds and uniqueness.
+          schema:
+            type: array
+            uniqueItems: true
+            minItems: 1
+            maxItems: 10
+            items:
+              type: string
+        - name: enumIntegerList
+          in: query
+          schema:
+            type: array
+            items:
+              type: integer
+              enum: [1, 2, 3]
+        - name: anySchema
+          in: query
+          description: No type at all, i.e. anything goes.
+          schema: {}
+      responses:
+        "200":
+          description: A page of primitives.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrimitiveBag"
+
+  /primitives/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Path-item level parameter, inherited by every operation.
+        schema:
+          type: string
+          format: uuid
+      - $ref: "#/components/parameters/TraceHeader"
+    get:
+      tags: [primitives]
+      summary: Read one, inheriting the path-item parameters.
+      operationId: getPrimitive
+      responses:
+        "200":
+          description: Found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrimitiveBag"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [primitives]
+      summary: Full replace.
+      operationId: replacePrimitive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrimitiveBag"
+      responses:
+        "200":
+          description: Replaced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrimitiveBag"
+    patch:
+      tags: [primitives]
+      summary: Partial update, with an operation-level override of `id`.
+      operationId: patchPrimitive
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Overrides the path-item declaration with a looser schema.
+          schema:
+            type: string
+      requestBody:
+        required: false
+        description: Sparse patch document.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+      responses:
+        "200":
+          description: Patched.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrimitiveBag"
+    delete:
+      tags: [primitives]
+      summary: Delete, no response body.
+      operationId: deletePrimitive
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/NotFound"
+    head:
+      tags: [primitives]
+      summary: Existence probe.
+      operationId: headPrimitive
+      responses:
+        "200":
+          description: Exists.
+        "404":
+          $ref: "#/components/responses/NotFound"
+    options:
+      tags: [primitives]
+      summary: Allowed methods.
+      operationId: optionsPrimitive
+      responses:
+        "204":
+          description: See the Allow header.
+          headers:
+            Allow:
+              required: true
+              schema:
+                type: string
+
+  # ─────────────────────────────────────────────────────────────────
+  # Composition: allOf / oneOf / anyOf / discriminator / nesting
+  # ─────────────────────────────────────────────────────────────────
+  /composition:
+    post:
+      tags: [composition]
+      summary: Composed schemas in and out.
+      description: Exercises allOf, oneOf, anyOf, discriminators and deep nesting.
+      operationId: composeShapes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [intersected, union, loose]
+              properties:
+                intersected:
+                  allOf:
+                    - $ref: "#/components/schemas/Identified"
+                    - $ref: "#/components/schemas/Timestamped"
+                union:
+                  oneOf:
+                    - $ref: "#/components/schemas/Cat"
+                    - $ref: "#/components/schemas/Dog"
+                loose:
+                  anyOf:
+                    - type: string
+                    - type: integer
+                singleAllOf:
+                  allOf:
+                    - $ref: "#/components/schemas/Identified"
+                singleOneOf:
+                  oneOf:
+                    - type: string
+                negated:
+                  not:
+                    type: string
+      responses:
+        "200":
+          description: The discriminated result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /composition/nested:
+    get:
+      tags: [composition]
+      summary: Deeply nested objects and arrays.
+      operationId: getNested
+      responses:
+        "200":
+          description: A nested tree.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Nested"
+
+  /composition/nullable:
+    get:
+      tags: [composition]
+      summary: Nullable in every position.
+      operationId: getNullable
+      responses:
+        "200":
+          description: Nulls everywhere.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NullableBag"
+
+  /formats:
+    get:
+      tags: [composition]
+      summary: String formats, free-form maps and read/write-only properties.
+      operationId: getFormats
+      responses:
+        "200":
+          description: The kitchen sink of schema annotations.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [formats]
+                properties:
+                  formats:
+                    $ref: "#/components/schemas/StringFormats"
+                  map:
+                    $ref: "#/components/schemas/MapObject"
+                  readWrite:
+                    $ref: "#/components/schemas/ReadWriteOnly"
+
+  # ─────────────────────────────────────────────────────────────────
+  # Request bodies: media types, refs, optionality
+  # ─────────────────────────────────────────────────────────────────
+  /bodies/json:
+    post:
+      tags: [bodies]
+      summary: A plain JSON body.
+      operationId: postJsonBody
+      requestBody:
+        required: true
+        description: The widget to create.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Widget"
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+
+  /bodies/ref:
+    put:
+      tags: [bodies]
+      summary: A body declared through components.requestBodies.
+      operationId: putRefBody
+      requestBody:
+        $ref: "#/components/requestBodies/WidgetBody"
+      responses:
+        "200":
+          description: Stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+
+  /bodies/multi:
+    post:
+      tags: [bodies]
+      summary: One operation, many request media types.
+      operationId: postMultiBody
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Widget"
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                count:
+                  type: integer
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                caption:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+            encoding:
+              file:
+                contentType: application/octet-stream
+              tags:
+                style: form
+                explode: true
+          text/plain:
+            schema:
+              type: string
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "202":
+          description: Accepted.
+
+  /bodies/optional:
+    post:
+      tags: [bodies]
+      summary: An optional request body.
+      operationId: postOptionalBody
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Fine either way.
+
+  # ─────────────────────────────────────────────────────────────────
+  # Responses: statuses, headers, examples, refs, media types
+  # ─────────────────────────────────────────────────────────────────
+  /responses/statuses:
+    get:
+      tags: [responses]
+      summary: A wide spread of status codes.
+      operationId: getStatuses
+      responses:
+        "200":
+          description: OK with a body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+        "201":
+          description: Created with a body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+        "204":
+          description: No content at all.
+        "301":
+          description: Moved, no body.
+        "304":
+          description: Not modified, no body.
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          description: Server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /responses/default:
+    get:
+      tags: [responses]
+      summary: Only a default response.
+      operationId: getDefaultResponse
+      responses:
+        default:
+          description: Anything at all.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /responses/range:
+    get:
+      tags: [responses]
+      summary: A wildcard status range.
+      operationId: getRangeResponse
+      responses:
+        "5XX":
+          description: Any server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /responses/headers:
+    get:
+      tags: [responses]
+      summary: Response headers, required and optional.
+      operationId: getResponseHeaders
+      responses:
+        "200":
+          description: With headers.
+          headers:
+            X-Request-Id:
+              description: Correlation id.
+              required: true
+              schema:
+                type: string
+                format: uuid
+            X-Rate-Limit:
+              description: Calls left in the window.
+              schema:
+                type: integer
+            X-Cached:
+              schema:
+                type: boolean
+            X-Ref-Header:
+              $ref: "#/components/headers/RateLimit"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+
+  /responses/examples:
+    get:
+      tags: [responses]
+      summary: Content-level example and examples.
+      operationId: getResponseExamples
+      responses:
+        "200":
+          description: One example.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+              example:
+                id: w_1
+                name: Bolt
+                size: 3
+        "409":
+          description: Several named examples.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                duplicate:
+                  summary: Already exists
+                  value:
+                    code: duplicate
+                    message: widget already exists
+                locked:
+                  summary: Locked by another writer
+                  value:
+                    code: locked
+                    message: widget is locked
+                fromComponents:
+                  $ref: "#/components/examples/ErrorExample"
+
+  /responses/media:
+    get:
+      tags: [responses]
+      summary: One status, several response media types.
+      operationId: getResponseMedia
+      responses:
+        "200":
+          description: Pick your representation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+            text/html:
+              schema:
+                type: string
+            text/plain:
+              schema:
+                type: string
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /responses/links:
+    post:
+      tags: [responses]
+      summary: A response carrying links.
+      operationId: postWithLinks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Widget"
+      responses:
+        "201":
+          description: Created, with a link to the read endpoint.
+          headers:
+            Location:
+              required: true
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+          links:
+            GetWidget:
+              $ref: "#/components/links/GetWidgetById"
+
+  # ─────────────────────────────────────────────────────────────────
+  # Parameters: every location, ref'd params, styles
+  # ─────────────────────────────────────────────────────────────────
+  /params/{group}/items/{itemId}:
+    get:
+      tags: [params]
+      summary: Path, query, header and cookie parameters together.
+      operationId: getParamMatrix
+      parameters:
+        - name: group
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: sort
+          in: query
+          description: Sort key, defaulted.
+          schema:
+            type: string
+            enum: [name, size, createdAt]
+            default: name
+        - name: expand
+          in: query
+          description: Repeated query parameter.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+        - name: legacy
+          in: query
+          description: On the way out.
+          deprecated: true
+          allowEmptyValue: true
+          schema:
+            type: string
+        - name: X-Tenant
+          in: header
+          required: true
+          description: Tenant selector.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/SessionCookie"
+        - name: contentParam
+          in: query
+          description: A parameter typed through `content` rather than `schema`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lat:
+                    type: number
+                  lon:
+                    type: number
+      responses:
+        "200":
+          description: Matrix echoed back.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+
+  /params/shared:
+    get:
+      tags: [params]
+      summary: Reuses the same page parameters, so they get promoted.
+      operationId: getSharedParams
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: A page.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Widget"
+
+  # ─────────────────────────────────────────────────────────────────
+  # Security
+  # ─────────────────────────────────────────────────────────────────
+  /security/bearer:
+    get:
+      tags: [security]
+      summary: Bearer auth with scopes.
+      operationId: getBearerSecured
+      security:
+        - bearerAuth: [read:widgets]
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /security/apikey:
+    get:
+      tags: [security]
+      summary: API key auth.
+      operationId: getApiKeySecured
+      security:
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+
+  /security/oauth:
+    get:
+      tags: [security]
+      summary: OAuth2 with two scopes.
+      operationId: getOauthSecured
+      security:
+        - oauth2Auth: [read:widgets, write:widgets]
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+
+  /security/alternatives:
+    get:
+      tags: [security]
+      summary: Either bearer or API key.
+      operationId: getAlternativeSecured
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+
+  /security/public:
+    get:
+      tags: [security]
+      summary: Explicitly public, overriding the global requirement.
+      operationId: getPublic
+      security: []
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+
+  # ─────────────────────────────────────────────────────────────────
+  # Operation metadata
+  # ─────────────────────────────────────────────────────────────────
+  /meta/deprecated:
+    get:
+      tags: [meta, primitives]
+      summary: A deprecated operation with several tags.
+      description: |
+        Multi-paragraph description.
+
+        The second paragraph must survive intact, including `code spans`,
+        an @-sign in `@scope/name`, and a trailing colon:
+      operationId: getDeprecated
+      deprecated: true
+      externalDocs:
+        url: https://example.test/docs/deprecated
+        description: Migration guide
+      responses:
+        "200":
+          description: Still works.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+
+  /meta/description-only:
+    get:
+      tags: [meta]
+      summary: ""
+      description: An operation with a description but no summary.
+      operationId: getDescriptionOnly
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: string
+
+  /meta/bare:
+    get:
+      tags: [meta]
+      summary: No parameters, no body, a single bodiless response.
+      operationId: getBare
+      responses:
+        "204":
+          description: Nothing to say.
+    trace:
+      tags: [meta]
+      summary: A method Galbe has no route builder for.
+      operationId: traceBare
+      responses:
+        "200":
+          description: Echoed back.
+          content:
+            message/http:
+              schema:
+                type: string
+
+  # ─────────────────────────────────────────────────────────────────
+  # Scoping: deep directories and a root-level parameterised path
+  # ─────────────────────────────────────────────────────────────────
+  /v2/admin/users/{userId}/sessions/{sessionId}:
+    get:
+      tags: [admin]
+      summary: Deeply nested path, two path parameters.
+      operationId: getAdminSession
+      security:
+        - bearerAuth: [admin]
+      responses:
+        "200":
+          description: The session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "403":
+          description: Forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [admin]
+      summary: Revoke a session.
+      operationId: deleteAdminSession
+      security:
+        - bearerAuth: [admin]
+      responses:
+        "204":
+          description: Revoked.
+
+  /{slug}:
+    get:
+      tags: [meta]
+      summary: A root-level parameterised path.
+      operationId: getBySlug
+      security: []
+      responses:
+        "200":
+          description: Resolved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Widget"
+
+components:
+  schemas:
+    PrimitiveBag:
+      type: object
+      title: Primitive bag
+      description: One property per scalar shape.
+      required: [str, int, num, bool, list, obj]
+      properties:
+        str:
+          type: string
+          description: A bounded, patterned string.
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9 ]+$"
+        int:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 2147483647
+        num:
+          type: number
+          format: float
+          minimum: 0
+          exclusiveMinimum: true
+        bool:
+          type: boolean
+        list:
+          type: array
+          minItems: 0
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+        obj:
+          type: object
+          required: [key]
+          properties:
+            key:
+              type: string
+            value:
+              type: string
+        optionalStr:
+          type: string
+        anything: {}
+        defaulted:
+          type: string
+          default: none
+        exampled:
+          type: string
+          example: sample-value
+
+    StringFormats:
+      type: object
+      description: One property per OpenAPI string format.
+      properties:
+        date:
+          type: string
+          format: date
+        dateTime:
+          type: string
+          format: date-time
+        password:
+          type: string
+          format: password
+        byte:
+          type: string
+          format: byte
+        binary:
+          type: string
+          format: binary
+        email:
+          type: string
+          format: email
+        uuid:
+          type: string
+          format: uuid
+        uri:
+          type: string
+          format: uri
+        hostname:
+          type: string
+          format: hostname
+        ipv4:
+          type: string
+          format: ipv4
+        ipv6:
+          type: string
+          format: ipv6
+
+    Identified:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+
+    Timestamped:
+      type: object
+      required: [createdAt]
+      properties:
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Widget:
+      allOf:
+        - $ref: "#/components/schemas/Identified"
+        - type: object
+          required: [name, size]
+          properties:
+            name:
+              type: string
+              minLength: 1
+            size:
+              type: integer
+              minimum: 0
+              maximum: 10
+            tags:
+              type: array
+              items:
+                type: string
+            kind:
+              type: string
+              enum: [bolt, nut, washer]
+              default: bolt
+
+    Pet:
+      type: object
+      required: [petType]
+      discriminator:
+        propertyName: petType
+        mapping:
+          cat: "#/components/schemas/Cat"
+          dog: "#/components/schemas/Dog"
+      properties:
+        petType:
+          type: string
+
+    Cat:
+      type: object
+      required: [meows]
+      properties:
+        meows:
+          type: boolean
+
+    Dog:
+      type: object
+      required: [barks]
+      properties:
+        barks:
+          type: boolean
+
+    Nested:
+      type: object
+      description: Objects inside arrays inside objects.
+      required: [root]
+      properties:
+        root:
+          type: object
+          required: [branches]
+          properties:
+            label:
+              type: string
+            branches:
+              type: array
+              items:
+                type: object
+                required: [leaves]
+                properties:
+                  leaves:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        type: string
+        matrix:
+          type: array
+          items:
+            type: array
+            items:
+              type: number
+
+    NullableBag:
+      type: object
+      required: [requiredNullable]
+      properties:
+        requiredNullable:
+          type: string
+          nullable: true
+        optionalNullable:
+          type: integer
+          nullable: true
+        optionalNonNullable:
+          type: string
+        nullableArray:
+          type: array
+          nullable: true
+          items:
+            type: string
+        arrayOfNullable:
+          type: array
+          items:
+            type: string
+            nullable: true
+
+    MapObject:
+      type: object
+      description: A free-form map declared through additionalProperties.
+      additionalProperties:
+        type: string
+
+    ReadWriteOnly:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        password:
+          type: string
+          writeOnly: true
+
+    Session:
+      type: object
+      required: [id, userId, startedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        startedAt:
+          type: string
+          format: date-time
+        agent:
+          type: string
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          description: Free-form, no type on purpose.
+
+  responses:
+    NotFound:
+      description: The resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: not_found
+            message: no such widget
+
+    Unauthorized:
+      description: Missing or invalid credentials.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    ValidationError:
+      description: The request body did not validate.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [code, errors]
+            properties:
+              code:
+                type: string
+              errors:
+                type: array
+                items:
+                  type: object
+                  required: [path, message]
+                  properties:
+                    path:
+                      type: string
+                    message:
+                      type: string
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: 1-based page number.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      description: Items per page.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    TraceHeader:
+      name: X-Trace-Id
+      in: header
+      description: Client-supplied trace id.
+      schema:
+        type: string
+        format: uuid
+    SessionCookie:
+      name: session
+      in: cookie
+      description: Session cookie.
+      schema:
+        type: string
+
+  requestBodies:
+    WidgetBody:
+      description: A widget payload, reused across operations.
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Widget"
+
+  headers:
+    RateLimit:
+      description: Remaining calls in the current window.
+      schema:
+        type: integer
+
+  examples:
+    ErrorExample:
+      summary: A shared error example
+      value:
+        code: shared
+        message: referenced through components.examples
+
+  links:
+    GetWidgetById:
+      operationId: getPrimitive
+      parameters:
+        id: $response.body#/id
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A signed JWT.
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+    basicAuth:
+      type: http
+      scheme: basic
+    oauth2Auth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://example.test/oauth/authorize
+          tokenUrl: https://example.test/oauth/token
+          scopes:
+            read:widgets: Read widgets
+            write:widgets: Write widgets
