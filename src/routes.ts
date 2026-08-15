@@ -18,6 +18,8 @@ const ROUTE_PATH_RGX = /^(\/(\*|:?\d+|:?\w+|:?[\w\d.][\w-.]+[\w\d]))*\/?$/
 // literal route segment: the router's segment rules minus ':param' and '*'
 const LITERAL_SEGMENT_RGX = /^(\d+|\w+|[\w\d.][\w-.]+[\w\d])$/
 const ROUTE_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'options', 'head', 'static'])
+/** directories that never hold app source — neither scanned nor watched */
+export const NEVER_SCANNED_DIRS = ['node_modules', '.git']
 
 export type RouteMeta = { head?: string, ignore?: boolean, hide?: boolean } & Record<string, boolean | string | string[]>
 export type RoutesMeta = {
@@ -212,8 +214,14 @@ const prefixMeta = (meta: RoutesMeta, prefix: string): RoutesMeta =>
 const collectFiles = async (pattern: string): Promise<Array<{ file: string; base: string }>> => {
   const root = process.cwd()
   const base = resolve(root, globBase(pattern))
+  // these hold other people's files, never the app's: an app-wide pattern like
+  // '**/*.route.ts' must not import (and prefix routes by) whatever a dependency
+  // happens to ship. A pattern naming one of them explicitly opts back in.
+  const skipped = NEVER_SCANNED_DIRS.filter(d => !pattern.split('/').includes(d))
+  const isSkipped = (path: string) => relative(root, path).split(sep).some(s => skipped.includes(s))
   const out: Array<{ file: string; base: string }> = []
   for await (const path of new Glob(pattern).scan({ cwd: root, absolute: true, onlyFiles: false, dot: true })) {
+    if (isSkipped(path)) continue
     if ((await lstat(path)).isDirectory()) {
       // a pattern naming a directory registers its direct children, unprefixed
       for (const f of await readdir(path)) out.push({ file: `${path}/${f}`, base: path })

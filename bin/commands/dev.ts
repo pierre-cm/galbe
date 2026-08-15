@@ -76,7 +76,7 @@ export default (cmd: Command) => {
               child = spawnApp()
             })
           },
-          { ignore: watchignore ? new RegExp(watchignore) : /node_modules/ }
+          { ignore: watchignore ? new RegExp(watchignore) : undefined }
         )
         // The watcher is non-persistent and a pending promise alone does not
         // keep the event loop alive — hold it open with an interval.
@@ -101,7 +101,7 @@ export default (cmd: Command) => {
             await instanciateRoutes(g)
             await g.listen(port)
           },
-          { ignore: watchignore ? new RegExp(watchignore) : /node_modules/ }
+          { ignore: watchignore ? new RegExp(watchignore) : undefined }
         )
       }
 

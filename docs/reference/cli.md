@@ -35,6 +35,9 @@ Start a dev server running your Galbe application.
 | -wi   | --watchignore | ignored watch files regex                  |         |
 | -nc   | --noclear     | don't clear on file changes                | false   |
 
+> [!NOTE]
+> `node_modules`, `.git` and `.galbe` are never watched. `--watchignore` adds to that list rather than replacing it.
+
 #### Example
 
 index.js

@@ -142,6 +142,8 @@ galbe.static('/static', './public')
 
 The Automatic Route Analyzer scans all Route Files in your project and registers their routes automatically. By default, it looks for files matching `src/**/*.route.{js,ts}`. This behavior can be customized via the `routes` property in your Galbe configuration. Setting it to `false` disables the analyzer.
 
+`node_modules` and `.git` are never scanned, so a broad pattern like `**/*.route.ts` only ever picks up your own files, not those shipped by your dependencies. A pattern that names one of these directories explicitly (e.g. `node_modules/my-routes/*.route.ts`) opts back in.
+
 ### Route Files
 
 To be analyzed correctly, a Route File must export a default function that accepts a Galbe instance as its only argument. Define your routes within this function:

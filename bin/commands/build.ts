@@ -125,7 +125,9 @@ export default (cmd: Command) => {
         buildIndex = await createBuildIndex(index, g, buildID, outPath)
       } catch (errors) {
         console.log(`\nerror: build errors`)
-        for (let error of errors as any[]) console.log(error)
+        // route-file errors come as an array; anything else (a boot error, a
+        // failed import) throws a single value — don't lose it
+        for (let error of [errors].flat()) console.log(error)
         return process.exit(1)
       }
       if (!buildIndex) {

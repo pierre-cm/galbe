@@ -14,6 +14,9 @@
 - `galbe generate code` emits the directory-convention layout with relative paths, so generated trees round-trip through the analyzer; route identity in merges is prefix-aware.
 
 ### Fixes
+- The Automatic Route Analyzer no longer scans `node_modules` and `.git`: an app-wide pattern such as `routes: '**/*.route.ts'` used to import route and middleware files shipped by dependencies, and a dependency directory that isn't a valid route segment aborted boot (`galbe dev` and `galbe build` alike). A pattern that names one of those directories explicitly still opts back in.
+- `galbe dev --watch` no longer reloads on `.git` writes (a `git checkout` or `git commit` used to respawn the app), and `--watchignore` now *adds* to the built-in ignores (`node_modules`, `.git`, `.galbe`) instead of replacing them.
+- `galbe build` no longer swallows boot errors: a single thrown error (invalid directory name, failed import) was reported as `TypeError: {} is not iterable` instead of itself.
 - Route-file metadata (tags, summaries, `@galbe-hide`, ...) is no longer silently dropped when `basePath` is set: meta keys are rewritten to final paths relative to `basePath` and all consumers look up accordingly.
 - `galbe build` now also copies static assets registered in the main entry file (previously only route-file registrations were copied).
 

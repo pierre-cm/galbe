@@ -2,12 +2,18 @@ import { relative } from 'path'
 import { watch } from 'fs'
 import { Galbe, type Route } from '../src'
 import { logRoute, walkRoutes } from '../src/util'
-import { type RouteMeta, defineRoutes } from '../src/routes'
+import { type RouteMeta, defineRoutes, NEVER_SCANNED_DIRS } from '../src/routes'
 
 export { default as pckg } from '../package.json'
 
 export const CWD = process.cwd()
-export const WATCH_IGNORE = /\.galbe/
+// What the analyzer refuses to load, the watcher refuses to watch: reloading on
+// a `bun install` or a `git checkout` only ever costs a respawn. `.galbe` is a
+// legacy build directory, kept for apps that still carry one. Always applied —
+// `--watchignore` adds to this list, it does not replace it.
+export const WATCH_IGNORE = new RegExp(
+  `(^|[\\\\/])(${[...NEVER_SCANNED_DIRS, '.galbe'].map(d => d.replaceAll('.', '\\.')).join('|')})([\\\\/]|$)`
+)
 
 export const fmtVal = (v: any) => {
   if (typeof v === 'boolean') return `\x1b[3${v ? '2' : '1'}m${v}\x1b[0m`

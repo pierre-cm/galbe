@@ -1,10 +1,13 @@
-import { expect, test, describe } from 'bun:test'
+import { expect, test, describe, beforeAll, afterAll } from 'bun:test'
+import { mkdir, rm, writeFile } from 'fs/promises'
 import { defineRoutes, globBase, metaAnalysis } from '../src/routes'
 import type { Route } from '../src'
 import { Galbe } from '../src'
 import type { RouteMeta } from '../src/routes'
 
 const TREE = 'test/resources/tree'
+// built at runtime: a committed fixture can't be named node_modules (gitignored)
+const DEPS = 'test/resources/depstree'
 
 describe('routeFiles', () => {
   test('meta analysis, empty', async () => {
@@ -341,5 +344,42 @@ describe('routeFiles, directory groups', () => {
     expect(defineRoutes({ routes: 'test/resources/badtree/**/*.route.ts' }, g)).rejects.toThrow(
       /invalid directory name/
     )
+  })
+})
+
+describe('routeFiles, dependency directories', () => {
+  // a dependency tree the app never wrote: `bad dir` is a directory name no
+  // route file could ever be prefixed by, and the .route/.middleware files are
+  // another package's, not the app's
+  beforeAll(async () => {
+    await mkdir(`${DEPS}/node_modules/leaky/bad dir`, { recursive: true })
+    await mkdir(`${DEPS}/node_modules/leaky/routes`, { recursive: true })
+    await mkdir(`${DEPS}/.git/hooks`, { recursive: true })
+    await writeFile(`${DEPS}/app.route.ts`, `export default (g: any) => {\n  g.get('/app', () => 'app')\n}\n`)
+    await writeFile(`${DEPS}/app.middleware.ts`, `export default (_ctx: any, next: any) => next()\n`)
+    await writeFile(`${DEPS}/node_modules/leaky/bad dir/x.route.ts`, `export default (g: any) => {\n  g.get('/x', () => 'x')\n}\n`)
+    await writeFile(`${DEPS}/node_modules/leaky/routes/leak.route.ts`, `export default (g: any) => {\n  g.get('/leak', () => 'leak')\n}\n`)
+    await writeFile(`${DEPS}/node_modules/leaky/leak.middleware.ts`, `export default (_ctx: any, next: any) => next()\n`)
+    await writeFile(`${DEPS}/.git/hooks/hook.route.ts`, `export default (g: any) => {\n  g.get('/hook', () => 'hook')\n}\n`)
+  })
+  afterAll(async () => {
+    await rm(DEPS, { recursive: true, force: true })
+  })
+
+  test('node_modules and .git are skipped, app files still found', async () => {
+    const g = new Galbe()
+    await defineRoutes({ routes: `${DEPS}/**/*.route.ts`, middleware: `${DEPS}/**/*.middleware.ts` }, g)
+
+    expect(g.router.find('get', '/app').path).toBe('/app')
+    expect(() => g.router.find('get', '/node_modules/leaky/routes/leak')).toThrow()
+    expect(() => g.router.find('get', '/.git/hooks/hook')).toThrow()
+    expect(g.metaMiddleware.map(m => m.file.split('/').at(-1))).toEqual(['app.middleware.ts'])
+  })
+
+  test('a pattern naming node_modules opts back in', async () => {
+    const g = new Galbe()
+    await defineRoutes({ routes: `${DEPS}/node_modules/leaky/routes/*.route.ts` }, g)
+
+    expect(g.router.find('get', '/leak').path).toBe('/leak')
   })
 })
