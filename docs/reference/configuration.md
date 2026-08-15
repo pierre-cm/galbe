@@ -119,6 +119,20 @@ Enables route caching for dynamic routes (see [Router Caching](../concepts/route
 
 Maximum number of entries kept in the route cache. The cache is a bounded LRU: once the limit is reached, the least recently used entries are evicted. Default: `1024`.
 
+### router.warn
+
+A callback receiving route [registration conflicts](../concepts/router.md#registration-conflicts) — a redefined route, or two parameter names sharing one trie node. Defaults to `console.warn` outside production (`BUN_ENV=production` silences it). Provide your own to log them elsewhere, or to throw:
+
+```ts
+export default {
+  router: {
+    warn: message => {
+      throw new Error(`route conflict: ${message}`)
+    }
+  }
+}
+```
+
 ### openapi
 
 Customizes the document-level blocks of the OpenAPI specification produced by `OpenAPISerializer` (`galbe/extras`) and `galbe generate spec`. These describe the document rather than any single route, so they have no route-level equivalent.

@@ -13,11 +13,6 @@ export interface Options {
    * `examples`). On any other schema: a single example value.
    */
   examples?: any
-  /**
-   * Response-only: declares response headers. Each value is a Galbe schema
-   * describing the header's value type.
-   */
-  headers?: Record<string, any>
   /** Marks the schema as deprecated. Surfaced by spec generators (e.g. OpenAPI). */
   deprecated?: boolean
   /**

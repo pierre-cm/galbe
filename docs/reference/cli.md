@@ -185,6 +185,8 @@ if (resp.status === 200) {
 
 **`GalbeClientError`** (thrown by the primary API) carries `.status`, `.headers`, and `.body` (pre-consumed as text).
 
+Query values serialize the way the server parses them: an array becomes repeated keys (`?tags=a&tags=b`) and an object becomes bracketed ones (`?filter[lat]=1`, OpenAPI's [`deepObject`](../concepts/schemas.md#query)).
+
 #### Multiple body content-types
 
 When a route accepts more than one content-type, the generator creates a separate method per content-type:
@@ -500,7 +502,7 @@ The warnings describe the spec, not the diff: they appear on every run, includin
 
 #### Example
 
-For that example, we will generate the Galbe source code from the [Swagger Petstore Openapi spec](https://petstore3.swagger.io/).
+For that example, we will generate the Galbe source code from the [Swagger Petstore OpenAPI spec](https://petstore3.swagger.io/).
 
 First, initiate a new bun project and install the galbe dependency.
 

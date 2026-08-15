@@ -80,7 +80,16 @@ If a [Schema](schemas.md) is defined, Galbe parses the body according to the [Sc
 
 ### contentType
 
-The body content-type group inferred from the `Content-Type` request header. One of `'json'`, `'text'`, `'urlForm'`, `'multipart'`, `'byteArray'`, or `'default'`. It is `undefined` for `GET`, `OPTIONS`, and `HEAD` requests.
+The request's media type, taken from the `Content-Type` header with any parameters (`; charset=…`) stripped — e.g. `'application/json'`. When the route declares a [body schema](schemas.md#body), it narrows to the media-type key that matched, so it discriminates `ctx.body`:
+
+```ts
+galbe.post('/items', { body: { 'application/json': Item, 'text/plain': $T.string() } }, ctx => {
+  if (ctx.contentType === 'application/json') ctx.body.name // typed as Item
+  else ctx.body // string
+})
+```
+
+It is `undefined` for `GET`, `OPTIONS`, and `HEAD` requests.
 
 ### remoteAddress
 

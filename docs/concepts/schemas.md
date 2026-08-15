@@ -19,6 +19,8 @@ Every schema type accepts an optional `options` object as its last argument. The
 - **example** / **examples** (`any`) — Example value(s), surfaced by spec generators (e.g. OpenAPI).
 - **deprecated** (`boolean`) — Marks the value as deprecated.
 - **readOnly** / **writeOnly** (`boolean`) — Documentation only: the value is only ever sent by the server, or only ever by the client. Surfaced by spec generators; **not enforced at runtime**.
+- **responseHeaders** (`Record<string, Schema>`) — Response schemas only: the headers the response carries. See [response](#response).
+- **responseLinks** (`Record<string, object>`) — Response schemas only, documentation only: the OpenAPI `links` object. See [response](#response).
 
 Type-specific options are listed alongside each type below.
 
@@ -214,9 +216,26 @@ Makes any type nullish, allowing both `undefined` and `null` values.
 const nullishSchema = $T.nullish($T.string())
 ```
 
+#### anyOf
+
+Creates a union of Schema Types: the value must match at least one member.
+
+```ts
+const anyOfSchema = $T.anyOf([$T.string(), $T.number()])
+```
+
+#### oneOf
+
+Same validation as `anyOf` — the difference is intent, and spec generators keep it. A union of literals declared with `anyOf` is emitted as an OpenAPI `enum` (a closed value set); `oneOf` keeps its explicit form, because "exactly one of these" is not what an `enum` says.
+
+```ts
+const oneOfSchema = $T.oneOf([$T.object({ a: $T.string() }), $T.object({ b: $T.number() })])
+```
+
 #### union
 
-Creates a union of Schema Types.
+> [!WARNING]
+> Deprecated — use [`anyOf`](#anyof) instead. `$T.union` remains as an alias of it.
 
 ```ts
 const unionSchema = $T.union([$T.string(), $T.number()])
@@ -370,44 +389,56 @@ A declared cookie that is missing or invalid is a `400`, reported under a `cooki
 <!-- prettier-ignore -->
 ```ts
 body: {
-  byteArray?: STByteArray | STStream
-  text?: STString | STLiteral | STBoolean | STNumber | STInteger | STUnion | STStream
-  json?: STJson | STObject | STBoolean | STInteger | STNumber | STString | STArray | STUnion | STIntersection
-  urlForm?: STObject | STStream | STUnion
-  multipart?: STMultipartForm | STStream | STUnion
-  default?: STString | STByteArray | STStream | STAny
+  [mediaType: `${string}/${string}`]: STSchema
+  description?: string
+  required?: boolean
 }
 ```
 
-Defines the request body schema based on content type. The matching schema is selected from the request's `Content-Type` header, then the body is parsed and validated. The `default` key is used when no other entry matches the content type.
+Defines the request body schema, keyed by **media type**. The schema is selected from the request's `Content-Type` header; `*/*` is the fallback when no key matches. The body is then parsed and validated against it.
+
+```ts
+const schema = {
+  body: {
+    'application/json': $T.object({ name: $T.string() }),
+    'text/plain': $T.string()
+  }
+}
+```
+
+`ctx.contentType` tells the handler which one matched, and `ctx.body` is typed accordingly:
+
+```ts
+galbe.post('/items', schema, ctx => {
+  if (ctx.contentType === 'application/json') ctx.body.name // string
+  else ctx.body // string
+})
+```
+
+Two keys beside the media types describe the body itself rather than any one schema — they are documentation, surfaced by spec generators, and never collide with a media type since those always contain a `/`:
+
+- **description** (`string`) — Describes the request body.
+- **required** (`boolean`) — Whether the body is required. Inferred from the schemas when unset.
+
+A body may also be declared as `$T.null()` alone, which means the route accepts no body at all.
 
 #### Byte Array
 
-Matches an `application/octet-stream` request body.
-
 ```ts
-const body = {
-  byteArray: $T.byteArray()
-}
+const body = { 'application/octet-stream': $T.byteArray() }
 ```
 
 #### Text
 
-Matches a `text/*` request body.
-
 ```ts
-const body = {
-  text: $T.string()
-}
+const body = { 'text/plain': $T.string() }
 ```
 
 #### JSON
 
-Matches an `application/json` request body.
-
 ```ts
 const body = {
-  json: $T.object({
+  'application/json': $T.object({
     name: $T.string(),
     age: $T.integer({ min: 0 })
   })
@@ -416,11 +447,9 @@ const body = {
 
 #### URL Form
 
-Matches an `application/x-www-form-urlencoded` request body.
-
 ```ts
 const body = {
-  urlForm: $T.object({
+  'application/x-www-form-urlencoded': $T.object({
     name: $T.string(),
     age: $T.integer({ min: 0 })
   })
@@ -429,11 +458,9 @@ const body = {
 
 #### Multipart Form
 
-Matches a `multipart/form-data` request body.
-
 ```ts
 const body = {
-  multipart: $T.multipartForm({
+  'multipart/form-data': $T.multipartForm({
     name: $T.string(),
     age: $T.integer({ min: 0 })
   })
@@ -456,7 +483,7 @@ galbe.post(
   '/user/create',
   {
     body: {
-      multipart: $T.multipartForm({
+      'multipart/form-data': $T.multipartForm({
         username: $T.string(),
         heavyImageFile: $T.byteArray()
       })
@@ -480,7 +507,7 @@ galbe.post(
   '/user/create',
   {
     body: {
-      multipart: $T.stream($T.multipartForm({
+      'multipart/form-data': $T.stream($T.multipartForm({
         username: $T.string(),
         heavyImageFile: $T.byteArray()
       }))
@@ -515,7 +542,7 @@ galbe.post(
   {
     bodyLimit: 10 * 1024 * 1024, // 10 MB
     body: {
-      multipart: $T.multipartForm({
+      'multipart/form-data': $T.multipartForm({
         heavyImageFile: $T.byteArray()
       })
     }
