@@ -6,6 +6,8 @@ const port = 7359
 const portRaw = 7367
 
 const UUID_RGX = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
+// SSE ids: one random prefix per connection, then an event counter
+const ID_RGX = `${UUID_RGX}:\\d+`
 
 function* genTxt(text: string) {
   const words = text.split(' ')
@@ -121,8 +123,18 @@ describe('responses', () => {
       }
       expect(resp.status).toBe(200)
       expect(resp.headers.get('content-type')).toBe('text/event-stream')
-      expect(body).toMatch(new RegExp(`id:${UUID_RGX}\ndata:Hello\n\nid:${UUID_RGX}\ndata:Mom!\n\n`))
+      expect(body).toMatch(new RegExp(`id:${ID_RGX}\ndata:Hello\n\nid:${ID_RGX}\ndata:Mom!\n\n`))
     }
+  })
+
+  test('response, no schema, stream, event ids share a prefix and increment', async () => {
+    const resp = await fetch(`http://localhost:${port}/stream/multiline`, { method: 'POST' })
+    const ids = [...(await resp.text()).matchAll(/^id:(.*)$/gm)].map(m => m[1]!)
+
+    expect(ids.length).toBe(2)
+    expect(new Set(ids).size).toBe(ids.length)
+    const [prefix] = ids[0]!.split(':')
+    expect(ids).toEqual([`${prefix}:0`, `${prefix}:1`])
   })
 
   test('response, no schema, stream, multi-line values', async () => {
@@ -134,7 +146,7 @@ describe('responses', () => {
     expect(resp.headers.get('content-type')).toBe('text/event-stream')
     // one data: line per source line; \n\n inside a value must not terminate the event early
     expect(body).toMatch(
-      new RegExp(`^id:${UUID_RGX}\ndata:line1\ndata:line2\n\nid:${UUID_RGX}\ndata:a\ndata:b\ndata:\ndata:c\n\n$`)
+      new RegExp(`^id:${ID_RGX}\ndata:line1\ndata:line2\n\nid:${ID_RGX}\ndata:a\ndata:b\ndata:\ndata:c\n\n$`)
     )
   })
 
@@ -450,7 +462,7 @@ describe('responses', () => {
     }
     expect(resp.status).toBe(200)
     expect(resp.headers.get('content-type')).toBe('text/event-stream')
-    expect(body).toMatch(new RegExp(`id:${UUID_RGX}\ndata:Hello\n\nid:${UUID_RGX}\ndata:Mom!\n\n`))
+    expect(body).toMatch(new RegExp(`id:${ID_RGX}\ndata:Hello\n\nid:${ID_RGX}\ndata:Mom!\n\n`))
   })
 
   test('response, stream ba, validation error', async () => {
@@ -484,7 +496,7 @@ describe('responses', () => {
     }
     expect(resp.status).toBe(200)
     expect(resp.headers.get('content-type')).toBe('text/event-stream')
-    expect(body).toMatch(new RegExp(`id:${UUID_RGX}\ndata:Hello\n\nid:${UUID_RGX}\ndata:Mom!\n\n`))
+    expect(body).toMatch(new RegExp(`id:${ID_RGX}\ndata:Hello\n\nid:${ID_RGX}\ndata:Mom!\n\n`))
   })
 
   test('response, stream str, validation error', async () => {

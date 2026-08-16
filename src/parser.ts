@@ -385,6 +385,20 @@ const parseUrlForm = (text: string, schema?: STObject) => {
     })
   return object
 }
+// First index >= `from` where `needle` fully occurs in `hay`, -1 if none. The
+// native indexOf skips to candidate positions (the needle's first byte) so only
+// candidates are compared byte by byte, instead of every offset of the scan.
+const indexOfSeq = (hay: Uint8Array, needle: Uint8Array, from: number) => {
+  if (!needle.length) return -1
+  const last = hay.length - needle.length
+  for (let i = hay.indexOf(needle[0]!, from); i !== -1 && i <= last; i = hay.indexOf(needle[0]!, i + 1)) {
+    let b = 1
+    while (b < needle.length && hay[i + b] === needle[b]) b++
+    if (b === needle.length) return i
+  }
+  return -1
+}
+
 async function* $streamToMultipartForm(
   data: ReadableStream<Uint8Array>,
   boundary: string,
@@ -411,26 +425,15 @@ async function* $streamToMultipartForm(
     scan.set(chunk, carry.length)
     rest = rest.slice(0, rest.length - carry.length)
     start = 0
-    for (let i = 0; i < scan.length; i++) {
-      let matchBound = bound.length > 0
-      let matchDelimiter = true
-      for (let b = 0; b < bound.length; b++) {
-        if (scan[i + b] === bound[b]) continue
-        else {
-          matchBound = false
-          break
-        }
-      }
-      if (!matchBound) {
-        for (let b = 0; b < delimiter.length; b++) {
-          if (scan[i + b] === delimiter[b]) continue
-          else {
-            matchDelimiter = false
-            break
-          }
-        }
-      }
-      if (matchBound) {
+    // jump from match to match: whichever of boundary/delimiter comes first
+    // (boundary wins a tie, as in the byte-wise scan this replaces)
+    for (let p = 0; p < scan.length; ) {
+      const iB = indexOfSeq(scan, bound, p)
+      const iD = indexOfSeq(scan, delimiter, p)
+      if (iB === -1 && iD === -1) break
+      const isBound = iB !== -1 && (iD === -1 || iB <= iD)
+      const i = isBound ? iB : iD
+      if (isBound) {
         bV = new Uint8Array(rest.length + i - start)
         bV.set(rest)
         bV.set(scan.slice(start, i), rest.length)
@@ -452,24 +455,22 @@ async function* $streamToMultipartForm(
         bK = new Uint8Array()
         bV = new Uint8Array()
         start = i + bound.length
-        rest = new Uint8Array()
-        i = start - 1
-      } else if (matchDelimiter) {
+      } else {
         bK = new Uint8Array(rest.length + i - start)
         bK.set(rest)
         bK.set(scan.slice(start, i), rest.length)
         start = i + 3
-        rest = new Uint8Array()
-        i = start - 1
       }
-      if (i === scan.length - 1) {
-        const newRest = new Uint8Array(rest.length + i - start + 1)
-        newRest.set(rest)
-        newRest.set(scan.slice(start, i + 1), rest.length)
-        // rest accumulates the current part across chunks — cap its growth
-        if (limit !== undefined && newRest.length > limit) throw new PayloadTooLargeError()
-        rest = newRest
-      }
+      rest = new Uint8Array()
+      p = start
+    }
+    if (start < scan.length) {
+      const newRest = new Uint8Array(rest.length + scan.length - start)
+      newRest.set(rest)
+      newRest.set(scan.subarray(start), rest.length)
+      // rest accumulates the current part across chunks — cap its growth
+      if (limit !== undefined && newRest.length > limit) throw new PayloadTooLargeError()
+      rest = newRest
     }
   }
   const headers = parseMultipartHeader(textDecoder.decode(bK))
@@ -808,19 +809,24 @@ export const parseEntry = <T extends STProps>(
   const parsedParams: Partial<Static<STObject<T>>> = {}
   const errors: { [key: string]: string | string[] } = {}
 
-  if (options?.i === true) {
-    params = Object.keys(params).reduce(
-      (acc, key) => {
-        acc[key.toLowerCase()] = params[key]
-        return acc
-      },
-      {} as { [key: string]: string | string[] }
-    )
+  // case-insensitive lookup (headers) without copying the whole map per request:
+  // the already-lowercased key usually hits, and the lowercased index — null
+  // prototype, the keys are untrusted — is only built when it does not
+  let lowercased: Record<string, any> | undefined
+  const lookup = (key: string) => {
+    const v = params[key]
+    if (v !== undefined || options?.i !== true) return v
+    if (!lowercased) {
+      const index: Record<string, any> = Object.create(null)
+      for (const k of Object.keys(params)) index[k.toLowerCase()] = params[k]
+      lowercased = index
+    }
+    return lowercased[key]
   }
 
   Object.entries(schema).forEach(([key, s]) => {
     const k = options?.i === true ? key.toLowerCase() : key
-    let v = params[k]
+    let v = lookup(k)
     if (s[Kind] === 'array' && options?.name === 'query' && typeof v === 'string') {
       // a single value may carry several items; repeated keys always may too
       const delimiter = (s as unknown as STArray).split
@@ -905,7 +911,11 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
     const rs = new ReadableStream({
       type: 'direct',
       async pull(controller) {
-        let id = ctx.request.headers.get('last-event-id') ?? crypto.randomUUID()
+        // ids only need to be unique within the stream: one random prefix per
+        // connection plus a counter, instead of a CSPRNG call per event
+        const prefix = crypto.randomUUID()
+        let n = 0
+        let id = ctx.request.headers.get('last-event-id') ?? `${prefix}:${n}`
         for await (const r of response) {
           // multi-line values must be split into one data: field per line (SSE spec)
           let data =
@@ -921,7 +931,7 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
           } catch (err) {
             console.error(err)
           }
-          id = crypto.randomUUID()
+          id = `${prefix}:${++n}`
         }
         controller.close()
       },
