@@ -1,12 +1,13 @@
 import { $T, Galbe } from '../src'
 import type { Static } from '../src/schema'
+import type { ContextSet, Route } from '../src/types'
+import type { SocketAddress } from 'bun'
 import { describe, test, expect, beforeAll } from 'bun:test'
 import { formdata } from './test.utils'
 
 // Test utils
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 type Expect<T extends true> = T
-type Extends<A, B> = A extends B ? true : false
 
 // Basic Schema types
 
@@ -20,23 +21,23 @@ const literal = $T.literal('foo')
 const ba = $T.byteArray()
 const obj = $T.object()
 
-type _any = Expect<Extends<Static<typeof any>, any>>
-type _nil = Expect<Extends<Static<typeof nil>, null>>
-type _bool = Expect<Extends<Static<typeof bool>, boolean>>
-type _num = Expect<Extends<Static<typeof num>, number>>
-type _int = Expect<Extends<Static<typeof int>, number>>
-type _str = Expect<Extends<Static<typeof str>, string>>
-type _literal = Expect<Extends<Static<typeof literal>, 'foo'>>
+type _any = Expect<Equal<Static<typeof any>, any>>
+type _nil = Expect<Equal<Static<typeof nil>, null>>
+type _bool = Expect<Equal<Static<typeof bool>, boolean>>
+type _num = Expect<Equal<Static<typeof num>, number>>
+type _int = Expect<Equal<Static<typeof int>, number>>
+type _str = Expect<Equal<Static<typeof str>, string>>
+type _literal = Expect<Equal<Static<typeof literal>, 'foo'>>
 
 // String schema must accept StringOptions (pattern/format/minLength/maxLength),
 // not NumberOptions. Regression for the `STString extends NumberOptions` typo.
 const str_with_pattern = $T.string({ pattern: /^foo/, format: 'email', minLength: 1, maxLength: 10 })
-type _str_pattern = Expect<Extends<typeof str_with_pattern.pattern, RegExp | undefined>>
-type _str_format = Expect<Extends<typeof str_with_pattern.format, string | undefined>>
-type _str_minLen = Expect<Extends<typeof str_with_pattern.minLength, number | undefined>>
-type _str_maxLen = Expect<Extends<typeof str_with_pattern.maxLength, number | undefined>>
-type _ba = Expect<Extends<Static<typeof ba>, Uint8Array>>
-type _obj = Expect<Extends<Static<typeof obj>, Record<string | number, any>>>
+type _str_pattern = Expect<Equal<typeof str_with_pattern.pattern, RegExp | undefined>>
+type _str_format = Expect<Equal<typeof str_with_pattern.format, string | undefined>>
+type _str_minLen = Expect<Equal<typeof str_with_pattern.minLength, number | undefined>>
+type _str_maxLen = Expect<Equal<typeof str_with_pattern.maxLength, number | undefined>>
+type _ba = Expect<Equal<Static<typeof ba>, Uint8Array>>
+type _obj = Expect<Equal<Static<typeof obj>, Record<string | number, any>>>
 
 // Basic schema wrappers
 
@@ -44,9 +45,9 @@ const opt_str = $T.optional($T.string())
 const null_str = $T.nullable($T.string())
 const nullish_str = $T.nullish($T.string())
 
-type _opt_str = Expect<Extends<Static<typeof opt_str>, string | undefined>>
-type _null_str = Expect<Extends<Static<typeof null_str>, string | null>>
-type _nullish_str = Expect<Extends<Static<typeof nullish_str>, string | null | undefined>>
+type _opt_str = Expect<Equal<Static<typeof opt_str>, string | undefined>>
+type _null_str = Expect<Equal<Static<typeof null_str>, string | null>>
+type _nullish_str = Expect<Equal<Static<typeof nullish_str>, string | null | undefined>>
 
 // Array schema type
 
@@ -61,16 +62,16 @@ const arr_arr = $T.array($T.array($T.literal('hello')))
 const arr_union = $T.array($T.union([$T.literal('hello'), $T.literal('mom')]))
 const arr_intersection = $T.array($T.intersection([$T.object({ foo: $T.string() }), $T.object({ bar: $T.number() })]))
 
-type _arr_nil = Expect<Extends<Static<typeof arr_nil>, null[]>>
-type _arr_bool = Expect<Extends<Static<typeof arr_bool>, boolean[]>>
-type _arr_num = Expect<Extends<Static<typeof arr_num>, number[]>>
-type _arr_int = Expect<Extends<Static<typeof arr_int>, number[]>>
-type _arr_str = Expect<Extends<Static<typeof arr_str>, string[]>>
-type _arr_obj = Expect<Extends<Static<typeof arr_obj>, { foo: 42 }[]>>
-type _arr_arr = Expect<Extends<Static<typeof arr_arr>, 'hello'[][]>>
+type _arr_nil = Expect<Equal<Static<typeof arr_nil>, null[]>>
+type _arr_bool = Expect<Equal<Static<typeof arr_bool>, boolean[]>>
+type _arr_num = Expect<Equal<Static<typeof arr_num>, number[]>>
+type _arr_int = Expect<Equal<Static<typeof arr_int>, number[]>>
+type _arr_str = Expect<Equal<Static<typeof arr_str>, string[]>>
+type _arr_obj = Expect<Equal<Static<typeof arr_obj>, { foo: 42 }[]>>
+type _arr_arr = Expect<Equal<Static<typeof arr_arr>, 'hello'[][]>>
 
-type _arr_union = Expect<Extends<Static<typeof arr_union>, ('hello' | 'mom')[]>>
-type _arr_intersection = Expect<Extends<Static<typeof arr_intersection>, ({ foo: string } & { bar: number })[]>>
+type _arr_union = Expect<Equal<Static<typeof arr_union>, ('hello' | 'mom')[]>>
+type _arr_intersection = Expect<Equal<Static<typeof arr_intersection>, ({ foo: string } & { bar: number })[]>>
 
 // Object schema type
 
@@ -119,11 +120,11 @@ const union_intersection = $T.union([
   $T.object({ test: $T.literal('test') }),
 ])
 
-type _union_str_number = Expect<Extends<Static<typeof union_str_number>, string | number>>
-type _union_str_any = Expect<Extends<Static<typeof union_str_any>, any>>
-type _union_union_number = Expect<Extends<Static<typeof union_union_number>, 'foo' | 'bar' | 'baz'>>
+type _union_str_number = Expect<Equal<Static<typeof union_str_number>, string | number>>
+type _union_str_any = Expect<Equal<Static<typeof union_str_any>, any>>
+type _union_union_number = Expect<Equal<Static<typeof union_union_number>, 'foo' | 'bar' | 'baz'>>
 type _union_intersection = Expect<
-  Extends<Static<typeof union_intersection>, ({ foo: 42 } & { bar: number }) | { test: 'test' }>
+  Equal<Static<typeof union_intersection>, ({ foo: 42 } & { bar: number }) | { test: 'test' }>
 >
 
 // Intersection type
@@ -138,12 +139,12 @@ const intersection_intersection_obj = $T.intersection([
   $T.object({ baz: $T.literal('42') }),
 ])
 
-type _intersection_obj_obj = Expect<Extends<Static<typeof intersection_obj_obj>, { foo: string } & { bar: boolean }>>
+type _intersection_obj_obj = Expect<Equal<Static<typeof intersection_obj_obj>, { foo: string } & { bar: boolean }>>
 type _intersection_union_obj = Expect<
-  Extends<Static<typeof intersection_union_obj>, ({ foo: string } | { bar: boolean }) & { baz: 42 }>
+  Equal<Static<typeof intersection_union_obj>, ({ foo: string } | { bar: boolean }) & { baz: 42 }>
 >
 type _intersection_intersection_obj = Expect<
-  Extends<Static<typeof intersection_intersection_obj>, { foo: string } & { bar: boolean } & { baz: '42' }>
+  Equal<Static<typeof intersection_intersection_obj>, { foo: string } & { bar: boolean } & { baz: '42' }>
 >
 
 // Stream types
@@ -161,10 +162,10 @@ const stream_intersection = $T.stream(
   $T.intersection([$T.object({ foo: $T.string() }), $T.object({ bar: $T.boolean() })])
 )
 
-type _stream_ba = Expect<Extends<Static<typeof stream_ba>, AsyncGenerator<Uint8Array>>>
-type _stream_str = Expect<Extends<Static<typeof stream_str>, AsyncGenerator<string>>>
+type _stream_ba = Expect<Equal<Static<typeof stream_ba>, AsyncGenerator<Uint8Array>>>
+type _stream_str = Expect<Equal<Static<typeof stream_str>, AsyncGenerator<string>>>
 type _stream_obj = Expect<
-  Extends<
+  Equal<
     Static<typeof stream_obj>,
     AsyncGenerator<
       | ['foo', 'hi']
@@ -179,7 +180,7 @@ type _stream_obj = Expect<
   >
 >
 type _stream_multipart = Expect<
-  Extends<
+  Equal<
     Static<typeof stream_multipart>,
     AsyncGenerator<
       | {
@@ -207,13 +208,15 @@ type _stream_multipart = Expect<
           content: {
             nested: boolean
           }
-        }
+        },
+      void,
+      unknown
     >
   >
 >
-type _stream_union = Expect<Extends<Static<typeof stream_union>, AsyncGenerator<['foo', string] | ['bar', boolean]>>>
+type _stream_union = Expect<Equal<Static<typeof stream_union>, AsyncGenerator<['foo', string] | ['bar', boolean]>>>
 type _stream_intersection = Expect<
-  Extends<Static<typeof stream_intersection>, AsyncGenerator<['foo', string] | ['bar', boolean]>>
+  Equal<Static<typeof stream_intersection>, AsyncGenerator<['foo', string] | ['bar', boolean]>>
 >
 
 // Endpoints
@@ -342,14 +345,14 @@ g.patch('/body/patch', { body: $T.null() }, ctx => {
 g.post('/body/ba', { body: { 'application/octet-stream': $T.byteArray() } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Equal<typeof body, Uint8Array>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'application/octet-stream'>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'application/octet-stream'>>
   ctx.set.status = body instanceof Uint8Array ? 200 : 500
 })
 
 g.post('/body/ba/stream', { body: { 'application/octet-stream': $T.stream($T.byteArray()) } }, async ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Extends<typeof body, AsyncGenerator<Uint8Array>>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'application/octet-stream'>>
+  type _ep_body = Expect<Equal<typeof body, AsyncGenerator<Uint8Array>>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'application/octet-stream'>>
   for await (const bp of body) {
     if (body instanceof Uint8Array) ctx.set.status = 500
   }
@@ -360,49 +363,49 @@ g.post('/body/ba/stream', { body: { 'application/octet-stream': $T.stream($T.byt
 g.post('/body/text/str', { body: { 'text/plain': $T.string() } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Equal<typeof body, string>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'text/plain'>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'text/plain'>>
   ctx.set.status = typeof body === 'string' ? 200 : 500
 })
 
 g.post('/body/text/literal', { body: { 'text/plain': $T.literal('foo') } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Equal<typeof body, 'foo'>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'text/plain'>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'text/plain'>>
   ctx.set.status = body === 'foo' ? 200 : 500
 })
 
 g.post('/body/text/bool', { body: { 'text/plain': $T.boolean() } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Equal<typeof body, boolean>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'text/plain'>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'text/plain'>>
   ctx.set.status = typeof body === 'boolean' ? 200 : 500
 })
 
 g.post('/body/text/num', { body: { 'text/plain': $T.number() } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Equal<typeof body, number>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'text/plain'>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'text/plain'>>
   ctx.set.status = typeof body === 'number' ? 200 : 500
 })
 
 g.post('/body/text/int', { body: { 'text/plain': $T.integer() } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Equal<typeof body, number>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'text/plain'>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'text/plain'>>
   ctx.set.status = typeof body === 'number' ? 200 : 500
 })
 
 g.post('/body/text/union', { body: { 'text/plain': $T.union([$T.literal('foo'), $T.number()]) } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Equal<typeof body, 'foo' | number>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'text/plain'>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'text/plain'>>
   ctx.set.status = body === 'foo' || typeof body === 'number' ? 200 : 500
 })
 
 g.post('/body/text/stream', { body: { 'text/plain': $T.stream($T.string()) } }, async ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Extends<typeof body, AsyncGenerator<string>>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'text/plain'>>
+  type _ep_body = Expect<Equal<typeof body, AsyncGenerator<string>>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'text/plain'>>
   for await (const chunk of body) if (typeof chunk !== 'string') ctx.set.status = 500
 })
 
@@ -410,43 +413,43 @@ g.post('/body/text/stream', { body: { 'text/plain': $T.stream($T.string()) } }, 
 
 g.post('/body/json/bool', { body: { 'application/json': $T.boolean() } }, ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Extends<typeof body, boolean>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'application/json'>>
+  type _ep_body = Expect<Equal<typeof body, boolean>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'application/json'>>
   ctx.set.status = typeof body === 'boolean' ? 200 : 500
 })
 
 g.post('/body/json/num', { body: { 'application/json': $T.number() } }, ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Extends<typeof body, number>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'application/json'>>
+  type _ep_body = Expect<Equal<typeof body, number>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'application/json'>>
   ctx.set.status = typeof body === 'number' ? 200 : 500
 })
 
 g.post('/body/json/int', { body: { 'application/json': $T.integer() } }, ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Extends<typeof body, number>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'application/json'>>
+  type _ep_body = Expect<Equal<typeof body, number>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'application/json'>>
   ctx.set.status = typeof body === 'number' ? 200 : 500
 })
 
 g.post('/body/json/str', { body: { 'application/json': $T.string() } }, ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Extends<typeof body, string>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'application/json'>>
+  type _ep_body = Expect<Equal<typeof body, string>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'application/json'>>
   ctx.set.status = typeof body === 'string' ? 200 : 500
 })
 
 g.post('/body/json/arr', { body: { 'application/json': $T.array($T.string()) } }, ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Extends<typeof body, string[]>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'application/json'>>
+  type _ep_body = Expect<Equal<typeof body, string[]>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'application/json'>>
   ctx.set.status = Array.isArray(body) && body.every(i => typeof i === 'string') ? 200 : 500
 })
 
 g.post('/body/json/union', { body: { 'application/json': $T.union([$T.boolean(), $T.string()]) } }, ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Extends<typeof body, boolean | string>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'application/json'>>
+  type _ep_body = Expect<Equal<typeof body, boolean | string>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'application/json'>>
   ctx.set.status = typeof body === 'string' || typeof body === 'boolean' ? 200 : 500
 })
 
@@ -455,16 +458,16 @@ g.post(
   { body: { 'application/json': $T.intersection([$T.object({ foo: $T.string() }), $T.object({ bar: $T.number() })]) } },
   ctx => {
     const { body, contentType } = ctx
-    type _ep_body = Expect<Extends<typeof body, { foo: string } & { bar: number }>>
-    type _ep_contentType = Expect<Extends<typeof contentType, 'application/json'>>
+    type _ep_body = Expect<Equal<typeof body, { foo: string } & { bar: number }>>
+    type _ep_contentType = Expect<Equal<typeof contentType, 'application/json'>>
     ctx.set.status = typeof body.foo === 'string' || typeof body.bar === 'number' ? 200 : 500
   }
 )
 
 g.post('/body/json/obj', { body: { 'application/json': $T.object({ foo: $T.string() }) } }, ctx => {
   const { body, contentType } = ctx
-  type _ep_body = Expect<Extends<typeof body, { foo: string }>>
-  type _ep_contentType = Expect<Extends<typeof contentType, 'application/json'>>
+  type _ep_body = Expect<Equal<typeof body, { foo: string }>>
+  type _ep_contentType = Expect<Equal<typeof contentType, 'application/json'>>
   ctx.set.status = typeof body.foo === 'string' ? 200 : 500
 })
 
@@ -484,7 +487,7 @@ g.post(
   ctx => {
     const { body, contentType } = ctx
     type _ep_body = Expect<Equal<typeof body, { foo: string; bar: number; opt?: 'opt' }>>
-    type _ep_contentType = Expect<Extends<typeof contentType, 'application/x-www-form-urlencoded'>>
+    type _ep_contentType = Expect<Equal<typeof contentType, 'application/x-www-form-urlencoded'>>
     ctx.set.status =
       typeof body.foo === 'string' && typeof body.bar === 'number' && (body.opt ? body.opt === 'opt' : true) ? 200 : 500
   }
@@ -502,8 +505,8 @@ g.post(
   },
   ctx => {
     const { body, contentType } = ctx
-    type _ep_body = Expect<Extends<typeof body, { foo: string } | { bar: boolean }>>
-    type _ep_contentType = Expect<Extends<typeof contentType, 'application/x-www-form-urlencoded'>>
+    type _ep_body = Expect<Equal<typeof body, { foo: string } | { bar: boolean }>>
+    type _ep_contentType = Expect<Equal<typeof contentType, 'application/x-www-form-urlencoded'>>
     //@ts-ignore
     typeof body.foo ? typeof body.foo === 'string' : true && body.bar ? typeof body.bar === 'number' : true ? 200 : 500
   }
@@ -514,8 +517,8 @@ g.post(
   { body: { 'application/x-www-form-urlencoded': $T.stream($T.object({ foo: $T.string(), bar: $T.number() })) } },
   async ctx => {
     const { body, contentType } = ctx
-    type _ep_body = Expect<Extends<typeof body, AsyncGenerator<['foo', string] | ['bar', number]>>>
-    type _ep_contentType = Expect<Extends<typeof contentType, 'application/x-www-form-urlencoded'>>
+    type _ep_body = Expect<Equal<typeof body, AsyncGenerator<['foo', string] | ['bar', number]>>>
+    type _ep_contentType = Expect<Equal<typeof contentType, 'application/x-www-form-urlencoded'>>
     for await (const [k, v] of body) {
       if (k === 'foo' && typeof v !== 'string') ctx.set.status = 500
       if (k === 'bar' && typeof v !== 'number') ctx.set.status = 500
@@ -569,7 +572,7 @@ g.post(
         }
       >
     >
-    type _ep_contentType = Expect<Extends<typeof contentType, 'multipart/form-data'>>
+    type _ep_contentType = Expect<Equal<typeof contentType, 'multipart/form-data'>>
     if (body.foo) {
       if (body.foo.headers?.type && typeof body.foo.headers?.type !== 'string') ctx.set.status = 500
       if (body.foo.headers?.filename && typeof body.foo.headers?.filename !== 'string') ctx.set.status = 500
@@ -603,7 +606,7 @@ g.post(
   async ctx => {
     const { body, contentType } = ctx
     type _ep_body = Expect<
-      Extends<
+      Equal<
         typeof body,
         AsyncGenerator<
           | {
@@ -629,11 +632,13 @@ g.post(
                 filename?: string
               }
               content: 'opt' | undefined
-            }
+            },
+          void,
+          unknown
         >
       >
     >
-    type _ep_contentType = Expect<Extends<typeof contentType, 'multipart/form-data'>>
+    type _ep_contentType = Expect<Equal<typeof contentType, 'multipart/form-data'>>
     for await (const mp of body) {
       if (mp.headers.name === 'foo') {
         if (mp.headers?.type && typeof mp.headers?.type !== 'string') ctx.set.status = 500
@@ -662,31 +667,157 @@ g.post(
 g.post('/body/default', { body: { '*/*': $T.any() } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Equal<typeof body, any>>
-  type _ep_contentType = Expect<Extends<typeof contentType, '*/*'>>
+  type _ep_contentType = Expect<Equal<typeof contentType, '*/*'>>
 })
 
 g.post('/body/default/ba', { body: { '*/*': $T.byteArray() } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Equal<typeof body, Uint8Array>>
-  type _ep_contentType = Expect<Extends<typeof contentType, '*/*'>>
+  type _ep_contentType = Expect<Equal<typeof contentType, '*/*'>>
 })
 
 g.post('/body/default/str', { body: { '*/*': $T.string() } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Equal<typeof body, string>>
-  type _ep_contentType = Expect<Extends<typeof contentType, '*/*'>>
+  type _ep_contentType = Expect<Equal<typeof contentType, '*/*'>>
 })
 
 g.post('/body/default/stream/ba', { body: { '*/*': $T.stream($T.byteArray()) } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Equal<typeof body, AsyncGenerator<Uint8Array>>>
-  type _ep_contentType = Expect<Extends<typeof contentType, '*/*'>>
+  type _ep_contentType = Expect<Equal<typeof contentType, '*/*'>>
 })
 
 g.post('/body/default/stream/str', { body: { '*/*': $T.stream($T.string()) } }, ctx => {
   const { body, contentType } = ctx
   type _ep_body = Expect<Equal<typeof body, AsyncGenerator<string>>>
-  type _ep_contentType = Expect<Extends<typeof contentType, '*/*'>>
+  type _ep_contentType = Expect<Equal<typeof contentType, '*/*'>>
+})
+
+// Whole-context inference
+//
+// The assertions above pin individual context keys, so a key nobody thought to
+// assert (`request`, `state`, `set`, `remoteAddress`, `route`, `cookies`) can be
+// retyped without any test failing. These pin `typeof ctx` in full on a handful
+// of representative routes: any change to the context object — a retyped field,
+// a dropped key, a new key — fails here. Registered on a throwaway instance so
+// the runtime case table below stays the authority on what is actually served.
+
+const ctxG = new Galbe()
+
+// No schema: headers/query/cookies stay open, params come from the path, no body.
+ctxG.get('/ctx/noschema/:id', ctx => {
+  type _ctx = Expect<
+    Equal<
+      typeof ctx,
+      {
+        headers: Record<string | number | symbol, any>
+        params: { id: string }
+        query: Record<string | number | symbol, any>
+        contentType: undefined
+        body: null
+        request: Request
+        remoteAddress: SocketAddress | null
+        route?: Route
+        state: Record<string, any>
+        set: ContextSet
+        cookies: Record<string | number | symbol, any>
+      }
+    >
+  >
+})
+
+// Every request schema populated, single body media type.
+ctxG.post(
+  '/ctx/full/:id',
+  {
+    headers: { 'x-tok': $T.string() },
+    query: { q: $T.string(), opt: $T.optional($T.integer()) },
+    params: { id: $T.integer() },
+    cookies: { sid: $T.string() },
+    body: { 'application/json': $T.object({ a: $T.string() }) },
+  },
+  ctx => {
+    type _ctx = Expect<
+      Equal<
+        typeof ctx,
+        {
+          headers: { 'x-tok': string }
+          params: { id: number }
+          query: { q: string; opt?: number }
+          contentType: 'application/json'
+          body: { a: string }
+          request: Request
+          remoteAddress: SocketAddress | null
+          route?: Route
+          state: Record<string, any>
+          set: ContextSet
+          cookies: { sid: string }
+        }
+      >
+    >
+  }
+)
+
+// Multiple body media types: the context is a union discriminated by contentType.
+ctxG.post(
+  '/ctx/multi',
+  { body: { 'application/json': $T.object({ a: $T.string() }), 'text/plain': $T.string() } },
+  ctx => {
+    type _ctx = Expect<
+      Equal<
+        typeof ctx,
+        | {
+            headers: Record<string | number | symbol, any>
+            params: {}
+            query: Record<string | number | symbol, any>
+            contentType: 'application/json'
+            body: { a: string }
+            request: Request
+            remoteAddress: SocketAddress | null
+            route?: Route
+            state: Record<string, any>
+            set: ContextSet
+            cookies: Record<string | number | symbol, any>
+          }
+        | {
+            headers: Record<string | number | symbol, any>
+            params: {}
+            query: Record<string | number | symbol, any>
+            contentType: 'text/plain'
+            body: string
+            request: Request
+            remoteAddress: SocketAddress | null
+            route?: Route
+            state: Record<string, any>
+            set: ContextSet
+            cookies: Record<string | number | symbol, any>
+          }
+      >
+    >
+  }
+)
+
+// Streaming body: the stream wrapper must survive into the context type.
+ctxG.post('/ctx/stream', { body: { 'application/octet-stream': $T.stream($T.byteArray()) } }, ctx => {
+  type _ctx = Expect<
+    Equal<
+      typeof ctx,
+      {
+        headers: Record<string | number | symbol, any>
+        params: {}
+        query: Record<string | number | symbol, any>
+        contentType: 'application/octet-stream'
+        body: AsyncGenerator<Uint8Array>
+        request: Request
+        remoteAddress: SocketAddress | null
+        route?: Route
+        state: Record<string, any>
+        set: ContextSet
+        cookies: Record<string | number | symbol, any>
+      }
+    >
+  >
 })
 
 const port = 7362

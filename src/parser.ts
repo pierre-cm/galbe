@@ -427,7 +427,7 @@ async function* $streamToMultipartForm(
     start = 0
     // jump from match to match: whichever of boundary/delimiter comes first
     // (boundary wins a tie, as in the byte-wise scan this replaces)
-    for (let p = 0; p < scan.length; ) {
+    for (let p = 0; p < scan.length;) {
       const iB = indexOfSeq(scan, bound, p)
       const iD = indexOfSeq(scan, delimiter, p)
       if (iB === -1 && iD === -1) break
