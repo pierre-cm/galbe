@@ -1484,7 +1484,6 @@ describe('parser unit', () => {
     const splitAt = bytes.indexOf(0xc3) + 1 // é = c3 a9, cut between the two bytes
     const body = await requestBodyParser(
       reqWith(chunked(bytes, splitAt), { 'content-type': 'application/json' }),
-      { 'content-type': 'application/json' },
       undefined,
       'application/json'
     )
@@ -1498,7 +1497,6 @@ describe('parser unit', () => {
     const bytes = new TextEncoder().encode('{"a": "unterminated')
     const err = await requestBodyParser(
       reqWith(chunked(bytes), { 'content-type': 'application/json' }),
-      { 'content-type': 'application/json' },
       undefined,
       'application/json'
     ).catch(e => e)
@@ -1511,7 +1509,6 @@ describe('parser unit', () => {
     const bytes = new TextEncoder().encode('{"a": "unterminated')
     const err = await requestBodyParser(
       reqWith(chunked(bytes), { 'content-type': 'application/json' }),
-      { 'content-type': 'application/json' },
       { 'application/json': $T.object({ a: $T.string() }) },
       'application/json'
     ).catch(e => e)
@@ -1524,7 +1521,6 @@ describe('parser unit', () => {
     const bytes = new TextEncoder().encode('a€b') // € = e2 82 ac
     const body = await requestBodyParser(
       reqWith(chunked(bytes, 2, 3), { 'content-type': 'text/plain' }),
-      { 'content-type': 'text/plain' },
       undefined,
       'text/plain'
     )
@@ -1567,7 +1563,7 @@ describe('parser unit', () => {
   test('requestBodyParser: multipart body parsed identically across chunkings', async () => {
     const { requestBodyParser } = await import('../src/parser')
     const parse = (body: ReadableStream<Uint8Array>) =>
-      requestBodyParser(reqWith(body, mpHeaders), mpHeaders, { 'multipart/form-data': $T.multipartForm(mpProps) }, 'multipart/form-data')
+      requestBodyParser(reqWith(body, mpHeaders), { 'multipart/form-data': $T.multipartForm(mpProps) }, 'multipart/form-data')
     const control: any = await parse(chunked(mpBody))
     expect(control.name.content).toBe('hello world')
     expect(control.n.content).toBe(42)
@@ -1578,7 +1574,7 @@ describe('parser unit', () => {
   test('requestBodyParser: multipart body split inside boundary token and header delimiter', async () => {
     const { requestBodyParser } = await import('../src/parser')
     const parse = (body: ReadableStream<Uint8Array>) =>
-      requestBodyParser(reqWith(body, mpHeaders), mpHeaders, { 'multipart/form-data': $T.multipartForm(mpProps) }, 'multipart/form-data')
+      requestBodyParser(reqWith(body, mpHeaders), { 'multipart/form-data': $T.multipartForm(mpProps) }, 'multipart/form-data')
     const control: any = await parse(chunked(mpBody))
     const str = new TextDecoder().decode(mpBody) // ASCII-only: string offsets are byte offsets
     const cuts = [
@@ -1594,7 +1590,6 @@ describe('parser unit', () => {
     const parse = async (body: ReadableStream<Uint8Array>) => {
       const stream: any = await requestBodyParser(
         reqWith(body, mpHeaders),
-        mpHeaders,
         { 'multipart/form-data': $T.stream($T.multipartForm(mpProps)) },
         'multipart/form-data'
       )
@@ -1616,7 +1611,6 @@ describe('parser unit', () => {
     const parse = (body: ReadableStream<Uint8Array>) =>
       requestBodyParser(
         reqWith(body, ufHeaders),
-        ufHeaders,
         { 'application/x-www-form-urlencoded': $T.object(ufProps) },
         ufHeaders['content-type']
       )
@@ -1630,7 +1624,6 @@ describe('parser unit', () => {
     const parse = async (body: ReadableStream<Uint8Array>) => {
       const stream: any = await requestBodyParser(
         reqWith(body, ufHeaders),
-        ufHeaders,
         { 'application/x-www-form-urlencoded': $T.stream($T.object(ufProps)) },
         ufHeaders['content-type']
       )
@@ -1663,7 +1656,7 @@ describe('parser unit', () => {
       )
     const parseText = async (bytes: Uint8Array, limit?: number) => {
       const { requestBodyParser } = await import('../src/parser')
-      return requestBodyParser(reqWith(chunkedEvery(bytes, 8), textHeaders), textHeaders, undefined, 'text/plain', limit)
+      return requestBodyParser(reqWith(chunkedEvery(bytes, 8), textHeaders), undefined, 'text/plain', limit)
     }
 
     test('requestBodyParser: body crossing the limit mid-stream is rejected with 413', async () => {
@@ -1682,7 +1675,6 @@ describe('parser unit', () => {
       const baHeaders = { 'content-type': 'application/octet-stream' }
       const err = await requestBodyParser(
         reqWith(chunkedEvery(new TextEncoder().encode('a'.repeat(128)), 8), baHeaders),
-        baHeaders,
         undefined,
         'application/octet-stream',
         64
@@ -1696,7 +1688,6 @@ describe('parser unit', () => {
       const bytes = new TextEncoder().encode(JSON.stringify({ s: 'a'.repeat(128) }))
       const err = await requestBodyParser(
         reqWith(chunkedEvery(bytes, 8), jsonHeaders),
-        jsonHeaders,
         undefined,
         'application/json',
         64
@@ -1707,12 +1698,11 @@ describe('parser unit', () => {
     test('requestBodyParser: multipart part larger than the limit is rejected', async () => {
       const { requestBodyParser } = await import('../src/parser')
       const parse = (body: ReadableStream<Uint8Array>, schema: any) =>
-        requestBodyParser(reqWith(body, mpHeaders), mpHeaders, schema, 'multipart/form-data', 64).catch(e => e)
+        requestBodyParser(reqWith(body, mpHeaders), schema, 'multipart/form-data', 64).catch(e => e)
       const buffered = await parse(chunkedEvery(bigMpBody(256), 7), { 'multipart/form-data': $T.multipartForm(mpProps) })
       expect(buffered).toBeInstanceOf(PayloadTooLargeError)
       const streamed: any = await requestBodyParser(
         reqWith(chunkedEvery(bigMpBody(256), 7), mpHeaders),
-        mpHeaders,
         { 'multipart/form-data': $T.stream($T.multipartForm(mpProps)) },
         'multipart/form-data',
         64
@@ -1729,7 +1719,6 @@ describe('parser unit', () => {
       const { requestBodyParser } = await import('../src/parser')
       const body: any = await requestBodyParser(
         reqWith(chunked(mpBody), mpHeaders),
-        mpHeaders,
         { 'multipart/form-data': $T.multipartForm(mpProps) },
         'multipart/form-data',
         mpBody.length

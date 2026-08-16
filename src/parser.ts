@@ -73,8 +73,8 @@ const reqJson = async (req: Request, limit?: number) =>
 // Multipart boundary extraction from the content-type header: parameters are
 // `;`-separated and extra legal parameters (charset, …) must not leak into
 // the boundary value.
-const multipartBoundary = (headers: Record<string, string>): string => {
-  for (const param of headers?.['content-type']?.split(';') ?? []) {
+const multipartBoundary = (contentType: string | null): string => {
+  for (const param of contentType?.split(';') ?? []) {
     const eq = param.indexOf('=')
     if (eq === -1 || param.slice(0, eq).trim().toLowerCase() !== 'boundary') continue
     let value = param.slice(eq + 1).trim()
@@ -84,9 +84,11 @@ const multipartBoundary = (headers: Record<string, string>): string => {
   throw new RequestError({ status: 400, payload: { body: `Missing multipart boundary` } })
 }
 
+// `contentType` is the normalized media type (no parameters); the raw header is
+// read from the request only where its parameters matter (multipart boundary),
+// so body parsing never needs the materialized header map
 export const requestBodyParser = async (
   req: Request,
-  headers: Record<string, string>,
   schemas?: STBody | STNull,
   contentType?: string,
   limit?: number
@@ -131,7 +133,8 @@ export const requestBodyParser = async (
         return parseUrlForm(await reqText(req, limit))
       } else if (parseMode === 'multipart') {
         if (body === null) return {}
-        return await streamToMultipartForm(oneChunkStream(await reqBytes(req, limit)), multipartBoundary(headers))
+        const boundary = multipartBoundary(req.headers.get('content-type'))
+        return await streamToMultipartForm(oneChunkStream(await reqBytes(req, limit)), boundary)
       } else return body === null ? null : rsToAsyncIterator(body)
     } else {
       // Schemas found
@@ -219,7 +222,7 @@ export const requestBodyParser = async (
                 },
               })
             : {}
-        const boundary = multipartBoundary(headers)
+        const boundary = multipartBoundary(req.headers.get('content-type'))
         if (kind === 'anyOf' || kind === 'oneOf') {
           let mp = await streamToMultipartForm(oneChunkStream(await reqBytes(req, limit)), boundary, undefined, limit)
           return unionize(mp, schema as STUnion)

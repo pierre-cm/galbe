@@ -48,8 +48,20 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
     async fetch(req) {
       if (!METHODS.includes(req.method)) return new Response('', { status: 501 })
       const cookies: string[] = []
+      let reqHeaders: Record<string, any> | undefined
       const context = {
         request: req,
+        // null-prototype: header names are untrusted keys and must never reach
+        // Object.prototype members (constructor, __proto__, toString, …)
+        get headers() {
+          if (reqHeaders) return reqHeaders
+          const h: Record<string, any> = Object.create(null)
+          for (const [k, v] of req.headers) h[k] = v
+          return (reqHeaders = h)
+        },
+        set headers(v: Record<string, any>) {
+          reqHeaders = v
+        },
         contentType: !EMPTY_BODY_METHODS.includes(req.method)
           ? normalizeContentType(req.headers.get('content-type'))
           : undefined,
@@ -60,7 +72,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         },
         state: {},
         cookies: readCookies(req.headers.get('cookie')),
-      } as MakeOptional<Context, 'headers' | 'params' | 'query' | 'body'>
+      } as MakeOptional<Context, 'params' | 'query' | 'body'>
       const url = new URL(req.url)
       let route: Route
       let response: any = ''
@@ -87,10 +99,8 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
 
         // parse request
         const schema = route.schema
-        // null-prototype maps: keys are untrusted, a plain {} would collide with
+        // null-prototype map: keys are untrusted, a plain {} would collide with
         // Object.prototype members (constructor, __proto__, toString, …)
-        const inHeaders: Record<string, any> = Object.create(null)
-        for (let [k, v] of req.headers) inHeaders[k] = v
         let inQuery: Record<string, any> = Object.create(null)
         for (let [k, v] of url.searchParams) {
           if (k in inQuery) {
@@ -108,12 +118,10 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
 
         context.body = await requestBodyParser(
           req,
-          inHeaders,
           EMPTY_BODY_METHODS.includes(req.method) ? undefined : schema.body,
           context.contentType,
           bodyLimit
         )
-        context.headers = inHeaders
         context.query = inQuery
         context.params = inParams
 
@@ -167,8 +175,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
 
         // hook/handler chain, composed once at route registration (see galbeMethod)
         response = await route.composed(context as Context)
-        if (context.set.status === undefined)
-          context.set.status = response instanceof Response ? response.status : 200
+        if (context.set.status === undefined) context.set.status = response instanceof Response ? response.status : 200
 
         const parsedResponse = responseParser(response, context as Context, cookies, schema.response)
 
@@ -204,7 +211,9 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         if (customError) return customError
         if (error instanceof InternalServerError) {
           let internalPayload = 'Internal Server Error'
-          try { internalPayload = JSON.stringify(error?.payload || internalPayload) } catch {}
+          try {
+            internalPayload = JSON.stringify(error?.payload || internalPayload)
+          } catch {}
           return new Response(internalPayload, {
             status: error.status,
             headers: { 'content-type': 'application/json' },

@@ -1233,3 +1233,42 @@ describe('query serialization', () => {
     expect(await (await get('/arrays', 'piped=a,b')).json()).toEqual({ piped: ['a,b'] })
   })
 })
+
+// ctx.headers is materialized from req.headers on first access; every consumer
+// must see the same fully populated, null-prototype map on a schema-less route
+describe('lazy request headers', () => {
+  const lazyPort = 7373
+  const galbe = new Galbe()
+  const seen: Record<string, any> = {}
+
+  galbe.get(
+    '/lazy',
+    [
+      ctx => {
+        seen.hook = ctx.headers
+      },
+    ],
+    ctx => ctx.headers
+  )
+
+  beforeAll(async () => {
+    await galbe.use({
+      name: 'dev.galbe.test.lazyHeaders',
+      beforeHandle: ctx => {
+        seen.plugin = ctx.headers
+      },
+    })
+    await galbe.listen(lazyPort)
+  })
+  afterAll(() => galbe.stop())
+
+  test('hook, plugin and handler all see the request headers', async () => {
+    const resp = await fetch(`http://localhost:${lazyPort}/lazy`, { headers: { 'X-One': 'a', 'X-Two': 'b' } })
+    const body: any = await resp.json()
+
+    expect(body).toMatchObject({ 'x-one': 'a', 'x-two': 'b' })
+    expect(seen.plugin).toMatchObject({ 'x-one': 'a', 'x-two': 'b' })
+    expect(seen.hook).toBe(seen.plugin)
+    expect(Object.getPrototypeOf(seen.hook)).toBeNull()
+  })
+})
