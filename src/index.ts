@@ -337,7 +337,6 @@ export class Galbe {
       | Hook<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R, C>>[]
       | Handler<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R, C>>,
     arg4?: Handler<'get', Path, RequestSchema<'get', Path, H, P, Q, B, R, C>>
-    //@ts-ignore
   ) => this.add(overloadDiscriminer(this, 'get', path, arg2, arg3, arg4))
   post: Endpoint<'post'> = <
     Path extends string,
@@ -513,8 +512,9 @@ export class GalbeGroup<Prefix extends string = string> {
     this.#prefix = joinPath('', prefix).replace(/\/+$/, '')
   }
   #route(method: Method, path: string, args: any[]): any {
-    //@ts-ignore
-    return this.#galbe[method](joinPath(this.#prefix, path), ...args)
+    // indexing by a Method union yields a union of Endpoint overload sets, which
+    // has no common call signature — the dispatch is checked at the call sites
+    return (this.#galbe[method] as (path: string, ...args: any[]) => any)(joinPath(this.#prefix, path), ...args)
   }
   get: Endpoint<'get', Prefix> = (path: any, ...args: any[]): any => this.#route('get', path, args)
   post: Endpoint<'post', Prefix> = (path: any, ...args: any[]): any => this.#route('post', path, args)

@@ -1,14 +1,15 @@
 import { describe, test, expect } from 'bun:test'
-import { $T } from '../src'
+import { Galbe, $T } from '../src'
 import type { STSchema, STArray, STString, STUnion, STIntersection, STObject, Static } from '../src/schema'
 import { Kind } from '../src/schema'
-import type { STBodyContent, STBodyType } from '../src/types'
+import type { Context, STBodyContent, STBodyType } from '../src/types'
 
 // Type-level regression tests for the dropped `[key: string]: any` index
 // signature on STSchema and the STBody/STBodyType decoupling.
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 type Expect<T extends true> = T
+type IsUnion<T, U = T> = T extends any ? ([U] extends [T] ? false : true) : never
 
 describe('schema typing', () => {
   test('STSchema does not accept arbitrary fields', () => {
@@ -160,5 +161,172 @@ describe('schema typing', () => {
         g.stop()
       }
     })
+  })
+})
+
+// Type-level regression tests for `Context` inference. Everything asserted here
+// is checked by `bun run typecheck`, not at runtime: the routes are registered
+// only so the assertions run against what the `Endpoint` overloads actually
+// infer, which is what a user sees in their editor.
+describe('context typing', () => {
+  const g = new Galbe()
+
+  test('a json body types `body` and pins `contentType` to its media type', () => {
+    g.post('/ctx/json', { body: { 'application/json': $T.object({ name: $T.string(), age: $T.number() }) } }, ctx => {
+      type _body = Expect<Equal<typeof ctx.body, { name: string; age: number }>>
+      type _ct = Expect<Equal<typeof ctx.contentType, 'application/json'>>
+      // @ts-expect-error — the body is an object, not a string.
+      const wrong: string = ctx.body
+      // @ts-expect-error — this route offers exactly one media type.
+      const never: boolean = ctx.contentType === 'text/plain'
+      void wrong
+      void never
+      return ctx.body
+    })
+    expect(true).toBe(true)
+  })
+
+  test('`contentType` discriminates `body` across media types', () => {
+    g.put(
+      '/ctx/multi',
+      {
+        body: {
+          'application/json': $T.object({ a: $T.string() }),
+          'text/plain': $T.string(),
+          'multipart/form-data': $T.multipartForm({ f: $T.byteArray() }),
+        },
+      },
+      ctx => {
+        if (ctx.contentType === 'application/json') {
+          type _json = Expect<Equal<typeof ctx.body, { a: string }>>
+          return ctx.body.a
+        }
+        if (ctx.contentType === 'text/plain') {
+          type _text = Expect<Equal<typeof ctx.body, string>>
+          return ctx.body
+        }
+        type _mp = Expect<Equal<typeof ctx.contentType, 'multipart/form-data'>>
+        return ctx.body.f.content
+      }
+    )
+    expect(true).toBe(true)
+  })
+
+  test('empty-body methods collapse `body` to null and `contentType` to undefined', () => {
+    g.get('/ctx/get', { body: { 'application/json': $T.object({ a: $T.string() }) } }, ctx => {
+      type _body = Expect<Equal<typeof ctx.body, null>>
+      type _ct = Expect<Equal<typeof ctx.contentType, undefined>>
+      // @ts-expect-error — a get carries no body, whatever the schema declares.
+      const wrong: object = ctx.body
+      void wrong
+      return null
+    })
+    // several media types on an empty-body method resolve to a single context:
+    // there is no media type left to discriminate on
+    g.head(
+      '/ctx/head',
+      { body: { 'application/json': $T.object({ a: $T.string() }), 'text/plain': $T.string() } },
+      ctx => {
+        type _single = Expect<Equal<IsUnion<typeof ctx>, false>>
+        type _body = Expect<Equal<typeof ctx.body, null>>
+        return null
+      }
+    )
+    g.options('/ctx/options', { body: { 'text/plain': $T.string() } }, ctx => {
+      type _body = Expect<Equal<typeof ctx.body, null>>
+      return null
+    })
+    expect(true).toBe(true)
+  })
+
+  test('a `$T.null()` body and a missing body both type `body` as null', () => {
+    g.post('/ctx/null', { body: $T.null() }, ctx => {
+      type _body = Expect<Equal<typeof ctx.body, null>>
+      type _ct = Expect<Equal<typeof ctx.contentType, undefined>>
+      return null
+    })
+    g.post('/ctx/nobody', { query: { q: $T.string() } }, ctx => {
+      type _q = Expect<Equal<typeof ctx.query, { q: string }>>
+      return null
+    })
+    expect(true).toBe(true)
+  })
+
+  test('an optional body schema unwraps to `| null | undefined`', () => {
+    g.post('/ctx/optbody', { body: { 'application/json': $T.optional($T.object({ a: $T.string() })) } }, ctx => {
+      type _body = Expect<Equal<typeof ctx.body, { a: string } | null | undefined>>
+      return null
+    })
+    expect(true).toBe(true)
+  })
+
+  test('a route with no schema keeps `body` open and `contentType` a media type', () => {
+    g.post('/ctx/free', ctx => {
+      type _body = Expect<Equal<typeof ctx.body, any>>
+      type _ct = Expect<Equal<typeof ctx.contentType, `${string}/${string}`>>
+      return ctx.body
+    })
+    expect(true).toBe(true)
+  })
+
+  test('params type from the schema, unknown ones fall back to string', () => {
+    g.get('/ctx/:id/:slug', { params: { id: $T.integer() } }, ctx => {
+      type _params = Expect<Equal<typeof ctx.params, { id: number; slug: string }>>
+      // @ts-expect-error — `params` only carries the path's own params.
+      void ctx.params.missing
+      return null
+    })
+    // a schema-optional value stays typed; a schema-optional *key* is dropped
+    // and falls back to string, like an undeclared param
+    g.get('/ctx/opt/:id', { params: { id: $T.optional($T.integer()) } }, ctx => {
+      type _params = Expect<Equal<typeof ctx.params, { id: number | undefined }>>
+      return null
+    })
+    const optionalKey: { id?: ReturnType<typeof $T.integer> } = {}
+    g.get('/ctx/optkey/:id', { params: optionalKey }, ctx => {
+      type _params = Expect<Equal<typeof ctx.params, { id: string }>>
+      return null
+    })
+    expect(true).toBe(true)
+  })
+
+  test('headers, query and cookies infer from their schemas', () => {
+    g.post(
+      '/ctx/entries',
+      {
+        headers: { 'x-token': $T.string() },
+        query: { q: $T.string(), n: $T.optional($T.number()) },
+        cookies: { session: $T.string(), count: $T.optional($T.integer()) },
+        body: { 'application/json': $T.array($T.string()) },
+      },
+      ctx => {
+        type _headers = Expect<Equal<typeof ctx.headers, { 'x-token': string }>>
+        type _query = Expect<Equal<typeof ctx.query, { q: string; n?: number | undefined }>>
+        type _cookies = Expect<Equal<typeof ctx.cookies, { session: string; count?: number | undefined }>>
+        type _body = Expect<Equal<typeof ctx.body, string[]>>
+        return null
+      }
+    )
+    expect(true).toBe(true)
+  })
+
+  test('a group prefix contributes its params to the context', () => {
+    g.group('/ctx/api/:v', grp => {
+      grp.post('/items/:id', { params: { id: $T.integer() }, body: { 'application/json': $T.object({}) } }, ctx => {
+        type _params = Expect<Equal<typeof ctx.params, { v: string; id: number }>>
+        type _ct = Expect<Equal<typeof ctx.contentType, 'application/json'>>
+        return null
+      })
+    })
+    expect(true).toBe(true)
+  })
+
+  test('a handler typed against the bare `Context` fits any route', () => {
+    const shared = (ctx: Context) => ctx.body
+    g.post('/ctx/shared/json', { body: { 'application/json': $T.object({ a: $T.string() }) } }, shared)
+    g.post('/ctx/shared/resp', { response: { 200: $T.string() } }, shared)
+    g.post('/ctx/shared/bare', shared)
+    g.get('/ctx/shared/get', shared)
+    expect(true).toBe(true)
   })
 })

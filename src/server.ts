@@ -1,4 +1,4 @@
-import type { Context, Method, Route } from './types'
+import type { Context, GalbePlugin, Method, Route } from './types'
 
 import { InternalServerError, PayloadTooLargeError, RequestError } from './types'
 import { parseEntry, requestBodyParser, requestPathParser, responseParser } from './parser'
@@ -18,11 +18,14 @@ const handleInternalError = (error: any) => {
   return new InternalServerError()
 }
 
+// the predicates narrow the hook to non-optional, so the lifecycle can call it
+// without a null check it has already made
+type PluginWith<K extends keyof GalbePlugin> = GalbePlugin & Required<Pick<GalbePlugin, K>>
 const setupPluginCallbacks = (galbe: Galbe) => ({
-  onFetch: galbe.plugins.filter(p => p.onFetch),
-  onRoute: galbe.plugins.filter(p => p.onRoute),
-  beforeHandle: galbe.plugins.filter(p => p.beforeHandle),
-  afterHandle: galbe.plugins.filter(p => p.afterHandle),
+  onFetch: galbe.plugins.filter((p): p is PluginWith<'onFetch'> => !!p.onFetch),
+  onRoute: galbe.plugins.filter((p): p is PluginWith<'onRoute'> => !!p.onRoute),
+  beforeHandle: galbe.plugins.filter((p): p is PluginWith<'beforeHandle'> => !!p.beforeHandle),
+  afterHandle: galbe.plugins.filter((p): p is PluginWith<'afterHandle'> => !!p.afterHandle),
 })
 
 export default async (galbe: Galbe, port?: number, hostname?: string) => {
@@ -78,7 +81,6 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
       let response: any = ''
       try {
         for (const p of pluginsCb.onFetch) {
-          //@ts-ignore
           const r = await p.onFetch(context)
           if (r) return r
         }
@@ -92,7 +94,6 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         context.route = route
 
         for (const p of pluginsCb.onRoute) {
-          //@ts-ignore
           const r = await p.onRoute(context)
           if (r) return r
         }
@@ -168,8 +169,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         }
 
         for (const p of pluginsCb.beforeHandle) {
-          //@ts-ignore
-          const r = await p.beforeHandle(context)
+          const r = await p.beforeHandle(context as Context)
           if (r) return r
         }
 
@@ -183,8 +183,7 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
           validateResponse(response, schema.response, parsedResponse.status || 200)
 
         for (const p of pluginsCb.afterHandle) {
-          //@ts-ignore
-          const r = await p.afterHandle(parsedResponse, context)
+          const r = await p.afterHandle(parsedResponse, context as Context)
           if (r) return r
         }
 

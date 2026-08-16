@@ -292,16 +292,21 @@ export type RequestSchema<
   bodyLimit?: number
 }
 
-// prettier-ignore
-// The `@ts-ignore` below suppresses the error on the value type; prettier would
-// split the mapped key onto its own line and detach the directive from it.
+/** The route's declared path params, with the `params?:` optionality peeled off. */
+type STParamsOf<S extends RequestSchema> = Exclude<S['params'], undefined>
+/** What `params` infers to, before the not-declared keys are dropped. */
+type StaticParams<S extends RequestSchema> = Static<STObject<STParamsOf<S>>>
+/**
+ * The declared params, minus the ones the schema itself marks optional
+ * (`params: { id?: $T.integer() }`) — those fall back to `string` in the
+ * context, like an undeclared param. `keyof StaticParams<S>` is `keyof
+ * STParamsOf<S>` by construction, so the `K extends keyof` guard on the value
+ * only exists to keep the indexed access provable while `S` is still generic.
+ */
 type OmitNotDefined<S extends RequestSchema> = {
-  [K in keyof Exclude<S['params'], undefined> as Exclude<S['params'], undefined>[K] extends Required<
-    Exclude<S['params'], undefined>
-  >[K]
-    ? K
-    : //@ts-ignore
-      never]: Static<STObject<Exclude<S['params'], undefined>>>[K]
+  [
+    K in keyof STParamsOf<S> as STParamsOf<S>[K] extends Required<STParamsOf<S>>[K] ? K : never
+  ]: K extends keyof StaticParams<S> ? StaticParams<S>[K] : never
 }
 type StaticBody<T extends STSchema> = T extends STOptional<STSchema> ? Static<T> | null : Static<T>
 export type ContextSet = {
@@ -312,67 +317,65 @@ export type ContextSet = {
   status?: number
   cookie: (name: string, value: string, opt?: CookieOptions) => void
 }
+/** Methods whose request carries no body: `contentType` and `body` collapse regardless of the schema. */
+type EmptyBodyMethod = 'get' | 'options' | 'head'
+/**
+ * `Fallback` when `T` is `any`, `T` otherwise — the `0 extends 1 & T` trick,
+ * which only ever holds for `any`. A route registered without a body schema
+ * leaves `B` at its `any` default, and `keyof any` is `string | number |
+ * symbol`: mapping over it would type `ctx.contentType` as `string` instead of
+ * a media type. Falling back to the `STBody` constraint types such a route
+ * exactly like the unparameterized {@link Context}, which is also what keeps a
+ * shared `(ctx: Context) => …` handler assignable to every route.
+ */
+type IfAny<T, Fallback> = 0 extends 1 & T ? Fallback : T
+/** The declared body's media-type map. `never` when the route declares no body, or declares `$T.null()`. */
+type STBodyOf<S extends RequestSchema> = Exclude<IfAny<S['body'], STBody>, undefined | STNull>
+/**
+ * `contentType` and `body` are the only two context fields the request's media
+ * type reaches, so they are the only ones derived per media type: one member
+ * per key of the body map, which is what makes `ctx.contentType` a discriminant
+ * for `ctx.body`. Everything else lives in the single object literal below.
+ */
+type ContextBody<M extends Method, S extends RequestSchema> = [STBodyOf<S>] extends [never]
+  ? { contentType: undefined; body: null }
+  : {
+      [K in keyof STBodyOf<S>]: {
+        contentType: M extends EmptyBodyMethod ? undefined : K
+        body: M extends EmptyBodyMethod ? null : StaticBody<Extract<Exclude<STBodyOf<S>[K], undefined>, STSchema>>
+      }
+    }[keyof STBodyOf<S>]
+/**
+ * The context shape, written once. `B` is a naked type parameter so the
+ * conditional distributes over {@link ContextBody}'s union — one context per
+ * media type — and resolves to a bare object literal, which is what keeps
+ * `ctx` hovering as its expanded shape rather than as an alias reference.
+ */
+type ContextOf<Path extends string, S extends RequestSchema, B> = B extends {
+  contentType: infer CT
+  body: infer Body
+}
+  ? {
+      headers: Static<STObject<Exclude<S['headers'], undefined>>>
+      params: {
+        [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
+      }
+      query: Static<STObject<Exclude<S['query'], undefined>>>
+      contentType: CT
+      body: Body
+      request: Request
+      remoteAddress: SocketAddress | null
+      route?: Route
+      state: Record<string, any>
+      set: ContextSet
+      cookies: Static<STObject<Exclude<S['cookies'], undefined>>>
+    }
+  : never
 export type Context<
   M extends Method = Method,
   Path extends string = string,
   S extends RequestSchema = RequestSchema,
-> = 0 extends 1 & Exclude<S['body'], undefined | STNull>
-  ? {
-      [K in keyof Exclude<S['body'], undefined | STNull>]: {
-        headers: Static<STObject<Exclude<S['headers'], undefined>>>
-        params: {
-          [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
-        }
-        query: Static<STObject<Exclude<S['query'], undefined>>>
-        contentType: M extends 'get' | 'options' | 'head' ? undefined : K
-        body: M extends 'get' | 'options' | 'head'
-          ? null
-          : Exclude<S['body'], undefined> extends STNull
-            ? null
-            : StaticBody<Extract<Exclude<Exclude<S['body'], undefined | STNull>[K], undefined>, STSchema>>
-        request: Request
-        remoteAddress: SocketAddress | null
-        route?: Route
-        state: Record<string, any>
-        set: ContextSet
-        cookies: Static<STObject<Exclude<S['cookies'], undefined>>>
-      }
-    }[keyof Exclude<S['body'], undefined | STNull>]
-  : [Exclude<S['body'], undefined | STNull>] extends [never]
-    ? {
-        headers: Static<STObject<Exclude<S['headers'], undefined>>>
-        params: {
-          [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
-        }
-        query: Static<STObject<Exclude<S['query'], undefined>>>
-        contentType: undefined
-        body: null
-        request: Request
-        remoteAddress: SocketAddress | null
-        route?: Route
-        state: Record<string, any>
-        set: ContextSet
-        cookies: Static<STObject<Exclude<S['cookies'], undefined>>>
-      }
-    : {
-        [K in keyof Exclude<S['body'], undefined | STNull>]: {
-          headers: Static<STObject<Exclude<S['headers'], undefined>>>
-          params: {
-            [P in ExtractParams<Path>]: P extends keyof OmitNotDefined<S> ? OmitNotDefined<S>[P] : string
-          }
-          query: Static<STObject<Exclude<S['query'], undefined>>>
-          contentType: M extends 'get' | 'options' | 'head' ? undefined : K
-          body: M extends 'get' | 'options' | 'head'
-            ? null
-            : StaticBody<Extract<Exclude<Exclude<S['body'], undefined | STNull>[K], undefined>, STSchema>>
-          request: Request
-          remoteAddress: SocketAddress | null
-          route?: Route
-          state: Record<string, any>
-          set: ContextSet
-          cookies: Static<STObject<Exclude<S['cookies'], undefined>>>
-        }
-      }[keyof Exclude<S['body'], undefined | STNull>]
+> = ContextOf<Path, S, ContextBody<M, S>>
 export type Next = () => void | Promise<any>
 export type Hook<M extends Method = Method, Path extends string = string, S extends RequestSchema = RequestSchema> = (
   ctx: Context<M, Path, S>,
