@@ -7,7 +7,6 @@ import type {
   Handler,
   Endpoint,
   Context,
-  ContextSet,
   ErrorHandler,
   GalbePlugin,
   STBody,
@@ -19,7 +18,6 @@ import type {
   StaticEndpoint,
   Route,
   StaticEndpointOptions,
-  STBodyValue,
   GalbeMiddleware,
   MaybeArray,
 } from './types'
@@ -29,7 +27,7 @@ import { resolve as resolvePath } from 'path'
 import server from './server'
 import { joinPath, matchMiddleware, parseMiddlewarePattern, walkRoutes } from './util'
 import { GalbeRouter } from './router'
-import { SchemaType, type STObject, type Static } from './schema'
+import { SchemaType } from './schema'
 import { compileRoute } from './validator.compile'
 
 const overloadDiscriminer = <
@@ -136,22 +134,10 @@ const galbeMethod = <
 ): Route<M, Path, P, H, Q, B, R, C> => {
   schema = schema ?? {}
   hooks = hooks || []
-  //@ts-ignore
-  const context: Context<M, Path, typeof schema> = {
-    headers: {} as Static<STObject<Exclude<(typeof schema)['headers'], undefined>>>,
-    params: {} as any,
-    query: {} as Static<STObject<Exclude<(typeof schema)['query'], undefined>>>,
-    body: ['get', 'options', 'head'].includes(method) ? null : ({} as unknown as STBodyValue),
-    request: {} as Request,
-    cookies: {} as Record<string, string>,
-    state: {},
-    set: {} as ContextSet,
-  }
   return {
     method,
     path,
     schema,
-    context,
     hooks,
     handler,
     composed: composeHooks(hooks, handler),

@@ -504,7 +504,6 @@ export type Route<
   method: M
   path: Path
   schema: RequestSchema<M, Path, H, P, Q, B, R, C>
-  context: Context<M, Path, RequestSchema<M, Path, H, P, Q, B, R, C>>
   hooks: Hook<M, Path, RequestSchema<M, Path, H, P, Q, B, R, C>>[]
   handler: Handler<M, Path, RequestSchema<M, Path, H, P, Q, B, R, C>>
   /**
