@@ -13,51 +13,41 @@ const normalizePath = (path: string) => (path.length > 1 ? path.replace(/\/+$/g,
 
 const DEFAULT_CACHE_LIMIT = 1024
 
-const walk = (path: string[], node: RouteNode, index: number = 0): RouteNode => {
+const walk = (path: string[], node: RouteNode, index: number = 0): RouteNode | null => {
   if (index === path.length - 1) {
     if (node.routes && !!Object.keys(node.routes).length) return node
     // /a/* should match /a — fall back to a wildcard child if the node has no
     // routes of its own.
     const wc = node.children?.['*']
     if (wc?.routes && !!Object.keys(wc.routes).length) return wc
-    throw new NotFoundError()
+    return null
   }
 
   const nextSegment = path[index + 1]
 
   // 1. Exact Match
   if (node.children && nextSegment !== undefined && nextSegment in node.children) {
-    try {
-      return walk(path, node.children[nextSegment]!, index + 1)
-    } catch (error) {
-      if (!(error instanceof NotFoundError)) throw error
-    }
+    const r = walk(path, node.children[nextSegment]!, index + 1)
+    if (r) return r
   }
 
   // 2. Param Match
   if (node.param) {
-    try {
-      return walk(path, node.param, index + 1)
-    } catch (error) {
-      if (!(error instanceof NotFoundError)) throw error
-    }
+    const r = walk(path, node.param, index + 1)
+    if (r) return r
   }
 
   // 3. Wildcard Match
   if (node.children && '*' in node.children) {
-    try {
-      return walk(path, node.children['*'], index + 1)
-    } catch (error) {
-      if (error instanceof NotFoundError) {
-        if (node.children['*'].routes && !!Object.keys(node.children['*'].routes).length) {
-          return node.children['*']
-        }
-      }
-      if (!(error instanceof NotFoundError)) throw error
-    }
+    const wc = node.children['*']
+    const r = walk(path, wc, index + 1)
+    if (r) return r
+    // a wildcard with routes of its own swallows the remaining segments:
+    // /a/* answers /a/b/c once the deeper walk found nothing
+    if (wc.routes && !!Object.keys(wc.routes).length) return wc
   }
 
-  throw new NotFoundError()
+  return null
 }
 
 export class GalbeRouter {
