@@ -181,15 +181,15 @@ describe('STJson', () => {
       g.post('/jbool', { body: { 'application/json': $T.json($T.boolean()) } }, () => 'ok')
 
       const spec = await OpenAPISerializer(g)
-      expect(
-        ((spec.paths!['/jstr'] as any).post.requestBody.content['application/json'].schema)
-      ).toMatchObject({ type: 'string' })
-      expect(
-        ((spec.paths!['/jnum'] as any).post.requestBody.content['application/json'].schema)
-      ).toMatchObject({ type: 'number' })
-      expect(
-        ((spec.paths!['/jbool'] as any).post.requestBody.content['application/json'].schema)
-      ).toMatchObject({ type: 'boolean' })
+      expect((spec.paths!['/jstr'] as any).post.requestBody.content['application/json'].schema).toMatchObject({
+        type: 'string',
+      })
+      expect((spec.paths!['/jnum'] as any).post.requestBody.content['application/json'].schema).toMatchObject({
+        type: 'number',
+      })
+      expect((spec.paths!['/jbool'] as any).post.requestBody.content['application/json'].schema).toMatchObject({
+        type: 'boolean',
+      })
     })
   })
 })

@@ -13,7 +13,8 @@ export type Diff = { kind: 'missing' | 'added' | 'changed'; path: string; expect
 const isObj = (v: any): v is Record<string, any> => v !== null && typeof v === 'object' && !Array.isArray(v)
 
 /** OpenAPI parameter arrays are unordered; key them by `in:name` instead of index. */
-const paramKey = (p: any) => (isObj(p) && typeof p.name === 'string' && typeof p.in === 'string' ? `${p.in}:${p.name}` : null)
+const paramKey = (p: any) =>
+  isObj(p) && typeof p.name === 'string' && typeof p.in === 'string' ? `${p.in}:${p.name}` : null
 
 export const METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch'] as const
 

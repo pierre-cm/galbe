@@ -21,7 +21,10 @@ const ROUTE_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'options
 /** directories that never hold app source — neither scanned nor watched */
 export const NEVER_SCANNED_DIRS = ['node_modules', '.git']
 
-export type RouteMeta = { head?: string, ignore?: boolean, hide?: boolean } & Record<string, boolean | string | string[]>
+export type RouteMeta = { head?: string; ignore?: boolean; hide?: boolean } & Record<
+  string,
+  boolean | string | string[]
+>
 export type RoutesMeta = {
   header: Record<string, boolean | string | string[]>
   routes: Record<string, Partial<Record<Method | 'static', RouteMeta>>>
@@ -65,8 +68,7 @@ const parseComment = (comment: string): Record<string, string | string[]> => {
         const val = n[2] ?? true
         return {
           ...acc,
-          [tag]:
-            tag in acc ? [...(typeof acc[tag] === 'string' ? [acc[tag]] : acc[tag]), val] : val
+          [tag]: tag in acc ? [...(typeof acc[tag] === 'string' ? [acc[tag]] : acc[tag]), val] : val,
         }
       },
       {} as Record<string, any>
@@ -95,12 +97,12 @@ export const metaAnalysis = async (filePath: string): Promise<RoutesMeta> => {
     content = transformSync(content, {
       jsc: {
         parser: {
-          syntax: 'typescript'
+          syntax: 'typescript',
         },
         preserveAllComments: true,
         // @swc/wasm's JscTarget typing lags @swc/core's; 'esnext' is supported at runtime
-        target: 'esnext' as any
-      }
+        target: 'esnext' as any,
+      },
     }).code
   }
 
@@ -116,13 +118,11 @@ export const metaAnalysis = async (filePath: string): Promise<RoutesMeta> => {
         if (!comments?.[locEnd.line]) comments[locEnd.line] = []
         if (IGNORE_COMMENT_RGX.test(text)) {
           ignoredLines.add(locEnd.line + 1)
-        }
-        else if (HIDE_COMMENT_RGX.test(text)) {
+        } else if (HIDE_COMMENT_RGX.test(text)) {
           hideLines.add(locEnd.line + 1)
-        }
-        else comments[locEnd.line]![locEnd.column] = text
+        } else comments[locEnd.line]![locEnd.column] = text
       }
-    }
+    },
   })
   simple(ast, {
     ExportDefaultDeclaration(node) {
@@ -153,17 +153,19 @@ export const metaAnalysis = async (filePath: string): Promise<RoutesMeta> => {
             // @ts-ignore
             let path = node.arguments?.[0]?.value
             if (!ROUTE_METHODS.has(method) || typeof path !== 'string') return
-            if (!path.startsWith("/")) path = `/${path}`
+            if (!path.startsWith('/')) path = `/${path}`
             const line = node.loc?.start.line || -1
             const col = node.loc?.start.column || -1
             const com = comments?.[line]?.[col - 1] ?? ''
-            const routeRefs = ignoredLines.has(line) ? { ignore: true } : { ...parseComment(com), ...(hide || hideLines.has(line) ? { hide: true } : {}) }
+            const routeRefs = ignoredLines.has(line)
+              ? { ignore: true }
+              : { ...parseComment(com), ...(hide || hideLines.has(line) ? { hide: true } : {}) }
             if (!(path in meta.routes)) meta.routes[path] = {}
             if (!(method in meta.routes[path]!)) meta.routes[path]![method] = routeRefs as RouteMeta
           }
-        }
+        },
       })
-    }
+    },
   })
   return meta
 }
@@ -218,7 +220,10 @@ const collectFiles = async (pattern: string): Promise<Array<{ file: string; base
   // '**/*.route.ts' must not import (and prefix routes by) whatever a dependency
   // happens to ship. A pattern naming one of them explicitly opts back in.
   const skipped = NEVER_SCANNED_DIRS.filter(d => !pattern.split('/').includes(d))
-  const isSkipped = (path: string) => relative(root, path).split(sep).some(s => skipped.includes(s))
+  const isSkipped = (path: string) =>
+    relative(root, path)
+      .split(sep)
+      .some(s => skipped.includes(s))
   const out: Array<{ file: string; base: string }> = []
   for await (const path of new Glob(pattern).scan({ cwd: root, absolute: true, onlyFiles: false, dot: true })) {
     if (isSkipped(path)) continue
@@ -253,9 +258,7 @@ export const defineRoutes = async (
   const patterns = conf.pattern === undefined ? [DEFAULT_ROUTE_PATTERN] : [conf.pattern].flat()
 
   const relPath = (path: string) =>
-    galbe.router.prefix && path.startsWith(galbe.router.prefix)
-      ? path.slice(galbe.router.prefix.length) || '/'
-      : path
+    galbe.router.prefix && path.startsWith(galbe.router.prefix) ? path.slice(galbe.router.prefix.length) || '/' : path
 
   // middleware files first: outer scopes wrap route files' in-file registrations
   const mwConf = options?.middleware
@@ -320,7 +323,7 @@ export const defineRoutes = async (
         const routeMeta: RouteMeta = {
           ...meta.routes?.[key]?.[root ? 'static' : route.method],
           ...(meta.hide ? { hide: true } : {}),
-          ...(meta.ignore ? { ignore: true } : {})
+          ...(meta.ignore ? { ignore: true } : {}),
         }
         // '@galbe-ignore'd routes must not be served: unregister them
         if (routeMeta.ignore) {

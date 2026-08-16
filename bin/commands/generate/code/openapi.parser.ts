@@ -344,14 +344,19 @@ const buildSchemaIndex = (def: OpenAPIV3.Document) => {
         // a bodiless component response: no media types, description only
         responseContent = []
       } else {
-        const contentMap = s.content as Record<string, { schema?: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject; example?: any; examples?: any }>
+        const contentMap = s.content as Record<
+          string,
+          { schema?: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject; example?: any; examples?: any }
+        >
         const entries = Object.entries(contentMap)
         for (const [, v] of entries) {
           if (v.example !== undefined && responseExample === undefined) responseExample = v.example
           if (v.examples && Object.keys(v.examples).length)
             responseExamples = {
               ...(responseExamples || {}),
-              ...Object.fromEntries(Object.entries(v.examples).map(([k, ex]) => [k, resolveExample(ex, def.components)])),
+              ...Object.fromEntries(
+                Object.entries(v.examples).map(([k, ex]) => [k, resolveExample(ex, def.components)])
+              ),
             }
         }
         const keyGroups: Record<string, string[]> = {}
@@ -542,8 +547,7 @@ const parseEndpointDef = (
     ? def.operationId.replace(/^\w/, c => c.toUpperCase())
     : `${method}${path
         .replaceAll(/\{([^\}]+)\}/g, (_, p) => `By${p.replace(/^\w/, (c: string) => c.toUpperCase())}`)
-        .replaceAll(/[^$\w\d_]+([$\w\d_])/g, (_, $1) => $1.toUpperCase())
-      }`.replace(/^\w/, c => c.toUpperCase())
+        .replaceAll(/[^$\w\d_]+([$\w\d_])/g, (_, $1) => $1.toUpperCase())}`.replace(/^\w/, c => c.toUpperCase())
 
   warnAt = `${method.toUpperCase()} ${path}`
   let meta = '/**\n'
@@ -625,8 +629,7 @@ const parseEndpointDef = (
     const honoured =
       style === defaultStyle
         ? p.in !== 'query' || pType !== 'object' // form-on-object is `a,b,c,d`, not implemented
-        : p.in === 'query' &&
-          (style === 'deepObject' ? pType === 'object' : !!split && pType === 'array')
+        : p.in === 'query' && (style === 'deepObject' ? pType === 'object' : !!split && pType === 'array')
     if (!honoured)
       warn(
         `parameter '${p.name}': style '${style}'${pType ? ` on a ${pType}` : ''} is not implemented — the generated route parses it as '${defaultStyle}'`
@@ -701,7 +704,8 @@ const parseEndpointDef = (
       const headerEntries = responseHeaderEntries(respObj?.headers, components).map(
         ([hName, code]) => `${JSON.stringify(hName)}:${deref(code)}`
       )
-      const description = typeof respObj?.description === 'string' && respObj.description ? respObj.description : undefined
+      const description =
+        typeof respObj?.description === 'string' && respObj.description ? respObj.description : undefined
       const links = resolveLinks((respObj as any)?.links, components)
       const hasLinks = Object.keys(links).length > 0
 
@@ -750,7 +754,8 @@ const parseEndpointDef = (
         // Single body key → STResponseContent object (preserves exact media type key)
         const [key] = uniqueKeys
         const unique = [...new Set(keyGroups[key] || [])]
-        let schemaStr = unique.length === 0 ? `$T.null()` : unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`
+        let schemaStr =
+          unique.length === 0 ? `$T.null()` : unique.length === 1 ? unique[0] : `$T.union([${unique.join(',')}])`
         // Examples sit beside the body in the content map, never spread onto the
         // body schema: a spread carrying `example`/`examples` over a schema with
         // an `id` leaks them into that shared component (see _responseId above).
@@ -806,8 +811,17 @@ const parseEndpoints = (def: OpenAPIV3.Document) => {
     // 'trace' is deliberately absent: it is disabled across most infrastructure
     // and Galbe has no builder for it. Say so rather than dropping it silently.
     for (const m of Object.keys(pathVal))
-      if (!(methods as readonly string[]).includes(m) && m !== 'parameters' && m !== 'summary' && m !== 'description' && m !== 'servers')
-        warn(`method '${m.toUpperCase()}' has no Galbe route builder — the operation is skipped`, `${m.toUpperCase()} ${fullPath}`)
+      if (
+        !(methods as readonly string[]).includes(m) &&
+        m !== 'parameters' &&
+        m !== 'summary' &&
+        m !== 'description' &&
+        m !== 'servers'
+      )
+        warn(
+          `method '${m.toUpperCase()}' has no Galbe route builder — the operation is skipped`,
+          `${m.toUpperCase()} ${fullPath}`
+        )
     let pathParams = pathVal.parameters || []
     for (let m of methods) {
       let endpointDef = pathVal?.[m]
@@ -859,7 +873,9 @@ const renderComponentSchemaFile = (
       let depMatch = [...s.dependsOn][0].match(/^#\/components\/([^\/]+)\/([^\/]+)/)
       if (!depMatch) return
       let [_, depOrig, depName] = [...depMatch]
-      decl.push(`export { ${depName} } from './${COMPONENT_TYPE_MAP[depOrig as keyof typeof COMPONENT_TYPE_MAP]}.schema'\n`)
+      decl.push(
+        `export { ${depName} } from './${COMPONENT_TYPE_MAP[depOrig as keyof typeof COMPONENT_TYPE_MAP]}.schema'\n`
+      )
       return
     }
     for (let dep of [k, ...s.dependsOn]) {

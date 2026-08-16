@@ -532,11 +532,14 @@ describe('raw Response return parity with ctx.set', () => {
     })
 
     // Parity: JSON object body
-    galbe.get('/raw/json-201', { response: { 201: $T.json($T.object()) } }, () =>
-      new Response(JSON.stringify({ foo: 'bar' }), {
-        status: 201,
-        headers: { 'content-type': 'application/json' },
-      })
+    galbe.get(
+      '/raw/json-201',
+      { response: { 201: $T.json($T.object()) } },
+      () =>
+        new Response(JSON.stringify({ foo: 'bar' }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        })
     )
     galbe.get('/ctx/json-201', { response: { 201: $T.json($T.object()) } }, (ctx: Context) => {
       ctx.set.status = 201
@@ -639,11 +642,7 @@ describe('wildcard status ranges', () => {
     )
 
     // a string response takes its content type from the matching range entry
-    galbe.get(
-      '/range-json-string',
-      { response: { '2XX': { 'application/json': $T.string() } } },
-      () => 'ranged'
-    )
+    galbe.get('/range-json-string', { response: { '2XX': { 'application/json': $T.string() } } }, () => 'ranged')
 
     await galbe.listen(portRange)
   })

@@ -50,10 +50,13 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false -p tsconfig.json && tsc --noEmit --emitDeclarationOnly false -p tsconfig.test.json",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "release": "bun run scripts/release.ts"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "prettier": "3.9.6"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"

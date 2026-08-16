@@ -109,7 +109,11 @@ describe('requests', () => {
     )
     galbe.post(
       '/stream/mp/ba/length',
-      { body: { 'multipart/form-data': $T.stream($T.multipartForm({ file: $T.byteArray({ minLength: 2, maxLength: 4 }) })) } },
+      {
+        body: {
+          'multipart/form-data': $T.stream($T.multipartForm({ file: $T.byteArray({ minLength: 2, maxLength: 4 }) })),
+        },
+      },
       async ctx => {
         for await (const _ of ctx.body) void _
         return { type: 'object', content: 'ok' }
@@ -158,14 +162,20 @@ describe('requests', () => {
 
     galbe.post(
       '/mp/file',
-      { body: { 'multipart/form-data': $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }) } },
+      {
+        body: {
+          'multipart/form-data': $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }),
+        },
+      },
       handleBody
     )
     galbe.post(
       '/mp/stream/file',
       {
         body: {
-          'multipart/form-data': $T.stream($T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })),
+          'multipart/form-data': $T.stream(
+            $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })
+          ),
         },
       },
       async ctx => {
@@ -1029,7 +1039,9 @@ describe('requests', () => {
   // toString, …) must behave like any other key and never touch globals.
   describe('built-in property keys', () => {
     test('query params', async () => {
-      const resp = await fetch(`http://localhost:${port}/builtins/query?constructor=zz&toString=b&hasOwnProperty=h&__proto__=p`)
+      const resp = await fetch(
+        `http://localhost:${port}/builtins/query?constructor=zz&toString=b&hasOwnProperty=h&__proto__=p`
+      )
       expect(resp.status).toBe(200)
       const body: any = await resp.json()
       expect(body.constructor).toBe('zz')

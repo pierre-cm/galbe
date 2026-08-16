@@ -133,10 +133,7 @@ describe('schema typing', () => {
         '/inter',
         {
           body: {
-            'application/json': $T.intersection([
-              $T.object({ a: $T.string() }),
-              $T.object({ b: $T.number() }),
-            ]),
+            'application/json': $T.intersection([$T.object({ a: $T.string() }), $T.object({ b: $T.number() })]),
           },
         },
         ctx => ctx.body

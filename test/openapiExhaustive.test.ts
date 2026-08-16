@@ -199,7 +199,10 @@ describe('openapi exhaustive: generate spec', () => {
   test('every $ref in the generated spec resolves', () => {
     const dangling: string[] = []
     const resolve = (ref: string) =>
-      ref.replace(/^#\//, '').split('/').reduce<any>((c, s) => c?.[s.replaceAll('~1', '/').replaceAll('~0', '~')], generated)
+      ref
+        .replace(/^#\//, '')
+        .split('/')
+        .reduce<any>((c, s) => c?.[s.replaceAll('~1', '/').replaceAll('~0', '~')], generated)
     const walk = (n: any, at: string): void => {
       if (Array.isArray(n)) return n.forEach((v, i) => walk(v, `${at}/${i}`))
       if (!n || typeof n !== 'object') return
@@ -296,10 +299,7 @@ describe('openapi exhaustive: roundtrip', () => {
       expect(generated.paths[path][method].security, `${method} ${path}`).toEqual(op.security)
     }
     expect(generated.paths['/security/public'].get.security).toEqual([])
-    expect(generated.paths['/security/alternatives'].get.security).toEqual([
-      { bearerAuth: [] },
-      { apiKeyAuth: [] },
-    ])
+    expect(generated.paths['/security/alternatives'].get.security).toEqual([{ bearerAuth: [] }, { apiKeyAuth: [] }])
     expect(generated.paths['/v2/admin/users/{userId}/sessions/{sessionId}'].get.security).toEqual([
       { bearerAuth: ['admin'] },
     ])
@@ -369,7 +369,12 @@ describe('openapi exhaustive: roundtrip', () => {
       maxLength: 64,
       pattern: '^[A-Za-z0-9 ]+$',
     })
-    expect(s.PrimitiveBag.properties.list).toMatchObject({ type: 'array', minItems: 0, maxItems: 100, uniqueItems: true })
+    expect(s.PrimitiveBag.properties.list).toMatchObject({
+      type: 'array',
+      minItems: 0,
+      maxItems: 100,
+      uniqueItems: true,
+    })
     expect(s.PrimitiveBag.properties.defaulted.default).toBe('none')
     expect(s.PrimitiveBag.properties.exampled.example).toBe('sample-value')
     // a property with no type at all keeps its description and gains no type
@@ -387,7 +392,11 @@ describe('openapi exhaustive: roundtrip', () => {
     const s = generated.components.schemas
     expect(s.Widget.allOf).toHaveLength(2)
     expect(s.Widget.allOf[0]).toEqual({ $ref: '#/components/schemas/Identified' })
-    expect(s.Widget.allOf[1].properties.kind).toMatchObject({ type: 'string', enum: ['bolt', 'nut', 'washer'], default: 'bolt' })
+    expect(s.Widget.allOf[1].properties.kind).toMatchObject({
+      type: 'string',
+      enum: ['bolt', 'nut', 'washer'],
+      default: 'bolt',
+    })
 
     const body = generated.paths['/composition'].post.requestBody.content['application/json'].schema
     expect(body.properties.intersected.allOf).toEqual([

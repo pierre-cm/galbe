@@ -7,9 +7,9 @@ describe('plugins', async () => {
   const galbe = new Galbe({
     plugin: {
       'dev.galbe.test.init': {
-        message: 'Hello Mom!'
-      }
-    }
+        message: 'Hello Mom!',
+      },
+    },
   })
   galbe.get('/plugin', ctx => ctx.query.param)
   galbe.get('/plugin/state', ctx => ctx.state)
@@ -24,7 +24,7 @@ describe('plugins', async () => {
       name: 'dev.galbe.test.init',
       init: mock(config => {
         pluginConfig = config
-      })
+      }),
     }
 
     await galbe.use(plugin)
@@ -41,7 +41,7 @@ describe('plugins', async () => {
       name: 'dev.galbe.test.init',
       onFetch: mock(ctx => {
         request = ctx.request
-      })
+      }),
     }
 
     await galbe.use(plugin)
@@ -55,7 +55,7 @@ describe('plugins', async () => {
     expect(plugin.onFetch).toHaveBeenCalledTimes(1)
     expect(request).toMatchObject({
       method: 'GET',
-      url: url
+      url: url,
     })
     expect(resp.status).toBe(200)
     expect(await resp.text()).toBe('hello')
@@ -67,7 +67,7 @@ describe('plugins', async () => {
       name: 'dev.galbe.test.init',
       onFetch: mock(() => {
         return response
-      })
+      }),
     }
 
     await galbe.use(plugin)
@@ -87,7 +87,7 @@ describe('plugins', async () => {
       name: 'dev.galbe.test.init',
       onRoute: mock(r => {
         route = r.route
-      })
+      }),
     }
 
     await galbe.use(plugin)
@@ -102,7 +102,7 @@ describe('plugins', async () => {
       method: 'get',
       path: `/plugin`,
       hooks: [],
-      handler: () => {}
+      handler: () => {},
     })
     expect(resp.status).toBe(200)
     expect(await resp.text()).toBe('hello')
@@ -114,7 +114,7 @@ describe('plugins', async () => {
       name: 'dev.galbe.test.init',
       onRoute: mock(() => {
         return response
-      })
+      }),
     }
 
     await galbe.use(plugin)
@@ -134,7 +134,7 @@ describe('plugins', async () => {
       name: 'dev.galbe.test.init',
       beforeHandle: mock((ctx: Context) => {
         context = ctx
-      })
+      }),
     }
 
     await galbe.use(plugin)
@@ -148,10 +148,10 @@ describe('plugins', async () => {
     expect(plugin.beforeHandle).toHaveBeenCalledTimes(1)
     expect(context?.request).toMatchObject({
       method: 'GET',
-      url: url
+      url: url,
     })
     expect(context?.query).toEqual({
-      param: 'hello'
+      param: 'hello',
     })
     expect(context?.body).toBeNull()
     expect(resp.status).toBe(200)
@@ -164,7 +164,7 @@ describe('plugins', async () => {
       name: 'dev.galbe.test.init',
       beforeHandle: mock(() => {
         return response
-      })
+      }),
     }
 
     await galbe.use(plugin)
@@ -184,7 +184,7 @@ describe('plugins', async () => {
       name: 'dev.galbe.test.init',
       afterHandle: mock((resp: Response) => {
         response = resp
-      })
+      }),
     }
 
     await galbe.use(plugin)
@@ -205,7 +205,7 @@ describe('plugins', async () => {
       name: 'dev.galbe.test.init',
       afterHandle: mock(() => {
         return response
-      })
+      }),
     }
 
     await galbe.use(plugin)
@@ -224,7 +224,7 @@ describe('plugins', async () => {
       name: 'dev.galbe.test.init',
       beforeHandle: mock((ctx: Context) => {
         ctx.state.foo = 'bar'
-      })
+      }),
     }
 
     await galbe.use(plugin)
@@ -248,7 +248,7 @@ describe('plugins', async () => {
       name: 'dev.galbe.test.init',
       afterHandle: mock((_resp: Response, ctx: Context) => {
         observedStatus = ctx.set.status
-      })
+      }),
     }
 
     await galbe.use(plugin)
@@ -268,7 +268,7 @@ describe('plugins', async () => {
       name: 'dev.galbe.test.init',
       onFetch: mock(() => {
         throw new Error('boom')
-      })
+      }),
     }
     let onErrorCalled = 0
     galbe.onError(() => {

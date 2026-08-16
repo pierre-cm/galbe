@@ -17,7 +17,7 @@ describe('router', () => {
 
     for (const p of invalidPaths) {
       try {
-        galbe.get(p, () => { })
+        galbe.get(p, () => {})
         expect.unreachable()
       } catch (err) {
         expect(err).toBeInstanceOf(SyntaxError)
@@ -31,7 +31,7 @@ describe('router', () => {
 
     expect(router.routes).toEqual({ routes: {} })
 
-    galbe.get('/', () => { })
+    galbe.get('/', () => {})
     let r: RouteNode | undefined = router.routes
 
     expect(r?.routes.get?.method).toBe('get')
@@ -39,7 +39,7 @@ describe('router', () => {
     expect(r?.param).toBeUndefined()
     expect(r?.children).toBeUndefined()
 
-    const mockHandler = () => { }
+    const mockHandler = () => {}
     galbe.get('/test', mockHandler)
     r = r?.children?.test
 
@@ -49,7 +49,7 @@ describe('router', () => {
     expect(r?.children).toBeUndefined()
     expect(r?.routes.get?.handler).toBe(mockHandler)
 
-    const mockHandler2 = () => { }
+    const mockHandler2 = () => {}
     galbe.get('/test/:foo', mockHandler2)
     r = r?.param
 
@@ -59,7 +59,7 @@ describe('router', () => {
     expect(r?.children).toBeUndefined()
     expect(r?.routes.get?.handler).toBe(mockHandler2)
 
-    const mockHandler3 = () => { }
+    const mockHandler3 = () => {}
     galbe.get('/test/:foo/bar', mockHandler3)
 
     expect(r?.children).toHaveProperty('bar')
@@ -72,7 +72,7 @@ describe('router', () => {
     const galbe = new Galbe({ router: { cacheEnabled: false, warn } })
     const router = galbe.router
 
-    const [h1, h2, h3] = [() => { }, () => { }, () => { }]
+    const [h1, h2, h3] = [() => {}, () => {}, () => {}]
 
     galbe.get('/', h1)
     galbe.get('/test', h2)
@@ -87,7 +87,7 @@ describe('router', () => {
     expect(r?.children?.test?.routes.get?.method).toBe('get')
     expect(r?.children?.test?.routes.get?.handler).toBe(h2)
 
-    const [h4, h5] = [() => { }, () => { }]
+    const [h4, h5] = [() => {}, () => {}]
 
     galbe.get('/foo/bar', h4)
     galbe.get('/foo', h5)
@@ -105,7 +105,7 @@ describe('router', () => {
     const galbe = new Galbe()
     const router = galbe.router
 
-    const [h1, h3, h4] = [() => { }, () => { }, () => { }, () => { }]
+    const [h1, h3, h4] = [() => {}, () => {}, () => {}, () => {}]
 
     galbe.get('/', h1)
     galbe.get('/test/foo', h3)
@@ -144,7 +144,7 @@ describe('router', () => {
     const galbe = new Galbe()
     const router = galbe.router
 
-    const [h1, h2] = [() => { }, () => { }]
+    const [h1, h2] = [() => {}, () => {}]
 
     galbe.get('/test/:foo', h1)
     galbe.get('/test/test', h2)
@@ -162,7 +162,7 @@ describe('router', () => {
     const galbe = new Galbe()
     const router = galbe.router
 
-    const [h1, h2, h3, h4] = [() => { }, () => { }, () => { }, () => { }]
+    const [h1, h2, h3, h4] = [() => {}, () => {}, () => {}, () => {}]
 
     galbe.get('/test/foo/*', h1)
     galbe.get('/test/foo/bar', h2)
@@ -191,7 +191,7 @@ describe('router', () => {
     const galbe = new Galbe()
     const router = galbe.router
 
-    const [h1, h2] = [() => { }, () => { }]
+    const [h1, h2] = [() => {}, () => {}]
 
     galbe.put('/test/foo', h1)
     galbe.post('/test/bar/*', h2)
@@ -221,7 +221,7 @@ describe('router', () => {
     const galbe = new Galbe()
     const router = galbe.router
 
-    const handler = () => { }
+    const handler = () => {}
     galbe.get('/test/', handler)
 
     expect(router.routes.children?.test?.routes.get?.handler).toBe(handler)
@@ -237,7 +237,7 @@ describe('router', () => {
     const galbe = new Galbe()
     const router = galbe.router
 
-    const handler = () => { }
+    const handler = () => {}
     galbe.get('/tail', handler)
     galbe.get('/user/:id', () => 'param')
 

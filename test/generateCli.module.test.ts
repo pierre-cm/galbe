@@ -7,7 +7,7 @@ import type { GalbeCLICommand } from '../src'
 
 const PORT = 47211
 
-const mkRoute = (method: string, path: string) => ({ method, path, handler: () => {} } as any)
+const mkRoute = (method: string, path: string) => ({ method, path, handler: () => {} }) as any
 
 const COMMANDS: GalbeCLICommand[] = [
   // untagged

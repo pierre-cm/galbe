@@ -13,5 +13,7 @@ jobs:
           bun-version: latest
       - name: Install
         run: bun install
+      - name: Format
+        run: bun run format:check
       - name: Test
         run: bun test

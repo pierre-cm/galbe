@@ -153,7 +153,9 @@ beforeAll(async () => {
       const url = new URL(req.url)
       const body = req.body ? await new Response(req.body).text() : ''
       const headers: Record<string, string> = {}
-      req.headers.forEach((v, k) => { headers[k] = v })
+      req.headers.forEach((v, k) => {
+        headers[k] = v
+      })
       captured.push({ method: req.method, url: url.pathname + url.search, body, headers })
 
       if (req.method === 'GET' && url.pathname === '/users') {
@@ -169,7 +171,11 @@ beforeAll(async () => {
       }
       if (req.method === 'GET' && url.pathname.startsWith('/users/')) {
         const id = url.pathname.split('/')[2]
-        if (id === 'missing') return new Response(JSON.stringify({ error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } })
+        if (id === 'missing')
+          return new Response(JSON.stringify({ error: 'not found' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          })
         return new Response(JSON.stringify({ id, name: 'Alice' }), { headers: { 'content-type': 'application/json' } })
       }
       if (req.method === 'GET' && url.pathname === '/ping') {
@@ -235,7 +241,11 @@ describe('simple API — happy paths', () => {
 describe('simple API — error handling', () => {
   test('throws GalbeClientError on non-2xx', async () => {
     let err: any
-    try { await client.getUser('missing') } catch (e) { err = e }
+    try {
+      await client.getUser('missing')
+    } catch (e) {
+      err = e
+    }
     expect(err).toBeDefined()
     expect(err.name).toBe('GalbeClientError')
     expect(err.status).toBe(404)
@@ -244,7 +254,11 @@ describe('simple API — error handling', () => {
 
   test('GalbeClientError.body is pre-consumed text', async () => {
     let err: any
-    try { await client.getUser('missing') } catch (e) { err = e }
+    try {
+      await client.getUser('missing')
+    } catch (e) {
+      err = e
+    }
     expect(err.body).toContain('not found')
   })
 })

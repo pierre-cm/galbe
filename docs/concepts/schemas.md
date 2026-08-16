@@ -67,7 +67,7 @@ Options:
 
 ```ts
 $T.integer({ format: 'int32' }) // 2147483648 → "Is out of int32 range"
-$T.number({ format: 'float' })  // 0.1 → accepted; the format only reaches the spec
+$T.number({ format: 'float' }) // 0.1 → accepted; the format only reaches the spec
 ```
 
 #### integer
@@ -136,7 +136,7 @@ Schema Type matching `object` values with typed properties.
 ```ts
 const objSchema = $T.object({
   name: $T.string(),
-  age: $T.optional($T.integer({ min: 0 }))
+  age: $T.optional($T.integer({ min: 0 })),
 })
 ```
 
@@ -169,7 +169,7 @@ Schema Type for `multipart/form-data` request bodies. Each property describes a 
 ```ts
 const formSchema = $T.multipartForm({
   username: $T.string(),
-  avatar: $T.byteArray()
+  avatar: $T.byteArray(),
 })
 ```
 
@@ -178,10 +178,7 @@ Options:
 - **encoding** (`Record<string, EncodingProperty>`) — Documentation only: how each part is serialized, keyed by property name. Emitted as the media type's OpenAPI `encoding` object. Parts are validated from the schema alone; this is never read at runtime.
 
 ```ts
-$T.multipartForm(
-  { avatar: $T.byteArray() },
-  { encoding: { avatar: { contentType: 'image/png' } } }
-)
+$T.multipartForm({ avatar: $T.byteArray() }, { encoding: { avatar: { contentType: 'image/png' } } })
 ```
 
 #### json
@@ -246,10 +243,7 @@ const unionSchema = $T.union([$T.string(), $T.number()])
 Creates an intersection of Schema Types. Members must be objects, unions, or other intersections.
 
 ```ts
-const intersectionSchema = $T.intersection([
-  $T.object({ a: $T.string() }),
-  $T.object({ b: $T.number() })
-])
+const intersectionSchema = $T.intersection([$T.object({ a: $T.string() }), $T.object({ b: $T.number() })])
 ```
 
 #### stream
@@ -284,8 +278,8 @@ Defines request headers with their respective Schema types.
 ```ts
 const schema = {
   headers: {
-    'user-agent': $T.optional($T.string({ pattern: /^Bun/ }))
-  }
+    'user-agent': $T.optional($T.string({ pattern: /^Bun/ })),
+  },
 }
 ```
 
@@ -306,8 +300,8 @@ Defines route parameters with their respective Schema types.
 const schema = {
   params: {
     name: $T.string(),
-    age: $T.integer({ min: 0 })
-  }
+    age: $T.integer({ min: 0 }),
+  },
 }
 ```
 
@@ -329,8 +323,8 @@ const schema = {
   query: {
     name: $T.literal('Galbe'),
     list: $T.array($T.number()),
-    filter: $T.object({ lat: $T.number(), lon: $T.number() })
-  }
+    filter: $T.object({ lat: $T.number(), lon: $T.number() }),
+  },
 }
 ```
 
@@ -339,7 +333,7 @@ const schema = {
 ```ts
 // without split: false, a single item containing a comma is unreachable
 $T.array($T.string(), { split: false }) // ?tags=a,b → ['a,b']
-$T.array($T.string(), { split: '|' })   // ?tags=a|b → ['a', 'b']
+$T.array($T.string(), { split: '|' }) // ?tags=a|b → ['a', 'b']
 ```
 
 **Objects.** An object parameter is read from bracketed keys — OpenAPI's `deepObject`:
@@ -367,8 +361,8 @@ Defines request cookies with their respective Schema types. Each one is parsed o
 const schema = {
   cookies: {
     session: $T.string({ minLength: 16 }),
-    visits: $T.optional($T.integer({ min: 0 }))
-  }
+    visits: $T.optional($T.integer({ min: 0 })),
+  },
 }
 ```
 
@@ -401,13 +395,14 @@ Defines the request body schema, keyed by **media type**. The schema is selected
 const schema = {
   body: {
     'application/json': $T.object({ name: $T.string() }),
-    'text/plain': $T.string()
-  }
+    'text/plain': $T.string(),
+  },
 }
 ```
 
 `ctx.contentType` tells the handler which one matched, and `ctx.body` is typed accordingly:
 
+<!-- prettier-ignore -->
 ```ts
 galbe.post('/items', schema, ctx => {
   if (ctx.contentType === 'application/json') ctx.body.name // string
@@ -440,8 +435,8 @@ const body = { 'text/plain': $T.string() }
 const body = {
   'application/json': $T.object({
     name: $T.string(),
-    age: $T.integer({ min: 0 })
-  })
+    age: $T.integer({ min: 0 }),
+  }),
 }
 ```
 
@@ -451,8 +446,8 @@ const body = {
 const body = {
   'application/x-www-form-urlencoded': $T.object({
     name: $T.string(),
-    age: $T.integer({ min: 0 })
-  })
+    age: $T.integer({ min: 0 }),
+  }),
 }
 ```
 
@@ -462,8 +457,8 @@ const body = {
 const body = {
   'multipart/form-data': $T.multipartForm({
     name: $T.string(),
-    age: $T.integer({ min: 0 })
-  })
+    age: $T.integer({ min: 0 }),
+  }),
 }
 ```
 
@@ -485,14 +480,13 @@ galbe.post(
     body: {
       'multipart/form-data': $T.multipartForm({
         username: $T.string(),
-        heavyImageFile: $T.byteArray()
-      })
-    }
+        heavyImageFile: $T.byteArray(),
+      }),
+    },
   },
   ctx => {
     // At this point, the full request body has already been processed.
-    if (!isValid(ctx.body.username))
-      throw new RequestError({ status: 400 })
+    if (!isValid(ctx.body.username)) throw new RequestError({ status: 400 })
     else ctx.set.status = 201
   }
 )
@@ -507,11 +501,13 @@ galbe.post(
   '/user/create',
   {
     body: {
-      'multipart/form-data': $T.stream($T.multipartForm({
-        username: $T.string(),
-        heavyImageFile: $T.byteArray()
-      }))
-    }
+      'multipart/form-data': $T.stream(
+        $T.multipartForm({
+          username: $T.string(),
+          heavyImageFile: $T.byteArray(),
+        })
+      ),
+    },
   },
   async ctx => {
     // At this point, the body has not been processed yet.
@@ -543,9 +539,9 @@ galbe.post(
     bodyLimit: 10 * 1024 * 1024, // 10 MB
     body: {
       'multipart/form-data': $T.multipartForm({
-        heavyImageFile: $T.byteArray()
-      })
-    }
+        heavyImageFile: $T.byteArray(),
+      }),
+    },
   },
   ctx => {}
 )
@@ -567,7 +563,7 @@ const response = {
   200: $T.object({ data: $T.array($T.number()) }),
   404: $T.literal('Not found'),
   '5XX': $T.object({ code: $T.string() }),
-  default: $T.string()
+  default: $T.string(),
 }
 ```
 
@@ -583,8 +579,8 @@ const response = {
     'application/json': Widget,
     description: 'Created.',
     responseHeaders: { Location: $T.string({ format: 'uri' }) },
-    responseLinks: { GetWidget: { operationId: 'getWidget', parameters: { id: '$response.body#/id' } } }
-  }
+    responseLinks: { GetWidget: { operationId: 'getWidget', parameters: { id: '$response.body#/id' } } },
+  },
 }
 ```
 

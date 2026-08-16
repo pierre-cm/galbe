@@ -133,9 +133,18 @@ async function main() {
     const feats = commits.filter(c => c.kind === 'feat')
     const fixes = commits.filter(c => c.kind === 'fix')
 
-    if (breaking.length) { console.log('\n  breaking:'); breaking.forEach(c => console.log(`    - ${c.message}`)) }
-    if (feats.length) { console.log('\n  features:'); feats.forEach(c => console.log(`    - ${c.scope ? `[${c.scope}] ` : ''}${c.message}`)) }
-    if (fixes.length) { console.log('\n  fixes:'); fixes.forEach(c => console.log(`    - ${c.scope ? `[${c.scope}] ` : ''}${c.message}`)) }
+    if (breaking.length) {
+      console.log('\n  breaking:')
+      breaking.forEach(c => console.log(`    - ${c.message}`))
+    }
+    if (feats.length) {
+      console.log('\n  features:')
+      feats.forEach(c => console.log(`    - ${c.scope ? `[${c.scope}] ` : ''}${c.message}`))
+    }
+    if (fixes.length) {
+      console.log('\n  fixes:')
+      fixes.forEach(c => console.log(`    - ${c.scope ? `[${c.scope}] ` : ''}${c.message}`))
+    }
 
     const recommended = suggest(commits, preRelease)
     const versions = { patch: bump(current, 'patch'), minor: bump(current, 'minor'), major: bump(current, 'major') }
@@ -164,7 +173,10 @@ async function main() {
     }
 
     const ok = prompt(`\nrelease ${next}? (y/N):`)?.trim().toLowerCase()
-    if (ok !== 'y') { console.log('aborted.'); process.exit(0) }
+    if (ok !== 'y') {
+      console.log('aborted.')
+      process.exit(0)
+    }
   }
 
   console.log()

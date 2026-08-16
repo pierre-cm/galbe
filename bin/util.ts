@@ -82,21 +82,25 @@ export const instanciateRoutes = async (g: Galbe) => {
   // static registrations emit one event per served file: collapse them to one
   // log line per `static(path, target)` call
   const seenStaticRoots = new Set<string>()
-  await defineRoutes({ routes: g?.config?.routes, middleware: g?.config?.middleware }, g, ({ type, route, error, filepath, meta }) => {
-    if (meta?.ignore || meta?.hide) return
-    if (!filepath) return
-    if (!(filepath in routes)) routes[filepath] = []
-    if (type === 'add' && route && filepath) {
-      const root = route.static?.root
-      if (root) {
-        if (seenStaticRoots.has(`${filepath}:${root}`)) return
-        seenStaticRoots.add(`${filepath}:${root}`)
-        const target = g.staticTargets.find(t => t.path === root)?.target ?? route.static!.path
-        routes[filepath].push({ route: { ...route, path: root, static: { path: target, root } }, meta })
-      } else routes[filepath].push({ route, meta })
+  await defineRoutes(
+    { routes: g?.config?.routes, middleware: g?.config?.middleware },
+    g,
+    ({ type, route, error, filepath, meta }) => {
+      if (meta?.ignore || meta?.hide) return
+      if (!filepath) return
+      if (!(filepath in routes)) routes[filepath] = []
+      if (type === 'add' && route && filepath) {
+        const root = route.static?.root
+        if (root) {
+          if (seenStaticRoots.has(`${filepath}:${root}`)) return
+          seenStaticRoots.add(`${filepath}:${root}`)
+          const target = g.staticTargets.find(t => t.path === root)?.target ?? route.static!.path
+          routes[filepath].push({ route: { ...route, path: root, static: { path: target, root } }, meta })
+        } else routes[filepath].push({ route, meta })
+      }
+      if (type === 'error') errors[filepath] = error
     }
-    if (type === 'error') errors[filepath] = error
-  })
+  )
   for (let [fp, e] of Object.entries(routes)) {
     console.log(`\x1b\[0;36m    ${relative(CWD, fp)}\x1b[0m`)
     let maxPathLength = e.reduce((p, c) => {

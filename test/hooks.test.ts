@@ -12,7 +12,7 @@ describe('hooks', async () => {
     galbe.get('/hooks/empty', [], () => 'handled')
 
     let resp = await fetch(`http://localhost:${port}/hooks/empty`, {
-      method: 'GET'
+      method: 'GET',
     })
     expect(resp.status).toBe(200)
     expect(await resp?.text()).toBe('handled')
@@ -22,7 +22,7 @@ describe('hooks', async () => {
     galbe.get('/hooks/void', [(_ctx, _next) => {}], () => 'handled')
 
     let resp = await fetch(`http://localhost:${port}/hooks/void`, {
-      method: 'GET'
+      method: 'GET',
     })
     expect(resp.status).toBe(200)
     expect(await resp?.text()).toBe('handled')
@@ -35,13 +35,13 @@ describe('hooks', async () => {
       [
         _ => {
           hookCalled++
-        }
+        },
       ],
       () => 'handled'
     )
     expect(hookCalled).toBe(0)
     let resp = await fetch(`http://localhost:${port}/hooks/called`, {
-      method: 'GET'
+      method: 'GET',
     })
     expect(hookCalled).toBe(1)
     expect(resp.status).toBe(200)
@@ -57,13 +57,13 @@ describe('hooks', async () => {
           hookCalled++
           await Bun.sleep(10)
           await next()
-        }
+        },
       ],
       () => 'handled'
     )
     expect(hookCalled).toBe(0)
     let resp = await fetch(`http://localhost:${port}/hooks/called`, {
-      method: 'GET'
+      method: 'GET',
     })
     expect(hookCalled).toBe(1)
     expect(resp.status).toBe(200)
@@ -81,7 +81,7 @@ describe('hooks', async () => {
           await Bun.sleep(10)
           await next()
           after++
-        }
+        },
       ],
       () => {
         expect(before).toBe(1)
@@ -92,7 +92,7 @@ describe('hooks', async () => {
     expect(before).toBe(0)
     expect(after).toBe(0)
     let resp = await fetch(`http://localhost:${port}/hooks/called`, {
-      method: 'GET'
+      method: 'GET',
     })
     expect(before).toBe(1)
     expect(after).toBe(1)
@@ -119,7 +119,7 @@ describe('hooks', async () => {
           await Bun.sleep(10)
           await next()
           after2++
-        }
+        },
       ],
       () => {
         expect(before1).toBe(1)
@@ -134,7 +134,7 @@ describe('hooks', async () => {
     expect(after1).toBe(0)
     expect(after2).toBe(0)
     let resp = await fetch(`http://localhost:${port}/hooks/called`, {
-      method: 'GET'
+      method: 'GET',
     })
     expect(before1).toBe(1)
     expect(before2).toBe(1)
@@ -157,7 +157,7 @@ describe('hooks', async () => {
         async _ => {
           hook2++
           await Bun.sleep(10)
-        }
+        },
       ],
       () => {
         expect(hook1).toBe(1)
@@ -168,7 +168,7 @@ describe('hooks', async () => {
     expect(hook1).toBe(0)
     expect(hook2).toBe(0)
     let resp = await fetch(`http://localhost:${port}/hooks/called`, {
-      method: 'GET'
+      method: 'GET',
     })
     expect(hook1).toBe(1)
     expect(hook2).toBe(1)
@@ -184,7 +184,7 @@ describe('hooks', async () => {
         async _ => {
           hook++
           return 'hook'
-        }
+        },
       ],
       () => {
         expect.unreachable()
@@ -192,7 +192,7 @@ describe('hooks', async () => {
     )
     expect(hook).toBe(0)
     let resp = await fetch(`http://localhost:${port}/hooks`, {
-      method: 'GET'
+      method: 'GET',
     })
     expect(hook).toBe(1)
     expect(resp.status).toBe(200)

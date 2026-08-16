@@ -1,0 +1,17 @@
+# Generated / vendored
+node_modules/
+coverage/
+dist/
+.galbe/
+bun.lock
+
+# Maintained by scripts/release.ts — reformatting it would drift on every release
+CHANGELOG.md
+
+# Bun test snapshots: no prettier parser, and the bytes are the assertion
+test/__snapshots__/
+
+# Hand-authored fixtures. Their exact content is the thing under test
+# (object.badSyntax.json is deliberately malformed, the openapi yamls are
+# pinned by the roundtrip snapshots).
+test/resources/

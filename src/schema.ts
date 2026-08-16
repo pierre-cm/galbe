@@ -142,17 +142,7 @@ export interface STSchema extends Options {
   static: unknown
 }
 export type STPropsValue =
-  | STBoolean
-  | STByteArray
-  | STNumber
-  | STInteger
-  | STString
-  | STLiteral
-  | STArray
-  | STObject
-  | STUnion
-  | STAny
-  | STNull
+  STBoolean | STByteArray | STNumber | STInteger | STString | STLiteral | STArray | STObject | STUnion | STAny | STNull
 export type STProps = Record<string | number, STPropsValue>
 
 type Evaluate<T> = T extends infer O ? { [K in keyof O]: O[K] } : never
@@ -550,12 +540,14 @@ export class SchemaType {
   ): Omit<STStream<T>, 'static'> & {
     static: AsyncGenerator<
       Entries<{
-        [P in KeysOfUnion<MemberProps<T['members'][number]>> as ValueAt<
-          MemberProps<T['members'][number]>,
-          P
-        > extends STSchema
-          ? P
-          : never]: Static<ValueAt<MemberProps<T['members'][number]>, P>>
+        [
+          P in KeysOfUnion<MemberProps<T['members'][number]>> as ValueAt<
+            MemberProps<T['members'][number]>,
+            P
+          > extends STSchema
+            ? P
+            : never
+        ]: Static<ValueAt<MemberProps<T['members'][number]>, P>>
       }>
     >
     params: unknown[]

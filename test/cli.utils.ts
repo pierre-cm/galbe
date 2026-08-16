@@ -49,7 +49,7 @@ export const runCli = (dir: string, args: string[]): CliProc => {
     cwd: dir,
     stdout: 'pipe',
     stderr: 'pipe',
-    env: { ...process.env, BUN_ENV: 'development', NO_COLOR: '1' }
+    env: { ...process.env, BUN_ENV: 'development', NO_COLOR: '1' },
   })
   let output = ''
   const drain = async (stream: ReadableStream<Uint8Array>) => {
@@ -65,7 +65,7 @@ export const runCli = (dir: string, args: string[]): CliProc => {
     stop: async () => {
       proc.kill()
       await proc.exited
-    }
+    },
   }
 }
 
@@ -118,7 +118,7 @@ const config: GalbeConfig = {
 ${[
   opts.port ? `  port: ${opts.port}` : '',
   `  routes: '${opts.routes}'`,
-  opts.middleware ? `  middleware: '${opts.middleware}'` : ''
+  opts.middleware ? `  middleware: '${opts.middleware}'` : '',
 ]
   .filter(Boolean)
   .join(',\n')}

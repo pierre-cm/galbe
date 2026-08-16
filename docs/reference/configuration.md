@@ -55,8 +55,8 @@ An object form gives access to the analyzer options:
 export default {
   routes: {
     pattern: 'src/**/*.route.ts', // glob pattern or array of patterns
-    dirPrefix: false,             // disable directory groups (default: true)
-  }
+    dirPrefix: false, // disable directory groups (default: true)
+  },
 }
 ```
 
@@ -71,6 +71,7 @@ A glob pattern (or array of glob patterns) defining the [middleware files](../co
 
 A namespace used by plugins to read their configuration. Each key should match a [Unique Plugin Identifier](../concepts/plugins.md#name).
 
+<!-- prettier-ignore -->
 ```ts
 export default {
   plugin: {
@@ -97,7 +98,7 @@ Maximum request body size in bytes. When the declared `Content-Length` exceeds t
 
 ```ts
 export default {
-  bodyLimit: 1024 * 1024 // 1 MB
+  bodyLimit: 1024 * 1024, // 1 MB
 }
 ```
 
@@ -128,8 +129,8 @@ export default {
   router: {
     warn: message => {
       throw new Error(`route conflict: ${message}`)
-    }
-  }
+    },
+  },
 }
 ```
 
@@ -161,10 +162,10 @@ export default {
 - **openapi.info**: any subset of the OpenAPI [Info Object](https://spec.openapis.org/oas/v3.0.3#info-object) (`title`, `version`, `description`, `contact`, `license`, `termsOfService`). Unset fields fall back to `title: 'Galbe app'` and `version: '0.1.0'`.
 - **openapi.servers**: an OpenAPI [Server Object](https://spec.openapis.org/oas/v3.0.3#server-object) list. When unset and a [`basePath`](#basepath) is configured, it defaults to `[{ url: basePath }]` — generated `paths` are relative to `basePath`, which is a deploy location rather than API structure.
 
-- **openapi.tags**: the document's [Tag Object](https://spec.openapis.org/oas/v3.0.3#tag-object) list — the descriptions behind the names operations use. Operations *name* their tags through the `@tags` annotation; this is where a tag is described.
+- **openapi.tags**: the document's [Tag Object](https://spec.openapis.org/oas/v3.0.3#tag-object) list — the descriptions behind the names operations use. Operations _name_ their tags through the `@tags` annotation; this is where a tag is described.
 - **openapi.security**: the document-level [Security Requirement](https://spec.openapis.org/oas/v3.0.3#security-requirement-object) list, applied to every operation that does not declare its own through `@security`.
 - **openapi.externalDocs**: the document's [External Documentation Object](https://spec.openapis.org/oas/v3.0.3#external-documentation-object). Route-level docs come from the `@externalDocs` annotation instead.
-- **openapi.securitySchemes**: the spec's [Security Schemes](https://spec.openapis.org/oas/v3.0.3#security-scheme-object), keyed by name. A route's `@security <name>` annotation *names* a scheme; this is where the scheme itself is defined. A scheme declared here always wins over the `bearerAuth` the serializer infers from an `Authorization: Bearer` header.
+- **openapi.securitySchemes**: the spec's [Security Schemes](https://spec.openapis.org/oas/v3.0.3#security-scheme-object), keyed by name. A route's `@security <name>` annotation _names_ a scheme; this is where the scheme itself is defined. A scheme declared here always wins over the `bearerAuth` the serializer infers from an `Authorization: Bearer` header.
 
 When generating a spec with `galbe generate spec`, values set here take precedence over the `package.json` inference (`name`, `description`, `author`, `license`, `version`), which itself takes precedence over the built-in defaults.
 

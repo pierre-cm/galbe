@@ -161,16 +161,20 @@ describe('openapi serializer', () => {
 
   test('emits additionalProperties for records, mixed objects and strict objects', async () => {
     const g = new Galbe()
-    g.post('/maps', {
-      body: {
-        'application/json': $T.object({
-          map: $T.record($T.string()),
-          mixed: $T.object({ id: $T.string() }, { additionalProperties: $T.integer() }),
-          strict: $T.object({ id: $T.string() }, { additionalProperties: false }),
-          open: $T.object({ id: $T.string() }),
-        }),
+    g.post(
+      '/maps',
+      {
+        body: {
+          'application/json': $T.object({
+            map: $T.record($T.string()),
+            mixed: $T.object({ id: $T.string() }, { additionalProperties: $T.integer() }),
+            strict: $T.object({ id: $T.string() }, { additionalProperties: false }),
+            open: $T.object({ id: $T.string() }),
+          }),
+        },
       },
-    }, () => null)
+      () => null
+    )
 
     const spec = await OpenAPISerializer(g)
     const props = (spec.paths!['/maps'] as any).post.requestBody.content['application/json'].schema.properties
@@ -215,11 +219,7 @@ describe('openapi serializer', () => {
     // A genuine JSON `null` body is spelled through the content map — a bare
     // `$T.null()` response means "no body" (see the test below).
     const g = new Galbe()
-    g.get(
-      '/n',
-      { response: { 200: { 'application/json': $T.null() } } },
-      () => null
-    )
+    g.get('/n', { response: { 200: { 'application/json': $T.null() } } }, () => null)
 
     const spec = await OpenAPISerializer(g)
     const resp = (spec.paths!['/n'] as any).get.responses['200']
@@ -235,11 +235,7 @@ describe('openapi serializer', () => {
     // that. Gating it on the status left 200/202/301 with a JSON `null` body
     // nobody asked for.
     const g = new Galbe()
-    g.get(
-      '/n',
-      { response: { 200: $T.null({ description: 'Exists.' }), 204: $T.null(), 301: $T.null() } },
-      () => null
-    )
+    g.get('/n', { response: { 200: $T.null({ description: 'Exists.' }), 204: $T.null(), 301: $T.null() } }, () => null)
 
     const spec = await OpenAPISerializer(g)
     const responses = (spec.paths!['/n'] as any).get.responses
@@ -318,7 +314,11 @@ describe('openapi serializer', () => {
 
   test('a route file header loses to the route and wins over the middleware scope', async () => {
     const g = new Galbe()
-    g.metaMiddleware.push({ file: 'auth.middleware.ts', scope: '/api/*', header: { security: 'bearerAuth', tags: 'api' } })
+    g.metaMiddleware.push({
+      file: 'auth.middleware.ts',
+      scope: '/api/*',
+      header: { security: 'bearerAuth', tags: 'api' },
+    })
     g.meta = [
       {
         file: 'f.route.ts',
@@ -339,7 +339,11 @@ describe('openapi serializer', () => {
 
   test('middleware-file @security and @tags apply to the file scope', async () => {
     const g = new Galbe()
-    g.metaMiddleware.push({ file: 'auth.middleware.ts', scope: '/api/*', header: { security: 'bearerAuth', tags: 'api' } })
+    g.metaMiddleware.push({
+      file: 'auth.middleware.ts',
+      scope: '/api/*',
+      header: { security: 'bearerAuth', tags: 'api' },
+    })
     g.meta = [
       {
         file: 'f.route.ts',
@@ -375,11 +379,7 @@ describe('openapi serializer', () => {
     // used to overwrite the whole `securitySchemes` object on the second one.
     const g = new Galbe()
     // Manually seed a custom scheme to ensure the merge keeps it.
-    g.get(
-      '/a',
-      { headers: { authorization: $T.string({ pattern: /^Bearer / }) } },
-      () => 'a'
-    )
+    g.get('/a', { headers: { authorization: $T.string({ pattern: /^Bearer / }) } }, () => 'a')
 
     const spec = await OpenAPISerializer(g)
     // Fake a pre-existing scheme by rerunning the serializer with a
@@ -392,11 +392,7 @@ describe('openapi serializer', () => {
 
     // Add a second route with the same pattern; previously this could have
     // wiped any other entry on `securitySchemes`. Verify bearerAuth survives.
-    g.get(
-      '/b',
-      { headers: { authorization: $T.string({ pattern: /^Bearer / }) } },
-      () => 'b'
-    )
+    g.get('/b', { headers: { authorization: $T.string({ pattern: /^Bearer / }) } }, () => 'b')
     const spec2 = await OpenAPISerializer(g)
     expect(spec2.components?.securitySchemes?.bearerAuth).toBeDefined()
   })

@@ -292,6 +292,9 @@ export type RequestSchema<
   bodyLimit?: number
 }
 
+// prettier-ignore
+// The `@ts-ignore` below suppresses the error on the value type; prettier would
+// split the mapped key onto its own line and detach the directive from it.
 type OmitNotDefined<S extends RequestSchema> = {
   [K in keyof Exclude<S['params'], undefined> as Exclude<S['params'], undefined>[K] extends Required<
     Exclude<S['params'], undefined>

@@ -211,7 +211,7 @@ Both fall back to the head split when absent, so existing comments are unaffecte
 
 ### Directory Groups
 
-By default, a route file's directory becomes its path prefix. The prefix is the file's directory relative to the *static base* of its glob pattern — the part of the pattern before the first segment containing a glob character. With the default pattern `src/**/*.route.{js,ts}`, the base is `src/`:
+By default, a route file's directory becomes its path prefix. The prefix is the file's directory relative to the _static base_ of its glob pattern — the part of the pattern before the first segment containing a glob character. With the default pattern `src/**/*.route.{js,ts}`, the base is `src/`:
 
 ```txt
 src/
@@ -233,7 +233,7 @@ To opt out, use the object form of the [`routes`](../reference/configuration.md#
 
 ```ts
 export default {
-  routes: { pattern: 'src/**/*.route.ts', dirPrefix: false }
+  routes: { pattern: 'src/**/*.route.ts', dirPrefix: false },
 }
 ```
 
@@ -246,7 +246,7 @@ The `@prefix` header annotation declares a file's route prefix explicitly, repla
  * @prefix /v2
  */
 export default g => {
-  g.get('/users', listUsers)  // GET /v2/users, wherever the file lives
+  g.get('/users', listUsers) // GET /v2/users, wherever the file lives
 }
 ```
 

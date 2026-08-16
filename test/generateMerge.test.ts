@@ -130,10 +130,7 @@ describe('generate code merge flow', () => {
     const routePath = join(dir, 'src/users.route.ts')
     let content = await readFile(routePath, 'utf-8')
     // Patch the listUsers handler
-    content = content.replace(
-      'throw new NotImplementedError()',
-      `return [{ id: '1', name: 'alice' }]`
-    )
+    content = content.replace('throw new NotImplementedError()', `return [{ id: '1', name: 'alice' }]`)
     await writeFile(routePath, content)
 
     const r = await run(['generate', 'code', 'spec.yaml'], dir)
@@ -183,17 +180,13 @@ describe('generate code merge flow', () => {
     // User customizes the now-stale handler
     const routePath = join(dir, 'src/users.route.ts')
     let content = await readFile(routePath, 'utf-8')
-    content = content.replace(
-      /g\.get\("\/users\/:id"[\s\S]*?throw new NotImplementedError\(\)/,
-      m => m.replace('throw new NotImplementedError()', `return { id: ctx.params.id, custom: true }`)
+    content = content.replace(/g\.get\("\/users\/:id"[\s\S]*?throw new NotImplementedError\(\)/, m =>
+      m.replace('throw new NotImplementedError()', `return { id: ctx.params.id, custom: true }`)
     )
     await writeFile(routePath, content)
 
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V2)
-    const r = await run(
-      ['generate', 'code', 'spec.yaml', '--ignore-route', 'GET /users/:id'],
-      dir
-    )
+    const r = await run(['generate', 'code', 'spec.yaml', '--ignore-route', 'GET /users/:id'], dir)
     expect(r.code).toBe(0)
 
     const after = await readFile(routePath, 'utf-8')
@@ -208,17 +201,13 @@ describe('generate code merge flow', () => {
 
     const routePath = join(dir, 'src/users.route.ts')
     let content = await readFile(routePath, 'utf-8')
-    content = content.replace(
-      /g\.get\("\/users\/:id"[\s\S]*?throw new NotImplementedError\(\)/,
-      m => m.replace('throw new NotImplementedError()', `return { id: ctx.params.id, fetched: true }`)
+    content = content.replace(/g\.get\("\/users\/:id"[\s\S]*?throw new NotImplementedError\(\)/, m =>
+      m.replace('throw new NotImplementedError()', `return { id: ctx.params.id, fetched: true }`)
     )
     await writeFile(routePath, content)
 
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V3)
-    const r = await run(
-      ['generate', 'code', 'spec.yaml', '--rename', 'GET /users/:id=GET /users/:userId'],
-      dir
-    )
+    const r = await run(['generate', 'code', 'spec.yaml', '--rename', 'GET /users/:id=GET /users/:userId'], dir)
     expect(r.code).toBe(0)
 
     const after = await readFile(routePath, 'utf-8')
@@ -233,10 +222,7 @@ describe('generate code merge flow', () => {
     const before = await readFile(join(dir, 'src/users.route.ts'), 'utf-8')
 
     await Bun.write(join(dir, 'spec.yaml'), SPEC_V2)
-    const r = await run(
-      ['generate', 'code', 'spec.yaml', '--dry-run', '--remove-stale'],
-      dir
-    )
+    const r = await run(['generate', 'code', 'spec.yaml', '--dry-run', '--remove-stale'], dir)
     expect(r.code).toBe(0)
     expect(r.stdout).toContain('Dry run')
     expect(r.stdout).toContain('POST /users')

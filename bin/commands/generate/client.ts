@@ -32,12 +32,7 @@ const mimeToShort = (mime: string) => MIME_SHORT[mime] ?? (mime.startsWith('text
 // ─── Operaion-id derivation ───────────────────────────────────────────────────
 
 const deriveOperationId = (method: string, path: string): string =>
-  `${method}-${path
-    .replace(/\//g, '-')
-    .replace(/:/g, '')
-    .replace(/^-/, '')
-    .replace(/-+/g, '-')
-    .replace(/-$/, '')}`
+  `${method}-${path.replace(/\//g, '-').replace(/:/g, '').replace(/^-/, '').replace(/-+/g, '-').replace(/-$/, '')}`
 
 // ─── Response-entry helpers ───────────────────────────────────────────────────
 
@@ -64,7 +59,10 @@ const responseBodyInfo = (entry: STResponseEntry): BodyInfo => {
   for (const [mime, s] of Object.entries(content)) {
     if (!mime.includes('/') || !s) continue
     const schema = s as STSchema
-    if (Stream in schema && (schema as any)[Stream]) { methods.push('stream'); continue }
+    if (Stream in schema && (schema as any)[Stream]) {
+      methods.push('stream')
+      continue
+    }
     const short = mimeToShort(mime)
     methods.push(short === 'byteArray' ? 'byteArray' : short === 'text' ? 'text' : 'json')
     typeStr = schemaToTypeStr(schema)
@@ -77,7 +75,9 @@ const responseHeadersType = (entry: STResponseEntry): string => {
     ? (entry as any).responseHeaders
     : (entry as STResponseContent).responseHeaders
   if (!rh || !Object.keys(rh).length) return 'Headers'
-  const keys = Object.keys(rh).map(k => `'${k}'`).join('|')
+  const keys = Object.keys(rh)
+    .map(k => `'${k}'`)
+    .join('|')
   return `{get<K extends string>(name:K):K extends ${keys}?string:string|null}&Omit<Headers,'get'>`
 }
 
@@ -119,7 +119,7 @@ const expandRanges = (response: STResponse): Array<[string, STResponseEntry]> =>
 // Convert operationId to a safe TypeScript identifier (for type names)
 const safeTypeId = (id: string) => id.replace(/[^a-zA-Z0-9_$]/g, '_')
 // Quote a property key if it is not a valid bare identifier
-const safePropKey = (id: string) => /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(id) ? id : `'${id}'`
+const safePropKey = (id: string) => (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(id) ? id : `'${id}'`)
 
 const buildBodyObjType = (methods: string[], typeStr: string): string => {
   const parts: string[] = []
@@ -151,14 +151,14 @@ const buildRawResponseType = (operationId: string, response: STResponse | null):
     const ok = OKS.has(status)
     const { methods, typeStr } = responseBodyInfo(entry)
     const headersT = responseHeadersType(entry)
-    arms.push(
-      `{status:${status};ok:${ok};headers:${headersT};body:${buildBodyObjType(methods, typeStr)}}`
-    )
+    arms.push(`{status:${status};ok:${ok};headers:${headersT};body:${buildBodyObjType(methods, typeStr)}}`)
   }
 
   // fallback arm
   const defaultEntry = (response as any)['default'] as STResponseEntry | undefined
-  const fallbackBody = defaultEntry ? buildBodyObjType(...Object.values(responseBodyInfo(defaultEntry)) as [string[], string]) : FALLBACK_BODY
+  const fallbackBody = defaultEntry
+    ? buildBodyObjType(...(Object.values(responseBodyInfo(defaultEntry)) as [string[], string]))
+    : FALLBACK_BODY
   const excludeStr = declared.length ? `Exclude<_HttpStatus,${declared.join('|')}>` : '_HttpStatus'
   arms.push(`{status:${excludeStr};ok:boolean;headers:Headers;body:${fallbackBody}}`)
 
@@ -239,7 +239,10 @@ const expandRoute = (r: GalbeClientRoute): RouteVariant[] => {
     Object.entries(r.query).map(([k, v]) => [k, { typeStr: v.type, optional: v.optional, description: v.description }])
   )
   const reqHeaders = Object.fromEntries(
-    Object.entries(r.headers).map(([k, v]) => [k, { typeStr: v.type, optional: v.optional, description: v.description }])
+    Object.entries(r.headers).map(([k, v]) => [
+      k,
+      { typeStr: v.type, optional: v.optional, description: v.description },
+    ])
   )
 
   const bodyEntries = r.body ? Object.entries(r.body) : []
@@ -311,9 +314,7 @@ const buildParamList = (v: RouteVariant): string => {
 const buildFetchCall = (v: RouteVariant, fnName: string): string => {
   const pathExpr = v.params.length ? `\`${v.pathTemplate}\`` : `'${v.path}'`
   const bodyArg = v.bodyShortName !== null ? 'body' : 'undefined'
-  const optionsArg = v.bodyShortName !== null
-    ? `{...(options??{}),contentType:'${v.bodyShortName}'}`
-    : 'options'
+  const optionsArg = v.bodyShortName !== null ? `{...(options??{}),contentType:'${v.bodyShortName}'}` : 'options'
   return `${fnName}(this.#config,'${v.method.toUpperCase()}',${pathExpr},${bodyArg},${optionsArg})`
 }
 
@@ -435,7 +436,9 @@ export default (cmd: Command) => {
       if (!out) out = { ts: 'dist/client.ts', js: 'dist/client.js' }[target as 'ts' | 'js']
 
       let pckg: any = {}
-      try { pckg = await Bun.file(resolve(CWD, 'package.json')).json() } catch {}
+      try {
+        pckg = await Bun.file(resolve(CWD, 'package.json')).json()
+      } catch {}
 
       let error: any = null
       Bun.write(Bun.stdout, '💻 \x1b[1;30mBuilding \x1b[36mGalbe\x1b[0m\x1b[1;30m client\x1b[0m')
@@ -446,7 +449,9 @@ export default (cmd: Command) => {
           await instanciateRoutes(mod)
           await mod.init()
           return mod
-        } catch (err) { error = err }
+        } catch (err) {
+          error = err
+        }
       })
 
       if (error) {
@@ -480,7 +485,7 @@ export default (cmd: Command) => {
         // Collect named types
         Object.values(r.schema.response ?? {}).forEach(entry => {
           if (!entry) return
-          const s = isResponseValue(entry as STResponseEntry) ? entry as STSchema : null
+          const s = isResponseValue(entry as STResponseEntry) ? (entry as STSchema) : null
           if (s?.id) namedTypes[s.id] = schemaToTypeStr(s)
         })
 
@@ -558,8 +563,8 @@ export default (cmd: Command) => {
       const allVariants = finalRoutes.flatMap(expandRoute)
       Bun.write(Bun.stdout, '\n')
       for (const v of allVariants) {
-        const sourceRoute = finalRoutes.find(r =>
-          r.operationId === v.operationId || v.operationId.startsWith(r.operationId)
+        const sourceRoute = finalRoutes.find(
+          r => r.operationId === v.operationId || v.operationId.startsWith(r.operationId)
         )
         const isAuto = sourceRoute?.autoDerived
         Bun.write(

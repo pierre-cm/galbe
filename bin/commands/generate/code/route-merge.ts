@@ -146,11 +146,7 @@ const applyEdits = (text: string, edits: Edit[]): string => {
   return out
 }
 
-export const mergeRouteFile = (
-  existing: string | null,
-  scope: ScopePlan,
-  opts: MergeOptions = {}
-): MergeResult => {
+export const mergeRouteFile = (existing: string | null, scope: ScopePlan, opts: MergeOptions = {}): MergeResult => {
   const removeStale = opts.removeStale ?? false
   const ignore = opts.ignore ?? new Set<RouteId>()
   const rename = opts.rename ?? new Map<RouteId, RouteId>()
@@ -255,4 +251,3 @@ export const mergeRouteFile = (
     stale: stale.map(s => s.origId),
   }
 }
-

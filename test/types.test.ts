@@ -173,7 +173,7 @@ type _stream_obj = Expect<
           'obj',
           {
             nested: boolean
-          }
+          },
         ]
     >
   >
@@ -472,7 +472,15 @@ g.post('/body/json/obj', { body: { 'application/json': $T.object({ foo: $T.strin
 
 g.post(
   '/body/urlForm',
-  { body: { 'application/x-www-form-urlencoded': $T.object({ foo: $T.string(), bar: $T.number(), opt: $T.optional($T.literal('opt')) }) } },
+  {
+    body: {
+      'application/x-www-form-urlencoded': $T.object({
+        foo: $T.string(),
+        bar: $T.number(),
+        opt: $T.optional($T.literal('opt')),
+      }),
+    },
+  },
   ctx => {
     const { body, contentType } = ctx
     type _ep_body = Expect<Equal<typeof body, { foo: string; bar: number; opt?: 'opt' }>>
@@ -484,7 +492,14 @@ g.post(
 
 g.post(
   '/body/urlForm/union',
-  { body: { 'application/x-www-form-urlencoded': $T.union([$T.object({ foo: $T.string() }), $T.object({ bar: $T.boolean() })]) } },
+  {
+    body: {
+      'application/x-www-form-urlencoded': $T.union([
+        $T.object({ foo: $T.string() }),
+        $T.object({ bar: $T.boolean() }),
+      ]),
+    },
+  },
   ctx => {
     const { body, contentType } = ctx
     type _ep_body = Expect<Extends<typeof body, { foo: string } | { bar: boolean }>>
@@ -513,7 +528,13 @@ g.post(
 g.post(
   '/body/multipart',
   {
-    body: { 'multipart/form-data': $T.multipartForm({ foo: $T.string(), bar: $T.number(), opt: $T.optional($T.literal('opt')) }) },
+    body: {
+      'multipart/form-data': $T.multipartForm({
+        foo: $T.string(),
+        bar: $T.number(),
+        opt: $T.optional($T.literal('opt')),
+      }),
+    },
   },
   ctx => {
     const { body, contentType } = ctx

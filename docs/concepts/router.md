@@ -16,7 +16,7 @@ When multiple routes could match a given request, Galbe resolves them with backt
 Two kinds of conflict are reported at registration time, on `stderr`, outside production (`BUN_ENV=production` silences them):
 
 - **A redefined route** — registering the same method and path twice overwrites the first, silently before. `route GET /items redefined — previous registration overwritten`.
-- **Colliding parameter names** — `/user/:id` and `/user/:name` are the *same* trie node, and the first registered name wins for both. `/user/:name collides with /user/:id — param routes share one trie node regardless of name`.
+- **Colliding parameter names** — `/user/:id` and `/user/:name` are the _same_ trie node, and the first registered name wins for both. `/user/:name collides with /user/:id — param routes share one trie node regardless of name`.
 
 Pass `router.warn` in the [Configuration](../reference/configuration.md#routerwarn) to route these somewhere else, or to turn them into errors.
 

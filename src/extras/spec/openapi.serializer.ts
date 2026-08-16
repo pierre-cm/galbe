@@ -99,8 +99,18 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       // An exclusive bound wins over an inclusive one on the same side: draft-4
       // has a single `minimum`/`maximum` slot, and the exclusive form is the
       // one the parser emits when the source spec marked the bound exclusive.
-      const lower = n.exclusiveMin !== undefined ? { value: n.exclusiveMin, exclusive: true } : n.min !== undefined ? { value: n.min, exclusive: false } : undefined
-      const upper = n.exclusiveMax !== undefined ? { value: n.exclusiveMax, exclusive: true } : n.max !== undefined ? { value: n.max, exclusive: false } : undefined
+      const lower =
+        n.exclusiveMin !== undefined
+          ? { value: n.exclusiveMin, exclusive: true }
+          : n.min !== undefined
+            ? { value: n.min, exclusive: false }
+            : undefined
+      const upper =
+        n.exclusiveMax !== undefined
+          ? { value: n.exclusiveMax, exclusive: true }
+          : n.max !== undefined
+            ? { value: n.max, exclusive: false }
+            : undefined
       const bound = (b: typeof lower, key: 'minimum' | 'maximum') => {
         if (!b) return {}
         if (!b.exclusive) return { [key]: b.value }
@@ -293,7 +303,12 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     const fileHeader = metaFileHeaders[rPath]
     if (r.static?.root) meta = metaStatic[r.static?.root]?.static
     if (meta?.hide) return
-    const inherited = mwMeta.filter(m => matchMiddleware(m.segments, rPath.split('/').filter(s => s !== '')))
+    const inherited = mwMeta.filter(m =>
+      matchMiddleware(
+        m.segments,
+        rPath.split('/').filter(s => s !== '')
+      )
+    )
     let path = rPath.replaceAll(/:([^\/]+)/g, '{$1}')
     if (!(path in paths)) paths[path] = {}
     const metaTags = (m?: Record<string, any>) => [
@@ -301,9 +316,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       ...(typeof m?.tag === 'string' ? [m?.tag] : m?.tag || []),
     ]
     // tags accumulate from every scope that names one, nearest first
-    let tags = [
-      ...new Set([...metaTags(meta), ...metaTags(fileHeader), ...inherited.flatMap(m => metaTags(m.header))]),
-    ]
+    let tags = [...new Set([...metaTags(meta), ...metaTags(fileHeader), ...inherited.flatMap(m => metaTags(m.header))])]
     let security: Record<string, any> = []
     let securityExplicitlyEmpty = false
 
@@ -389,9 +402,7 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       // schema is a `$ref` to a documented component: that description belongs
       // to the component, not to this operation's request body.
       requestBody = {
-        ...(typeof bodyMap.description === 'string' && bodyMap.description
-          ? { description: bodyMap.description }
-          : {}),
+        ...(typeof bodyMap.description === 'string' && bodyMap.description ? { description: bodyMap.description } : {}),
         required: typeof bodyMap.required === 'boolean' ? bodyMap.required : required,
         content,
       }
@@ -452,10 +463,12 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
               const mediaType = schemaToMedia({ type, format, isJson } as SchemaType, hasComposite)
               const explicitExamples = (v as any)?.examples as Record<string, any> | undefined
               const explicitExample = (v as any)?.example
-              const content: Record<string, { schema: typeof schema; example?: any; examples?: Record<string, any> }> = {
-                [mediaType]: { schema: { ...schema } },
-              }
-              if (explicitExamples && Object.keys(explicitExamples).length) content[mediaType]!.examples = explicitExamples
+              const content: Record<string, { schema: typeof schema; example?: any; examples?: Record<string, any> }> =
+                {
+                  [mediaType]: { schema: { ...schema } },
+                }
+              if (explicitExamples && Object.keys(explicitExamples).length)
+                content[mediaType]!.examples = explicitExamples
               if (explicitExample !== undefined) content[mediaType]!.example = explicitExample
               response = {
                 description: (v as any).description || statusDescription || 'Response',

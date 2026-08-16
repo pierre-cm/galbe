@@ -24,8 +24,8 @@ galbe.middleware('/api/*', ctx => {
   if (!isAuthenticated(ctx.headers.authorization)) throw new UnauthorizedError()
 })
 
-galbe.get('/api/users', ctx => listUsers())   // runs the auth hook first
-galbe.get('/health', ctx => 'ok')             // does not
+galbe.get('/api/users', ctx => listUsers()) // runs the auth hook first
+galbe.get('/health', ctx => 'ok') // does not
 ```
 
 #### Timing every request
@@ -64,6 +64,7 @@ plugins → middleware (registration order) → route hooks → handler
 
 They follow the same nesting rules as route hooks: code after `await next()` runs after the handler and the route hooks have completed.
 
+<!-- prettier-ignore -->
 ```ts
 galbe.middleware('/example', async (ctx, next) => {
   console.log('middleware start')
@@ -128,24 +129,24 @@ A `@galbe-ignore` comment above the default export skips the file. Header annota
 
 Code-level API:
 
-| Definition | Example | Scope |
-| --- | --- | --- |
-| Global middleware | `galbe.middleware(log)` | every route |
-| Prefix middleware | `galbe.middleware('/api/*', auth)` | routes matching the pattern, wherever registered |
-| Route hooks | `galbe.get('/x', [h], handler)` | that route only |
-| Group | `galbe.group('/v1', g => ...)` | prefixes the routes registered through `g` |
-| Group hooks | `galbe.group('/v1', [auth], g => ...)` | the whole `/v1/*` subtree, incl. routes registered outside the group |
-| Group-scoped middleware | `g.middleware(h)` / `g.middleware('/sub/*', h)` | group subtree / pattern relative to the group prefix |
+| Definition              | Example                                         | Scope                                                                |
+| ----------------------- | ----------------------------------------------- | -------------------------------------------------------------------- |
+| Global middleware       | `galbe.middleware(log)`                         | every route                                                          |
+| Prefix middleware       | `galbe.middleware('/api/*', auth)`              | routes matching the pattern, wherever registered                     |
+| Route hooks             | `galbe.get('/x', [h], handler)`                 | that route only                                                      |
+| Group                   | `galbe.group('/v1', g => ...)`                  | prefixes the routes registered through `g`                           |
+| Group hooks             | `galbe.group('/v1', [auth], g => ...)`          | the whole `/v1/*` subtree, incl. routes registered outside the group |
+| Group-scoped middleware | `g.middleware(h)` / `g.middleware('/sub/*', h)` | group subtree / pattern relative to the group prefix                 |
 
 Analyzer level:
 
-| Definition | Example | Scope |
-| --- | --- | --- |
-| Directory group *(default on)* | `src/api/users.route.ts` | the file's routes get `/api`; nested dirs compose |
-| `@prefix` annotation | `/** @prefix /v2 */` atop a route file | replaces the dir-derived prefix for that file |
-| Middleware file | `src/api/auth.middleware.ts` exporting `Hook \| Hook[]` | `/api/*` — the file's directory subtree |
-| Scope override export | `export const scope = '/admin/*'` in a middleware file | narrows within the directory scope |
-| In-file registration | `g.middleware(...)` / `g.group(...)` inside a route file | relative to the file's prefix |
+| Definition                     | Example                                                  | Scope                                             |
+| ------------------------------ | -------------------------------------------------------- | ------------------------------------------------- |
+| Directory group _(default on)_ | `src/api/users.route.ts`                                 | the file's routes get `/api`; nested dirs compose |
+| `@prefix` annotation           | `/** @prefix /v2 */` atop a route file                   | replaces the dir-derived prefix for that file     |
+| Middleware file                | `src/api/auth.middleware.ts` exporting `Hook \| Hook[]`  | `/api/*` — the file's directory subtree           |
+| Scope override export          | `export const scope = '/admin/*'` in a middleware file   | narrows within the directory scope                |
+| In-file registration           | `g.middleware(...)` / `g.group(...)` inside a route file | relative to the file's prefix                     |
 
 ## Route Groups
 

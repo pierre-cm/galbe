@@ -53,7 +53,7 @@ export const parseCookie = (str: string) => {
           case 'SameSite':
             cookie.sameSite =
               ({ true: true, false: false, lax: 'lax', strict: 'strict', none: 'none' } as const)[
-              val?.toLowerCase() || 'true'
+                val?.toLowerCase() || 'true'
               ] || true
             break
           case 'Secure':

@@ -84,7 +84,8 @@ The request's media type, taken from the `Content-Type` header with any paramete
 
 ```ts
 galbe.post('/items', { body: { 'application/json': Item, 'text/plain': $T.string() } }, ctx => {
-  if (ctx.contentType === 'application/json') ctx.body.name // typed as Item
+  if (ctx.contentType === 'application/json')
+    ctx.body.name // typed as Item
   else ctx.body // string
 })
 ```
@@ -112,7 +113,7 @@ galbe.get(
   [
     ctx => {
       ctx.state['foo'] = 'bar'
-    }
+    },
   ],
   ctx => {
     return ctx.state.foo

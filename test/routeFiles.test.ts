@@ -16,15 +16,15 @@ describe('routeFiles', () => {
       header: {},
       routes: {
         '/one': {
-          get: {}
+          get: {},
         },
         '/two': {
-          post: {}
+          post: {},
         },
         '/three': {
-          put: {}
-        }
-      }
+          put: {},
+        },
+      },
     })
   })
 
@@ -33,7 +33,7 @@ describe('routeFiles', () => {
     expect(meta).toEqual({
       header: {
         head: 'description\nmultiline',
-        tag: 'test'
+        tag: 'test',
       },
       routes: {
         '/test/:param1': {
@@ -43,34 +43,34 @@ describe('routeFiles', () => {
             summary: 'short summary',
             description: 'longer description example',
             deprecated: true,
-            param: ['{path} param1 description', '{query} param2 description']
-          }
+            param: ['{path} param1 description', '{query} param2 description'],
+          },
         },
         '/test': {
           post: {
             tags: 'tag1, tag2, tag3',
             summary: 'short summary',
             description: 'longer description example',
-            body: 'body descripton'
+            body: 'body descripton',
           },
           put: {
             tags: 'tag1, tag2',
-            other: 'Hello Mom!'
+            other: 'Hello Mom!',
           },
           patch: {
-            head: 'patch method'
+            head: 'patch method',
           },
           options: {
-            head: 'options method'
+            head: 'options method',
           },
           delete: {
-            head: 'delete method'
+            head: 'delete method',
           },
           head: {
-            head: 'head method'
-          }
-        }
-      }
+            head: 'head method',
+          },
+        },
+      },
     })
   })
 
@@ -84,7 +84,7 @@ describe('routeFiles', () => {
     const g = new Galbe()
     await defineRoutes({}, g)
     expect(g.router.routes).toEqual({
-      routes: {}
+      routes: {},
     })
   })
 
@@ -92,7 +92,7 @@ describe('routeFiles', () => {
     const g = new Galbe({ routes: false })
     await defineRoutes({ routes: false }, g)
     expect(g.router.routes).toEqual({
-      routes: {}
+      routes: {},
     })
   })
 
@@ -100,7 +100,7 @@ describe('routeFiles', () => {
     const g = new Galbe()
     await defineRoutes({ routes: 'unexisting_route' }, g)
     expect(g.router.routes).toEqual({
-      routes: {}
+      routes: {},
     })
   })
 
@@ -113,33 +113,33 @@ describe('routeFiles', () => {
     expect(r?.children?.one?.routes.get).toMatchObject({
       method: 'get',
       path: '/one',
-      handler: () => {}
+      handler: () => {},
     })
     expect(r?.children?.two?.routes.post).toMatchObject({
       method: 'post',
       path: '/two',
-      handler: () => {}
+      handler: () => {},
     })
     expect(r?.children?.three?.routes.put).toMatchObject({
       method: 'put',
       path: '/three',
-      handler: () => {}
+      handler: () => {},
     })
     expect(g.meta).toMatchObject([
       {
         header: {},
         routes: {
           '/one': {
-            get: {}
+            get: {},
           },
           '/two': {
-            post: {}
+            post: {},
           },
           '/three': {
-            put: {}
-          }
-        }
-      }
+            put: {},
+          },
+        },
+      },
     ])
     expect(g.meta?.[0].file).toMatch(/test\.route\.empty\.ts$/)
   })
@@ -153,28 +153,28 @@ describe('routeFiles', () => {
     expect(r?.children?.one?.routes.get).toMatchObject({
       method: 'get',
       path: '/one',
-      handler: () => {}
+      handler: () => {},
     })
     expect(r?.children?.two?.routes.post).toMatchObject({
       method: 'post',
       path: '/two',
-      handler: () => {}
+      handler: () => {},
     })
     expect(r?.children?.three?.routes.put).toMatchObject({
       method: 'put',
       path: '/three',
-      handler: () => {}
+      handler: () => {},
     })
     expect(r?.children?.test?.param?.routes.get).toMatchObject({
       method: 'get',
       path: '/test/:param1',
-      handler: () => {}
+      handler: () => {},
     })
     for (const method of ['post', 'put', 'patch', 'options', 'delete', 'head'] as const) {
       expect(r?.children?.test?.routes[method]).toMatchObject({
         method,
         path: '/test',
-        handler: () => {}
+        handler: () => {},
       })
     }
     expect(g.meta?.sort((a, b) => (a.file < b.file ? 1 : -1))).toMatchObject([
@@ -182,20 +182,20 @@ describe('routeFiles', () => {
         header: {},
         routes: {
           '/one': {
-            get: {}
+            get: {},
           },
           '/two': {
-            post: {}
+            post: {},
           },
           '/three': {
-            put: {}
-          }
-        }
+            put: {},
+          },
+        },
       },
       {
         header: {
           head: 'description\nmultiline',
-          tag: 'test'
+          tag: 'test',
         },
         routes: {
           '/test/:param1': {
@@ -205,23 +205,23 @@ describe('routeFiles', () => {
               summary: 'short summary',
               description: 'longer description example',
               deprecated: true,
-              param: ['{path} param1 description', '{query} param2 description']
-            }
+              param: ['{path} param1 description', '{query} param2 description'],
+            },
           },
           '/test': {
             post: {
               tags: 'tag1, tag2, tag3',
               summary: 'short summary',
               description: 'longer description example',
-              body: 'body descripton'
+              body: 'body descripton',
             },
             put: {
               tags: 'tag1, tag2',
-              other: 'Hello Mom!'
-            }
-          }
-        }
-      }
+              other: 'Hello Mom!',
+            },
+          },
+        },
+      },
     ])
     expect(g.meta?.[0].file).toMatch(/test\.route\..*$/)
     expect(g.meta?.[1].file).toMatch(/test\.route\..*$/)
@@ -357,10 +357,22 @@ describe('routeFiles, dependency directories', () => {
     await mkdir(`${DEPS}/.git/hooks`, { recursive: true })
     await writeFile(`${DEPS}/app.route.ts`, `export default (g: any) => {\n  g.get('/app', () => 'app')\n}\n`)
     await writeFile(`${DEPS}/app.middleware.ts`, `export default (_ctx: any, next: any) => next()\n`)
-    await writeFile(`${DEPS}/node_modules/leaky/bad dir/x.route.ts`, `export default (g: any) => {\n  g.get('/x', () => 'x')\n}\n`)
-    await writeFile(`${DEPS}/node_modules/leaky/routes/leak.route.ts`, `export default (g: any) => {\n  g.get('/leak', () => 'leak')\n}\n`)
-    await writeFile(`${DEPS}/node_modules/leaky/leak.middleware.ts`, `export default (_ctx: any, next: any) => next()\n`)
-    await writeFile(`${DEPS}/.git/hooks/hook.route.ts`, `export default (g: any) => {\n  g.get('/hook', () => 'hook')\n}\n`)
+    await writeFile(
+      `${DEPS}/node_modules/leaky/bad dir/x.route.ts`,
+      `export default (g: any) => {\n  g.get('/x', () => 'x')\n}\n`
+    )
+    await writeFile(
+      `${DEPS}/node_modules/leaky/routes/leak.route.ts`,
+      `export default (g: any) => {\n  g.get('/leak', () => 'leak')\n}\n`
+    )
+    await writeFile(
+      `${DEPS}/node_modules/leaky/leak.middleware.ts`,
+      `export default (_ctx: any, next: any) => next()\n`
+    )
+    await writeFile(
+      `${DEPS}/.git/hooks/hook.route.ts`,
+      `export default (g: any) => {\n  g.get('/hook', () => 'hook')\n}\n`
+    )
   })
   afterAll(async () => {
     await rm(DEPS, { recursive: true, force: true })

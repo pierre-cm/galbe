@@ -482,8 +482,7 @@ export class Galbe {
         t = resolvePath(import.meta.dir, `static-${Bun.env.GALBE_BUILD}/${target}`)
       }
 
-      if (!existsSync(t))
-        throw new Error(`galbe.static('${rootPath}', '${rootTarget}'): target does not exist: ${t}`)
+      if (!existsSync(t)) throw new Error(`galbe.static('${rootPath}', '${rootTarget}'): target does not exist: ${t}`)
 
       if (!statSync(t).isDirectory()) {
         let ut: string | null | undefined | void = t

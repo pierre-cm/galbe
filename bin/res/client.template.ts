@@ -19,17 +19,17 @@ interface GR<S extends number | 'default' = 'default', B = any, OKS extends numb
     ? ST extends true
       ? Promise<AsyncGenerator<Uint8Array, void, unknown>>
       : B extends Json<infer T>
-      ? Promise<T>
-      : Promise<B>
+        ? Promise<T>
+        : Promise<B>
     : B extends string
-    ? ST extends true
-      ? Promise<AsyncGenerator<string, void, unknown>>
+      ? ST extends true
+        ? Promise<AsyncGenerator<string, void, unknown>>
+        : B extends Json<infer T>
+          ? Promise<T>
+          : Promise<B>
       : B extends Json<infer T>
-      ? Promise<T>
-      : Promise<B>
-    : B extends Json<infer T>
-    ? Promise<T>
-    : Promise<B>
+        ? Promise<T>
+        : Promise<B>
 }
 
 export type OKStatusCode = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207 | 208 | 226
@@ -38,7 +38,7 @@ export type HttpStatusCode = 100 | 101 | 102 | 103 | OKStatusCode | 300 | 301 | 
 type PGR<
   S extends number | 'default' = 'default',
   B = any,
-  O extends number = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207 | 208 | 226
+  O extends number = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207 | 208 | 226,
 > = Promise<GR<S, B, O>>
 
 type ContentType = 'byteArray' | 'text' | 'json' | 'urlForm' | 'multipart' | 'default'
@@ -46,7 +46,7 @@ type RequestOptions<
   H = any,
   Q = any,
   B extends Partial<Record<ContentType, any>> = Partial<Record<ContentType, any>>,
-  C extends keyof B = keyof B
+  C extends keyof B = keyof B,
 > = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD'
   headers?: H

@@ -176,7 +176,18 @@ export const requestBodyParser = async (
       } else if (parseMode === 'json') {
         if (
           !kind ||
-          !['object', 'json', 'boolean', 'number', 'integer', 'string', 'array', 'anyOf', 'oneOf', 'intersection'].includes(kind)
+          ![
+            'object',
+            'json',
+            'boolean',
+            'number',
+            'integer',
+            'string',
+            'array',
+            'anyOf',
+            'oneOf',
+            'intersection',
+          ].includes(kind)
         )
           throw new RequestError({ status: 400, payload: { body: `Not a valid body` } })
         // an absent body parses as `null`, matching JSON.parse('null')
@@ -207,7 +218,8 @@ export const requestBodyParser = async (
                 },
               })
             : parseUrlForm('', schema as STObject)
-        if (kind === 'anyOf' || kind === 'oneOf') return unionize(parseUrlForm(await reqText(req, limit)), schema as STUnion)
+        if (kind === 'anyOf' || kind === 'oneOf')
+          return unionize(parseUrlForm(await reqText(req, limit)), schema as STUnion)
         if (isStream) return $streamToUrlForm(body, schema as STStream<STObject>)
         else return parseUrlForm(await reqText(req, limit), schema as STObject)
       } else if (parseMode === 'multipart') {
@@ -228,7 +240,12 @@ export const requestBodyParser = async (
           return unionize(mp, schema as STUnion)
         }
         if (isStream) return $streamToMultipartForm(body, boundary, schema as STStream<STMultipartForm>, limit)
-        return streamToMultipartForm(oneChunkStream(await reqBytes(req, limit)), boundary, schema as STMultipartForm, limit)
+        return streamToMultipartForm(
+          oneChunkStream(await reqBytes(req, limit)),
+          boundary,
+          schema as STMultipartForm,
+          limit
+        )
       } else if (parseMode === 'default') {
         throw new RequestError({ status: 400, payload: { body: `Not a valid content-type` } })
       }
@@ -368,7 +385,12 @@ const parseUrlForm = (text: string, schema?: STObject) => {
     })
   return object
 }
-async function* $streamToMultipartForm(data: ReadableStream<Uint8Array>, boundary: string, schema?: STMultipartForm, limit?: number) {
+async function* $streamToMultipartForm(
+  data: ReadableStream<Uint8Array>,
+  boundary: string,
+  schema?: STMultipartForm,
+  limit?: number
+) {
   const bound = textEncoder.encode(boundary)
   const delimiter = textEncoder.encode('\r\n\r\n')
   // A match straddling two chunks is undetectable within a single chunk: carry
@@ -564,7 +586,12 @@ const oneChunkStream = (buf: Uint8Array) =>
       controller.close()
     },
   })
-const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary: string, schema?: STMultipartForm, limit?: number) => {
+const streamToMultipartForm = async (
+  data: ReadableStream<Uint8Array>,
+  boundary: string,
+  schema?: STMultipartForm,
+  limit?: number
+) => {
   const res: Record<string, MultipartFormData> = Object.create(null)
   const errors: Record<string, any> = Object.create(null)
   const required = Object.fromEntries(
@@ -577,8 +604,7 @@ const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary:
       if (!Array.isArray(existing.content)) existing.content = [existing.content]
       existing.content.push(chunk.content)
     } else {
-      if (getProp(schema?.props, name)?.[Kind] === 'array')
-        res[name] = { ...chunk, content: [chunk.content] }
+      if (getProp(schema?.props, name)?.[Kind] === 'array') res[name] = { ...chunk, content: [chunk.content] }
       else res[name] = chunk
     }
     delete required[name]
@@ -587,8 +613,7 @@ const streamToMultipartForm = async (data: ReadableStream<Uint8Array>, boundary:
       try {
         const prop = schema.props[name]!
         const entry = res[name]!
-        if (Array.isArray(entry.content) && prop[Kind] !== 'array')
-          throw `Multiple values found`
+        if (Array.isArray(entry.content) && prop[Kind] !== 'array') throw `Multiple values found`
         entry.content = runCompiled(entry.content, prop, {
           parse: true,
         })
@@ -784,10 +809,13 @@ export const parseEntry = <T extends STProps>(
   const errors: { [key: string]: string | string[] } = {}
 
   if (options?.i === true) {
-    params = Object.keys(params).reduce((acc, key) => {
-      acc[key.toLowerCase()] = params[key]
-      return acc
-    }, {} as { [key: string]: string | string[] })
+    params = Object.keys(params).reduce(
+      (acc, key) => {
+        acc[key.toLowerCase()] = params[key]
+        return acc
+      },
+      {} as { [key: string]: string | string[] }
+    )
   }
 
   Object.entries(schema).forEach(([key, s]) => {
@@ -852,8 +880,7 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
     }
     for (const cookie of cookies) existing.append('set-cookie', cookie)
     return response
-  }
-  else if (typeof response === 'string') {
+  } else if (typeof response === 'string') {
     if (!details?.headers?.has('content-type')) {
       const statusEntry: any = responseEntryFor(schema as Partial<Record<string | number, any>>, details.status)
       const isJson = statusEntry?.[Kind]
@@ -881,7 +908,13 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
         let id = ctx.request.headers.get('last-event-id') ?? crypto.randomUUID()
         for await (const r of response) {
           // multi-line values must be split into one data: field per line (SSE spec)
-          let data = `id:${id}\n` + String(r).split(/\r\n|\r|\n/).map(l => `data:${l}`).join('\n') + '\n\n'
+          let data =
+            `id:${id}\n` +
+            String(r)
+              .split(/\r\n|\r|\n/)
+              .map(l => `data:${l}`)
+              .join('\n') +
+            '\n\n'
           try {
             await controller.write(data)
             await controller.flush()
@@ -910,10 +943,13 @@ export const responseParser = (response: any, ctx: Context, cookies: string[], s
 const unionize = (b: any, schema: STUnion) => {
   let res
   let error
-  const discriminants = schema.members.reduce((acc, obj) => {
-    const props = (obj as STObject).props
-    return acc.filter(k => props && k in props && props[k]?.[Kind] === 'literal' && !props[k]?.[Optional])
-  }, Object.keys((schema.members[0] as STObject)?.props || {}))
+  const discriminants = schema.members.reduce(
+    (acc, obj) => {
+      const props = (obj as STObject).props
+      return acc.filter(k => props && k in props && props[k]?.[Kind] === 'literal' && !props[k]?.[Optional])
+    },
+    Object.keys((schema.members[0] as STObject)?.props || {})
+  )
   for (let s of schema.members) {
     try {
       res = runCompiled(b, s, { parse: true })

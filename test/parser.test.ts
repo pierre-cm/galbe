@@ -176,14 +176,20 @@ describe('parser', () => {
 
     galbe.post(
       '/mp/file',
-      { body: { 'multipart/form-data': $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }) } },
+      {
+        body: {
+          'multipart/form-data': $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) }),
+        },
+      },
       handleBody
     )
     galbe.post(
       '/mp/stream/file',
       {
         body: {
-          'multipart/form-data': $T.stream($T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })),
+          'multipart/form-data': $T.stream(
+            $T.multipartForm({ imgFile: $T.byteArray(), jsonFile: $T.object(schema_jsonFile) })
+          ),
         },
       },
       async ctx => {
@@ -1118,14 +1124,9 @@ describe('parser', () => {
 
   test('body, multipart boundary parsing', async () => {
     const boundary = 'X-BOUNDARY'
-    const mp = [
-      `--${boundary}`,
-      'Content-Disposition: form-data; name="a"',
-      '',
-      'hello',
-      `--${boundary}--`,
-      '',
-    ].join('\r\n')
+    const mp = [`--${boundary}`, 'Content-Disposition: form-data; name="a"', '', 'hello', `--${boundary}--`, ''].join(
+      '\r\n'
+    )
     // Extra parameters around the boundary are legal per RFC 2046 and must not
     // leak into the boundary value.
     const contentTypes = [
@@ -1563,7 +1564,11 @@ describe('parser unit', () => {
   test('requestBodyParser: multipart body parsed identically across chunkings', async () => {
     const { requestBodyParser } = await import('../src/parser')
     const parse = (body: ReadableStream<Uint8Array>) =>
-      requestBodyParser(reqWith(body, mpHeaders), { 'multipart/form-data': $T.multipartForm(mpProps) }, 'multipart/form-data')
+      requestBodyParser(
+        reqWith(body, mpHeaders),
+        { 'multipart/form-data': $T.multipartForm(mpProps) },
+        'multipart/form-data'
+      )
     const control: any = await parse(chunked(mpBody))
     expect(control.name.content).toBe('hello world')
     expect(control.n.content).toBe(42)
@@ -1574,7 +1579,11 @@ describe('parser unit', () => {
   test('requestBodyParser: multipart body split inside boundary token and header delimiter', async () => {
     const { requestBodyParser } = await import('../src/parser')
     const parse = (body: ReadableStream<Uint8Array>) =>
-      requestBodyParser(reqWith(body, mpHeaders), { 'multipart/form-data': $T.multipartForm(mpProps) }, 'multipart/form-data')
+      requestBodyParser(
+        reqWith(body, mpHeaders),
+        { 'multipart/form-data': $T.multipartForm(mpProps) },
+        'multipart/form-data'
+      )
     const control: any = await parse(chunked(mpBody))
     const str = new TextDecoder().decode(mpBody) // ASCII-only: string offsets are byte offsets
     const cuts = [
@@ -1699,7 +1708,9 @@ describe('parser unit', () => {
       const { requestBodyParser } = await import('../src/parser')
       const parse = (body: ReadableStream<Uint8Array>, schema: any) =>
         requestBodyParser(reqWith(body, mpHeaders), schema, 'multipart/form-data', 64).catch(e => e)
-      const buffered = await parse(chunkedEvery(bigMpBody(256), 7), { 'multipart/form-data': $T.multipartForm(mpProps) })
+      const buffered = await parse(chunkedEvery(bigMpBody(256), 7), {
+        'multipart/form-data': $T.multipartForm(mpProps),
+      })
       expect(buffered).toBeInstanceOf(PayloadTooLargeError)
       const streamed: any = await requestBodyParser(
         reqWith(chunkedEvery(bigMpBody(256), 7), mpHeaders),

@@ -25,7 +25,10 @@ const scope = (routes: RoutePlanEntry[], over: Partial<ScopePlan> = {}): ScopePl
   ...over,
 })
 
-const existingFile = (body: string, imports = `import { GetUsers } from './schemas/main.schema'`) => `import { NotImplementedError, type Galbe } from 'galbe'
+const existingFile = (
+  body: string,
+  imports = `import { GetUsers } from './schemas/main.schema'`
+) => `import { NotImplementedError, type Galbe } from 'galbe'
 ${imports}
 
 export default (g: Galbe) => {
@@ -91,7 +94,12 @@ describe('mergeRouteFile', () => {
     const userBody = `  g.get("/users", GetUsers, ctx => { return [] })`
     const existing = existingFile(userBody)
 
-    const newRoute = route({ method: 'post', path: '/users', schemaName: 'CreateUser', call: 'post("/users", CreateUser, ctx => {\n  throw new NotImplementedError()\n})' })
+    const newRoute = route({
+      method: 'post',
+      path: '/users',
+      schemaName: 'CreateUser',
+      call: 'post("/users", CreateUser, ctx => {\n  throw new NotImplementedError()\n})',
+    })
     const result = mergeRouteFile(existing, scope([route({}), newRoute]))
 
     expect(result.added).toEqual([routeId('post', '/users')])

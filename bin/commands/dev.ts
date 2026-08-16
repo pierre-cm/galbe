@@ -48,7 +48,7 @@ export default (cmd: Command) => {
         const spawnApp = () =>
           Bun.spawn([process.execPath, process.argv[1], 'dev', index, '-p', `${port || DEFAULT_PORT}`], {
             stdio: ['inherit', 'inherit', 'inherit'],
-            cwd: CWD
+            cwd: CWD,
           })
         const killChild = () => {
           try {

@@ -78,10 +78,10 @@ These scripts use the Galbe CLI to run and build the application. More details a
 Your `index.ts` file must export a default Galbe instance:
 
 ```ts
-import { Galbe } from "galbe"
+import { Galbe } from 'galbe'
 
 const galbe = new Galbe({ port: 3000 })
-galbe.get("/hello", () => "Hello Mom!")
+galbe.get('/hello', () => 'Hello Mom!')
 
 export default galbe
 ```

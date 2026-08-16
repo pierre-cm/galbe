@@ -52,9 +52,7 @@ const createBuildIndex = async (indexPath: string, g: Galbe, buildId: string, ou
     `import galbe from '${relative(buildPath, indexPath)}';\n` +
     (usesGroup ? `import {GalbeGroup} from '${relative(buildPath, galbeIndexPath)}';\n` : '') +
     (configPath ? `import config from '${relative(buildPath, configPath)}';\n` : '') +
-    (configPath
-      ? `import {softMerge} from '${relative(buildPath, galbeUtilPath)}';\n`
-      : '') +
+    (configPath ? `import {softMerge} from '${relative(buildPath, galbeUtilPath)}';\n` : '') +
     (configPath ? `let conf = galbe.config;\ngalbe.config = softMerge(config, conf)\n` : '') +
     `${middlewareFiles.map((m, idx) => `import mw_${idx} from '${relative(buildPath, m.file)}'`).join(';\n')}\n` +
     `${routeFiles.map((r, idx) => `import _${idx} from '${relative(buildPath, r.file)}'`).join(';\n')}\n` +

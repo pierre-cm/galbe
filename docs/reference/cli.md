@@ -22,8 +22,8 @@ Start a dev server running your Galbe application.
 
 #### Arguments
 
-| Name  | Description                                               |
-| ----- | --------------------------------------------------------- |
+| Name  | Description                                                |
+| ----- | ---------------------------------------------------------- |
 | index | The js or ts file that exports your Galbe server instance. |
 
 #### Options
@@ -68,8 +68,8 @@ Bundle your Galbe application.
 
 #### Arguments
 
-| Name  | Description                                               |
-| ----- | --------------------------------------------------------- |
+| Name  | Description                                                |
+| ----- | ---------------------------------------------------------- |
 | index | The js or ts file that exports your Galbe server instance. |
 
 #### Options
@@ -83,6 +83,7 @@ Bundle your Galbe application.
 #### Example
 
 index.js
+
 ```js
 import { Galbe } from 'galbe'
 
@@ -164,9 +165,9 @@ const users = await client.listUsers({ query: { page: 1 } })
 const result = await client.createUser({ name: 'Alice' }).safe()
 
 if (result.ok) {
-  console.log(result.data)         // typed as the 200 schema
+  console.log(result.data) // typed as the 200 schema
 } else if (result.error.status === 400) {
-  console.log(result.error.body)   // typed from the 400 schema
+  console.log(result.error.body) // typed from the 400 schema
 }
 ```
 
@@ -176,10 +177,10 @@ if (result.ok) {
 const resp = await client.$raw.getUser('abc')
 
 if (resp.status === 200) {
-  const user = await resp.body.json()   // typed from 200 schema
+  const user = await resp.body.json() // typed from 200 schema
   const reqId = resp.headers.get('x-request-id')
 } else {
-  const err = await resp.body.json()    // typed from error schema
+  const err = await resp.body.json() // typed from error schema
 }
 ```
 
@@ -201,9 +202,9 @@ client.createUserUrlForm({ name: 'Alice' })
 
 ```ts
 new Client({
-  server:  { url: 'http://localhost:3000' },
-  headers: { 'x-api-key': 'secret' },        // default headers on every request
-  fetch:   myCustomFetch,                     // override fetch (interceptors, mocking, retry)
+  server: { url: 'http://localhost:3000' },
+  headers: { 'x-api-key': 'secret' }, // default headers on every request
+  fetch: myCustomFetch, // override fetch (interceptors, mocking, retry)
 })
 ```
 
@@ -219,9 +220,7 @@ Pass `--config <file>` to customise what is generated. The file can export two n
 import type { GalbeClientRoute, GalbeClientOptions } from 'galbe/extras'
 
 export const transform = (routes: GalbeClientRoute[]): GalbeClientRoute[] =>
-  routes
-    .filter(r => !r.tags.includes('internal'))
-    .map(r => ({ ...r, operationId: r.operationId.replace(/^get-/, '') }))
+  routes.filter(r => !r.tags.includes('internal')).map(r => ({ ...r, operationId: r.operationId.replace(/^get-/, '') }))
 
 export const options: GalbeClientOptions = {
   className: 'MyAppClient',
@@ -238,18 +237,18 @@ Generate a CLI for your Galbe application. Commands are derived from your routes
 
 #### Arguments
 
-| Name  | Description                                               |
-| ----- | --------------------------------------------------------- |
+| Name  | Description                                                |
+| ----- | ---------------------------------------------------------- |
 | index | The js or ts file that exports your Galbe server instance. |
 
 #### Options
 
-| Short | Long     | Description                           | Default                              |
-| ----- | -------- | ------------------------------------- | ------------------------------------ |
-| -o    | --out    | output file                           | dist/cli (standalone) \| dist/cli.ts (module) |
-| -t    | --target | CLI target [cac]                      | cac                                  |
-| -m    | --mode   | output mode [standalone, module]      | standalone                           |
-| -c    | --config | config file (.ts or .js)              |                                      |
+| Short | Long     | Description                      | Default                                       |
+| ----- | -------- | -------------------------------- | --------------------------------------------- |
+| -o    | --out    | output file                      | dist/cli (standalone) \| dist/cli.ts (module) |
+| -t    | --target | CLI target [cac]                 | cac                                           |
+| -m    | --mode   | output mode [standalone, module] | standalone                                    |
+| -c    | --config | config file (.ts or .js)         |                                               |
 
 #### Standalone mode
 
@@ -353,9 +352,7 @@ Pass `--config <file>` to customise commands and set baked-in defaults. The file
 import type { GalbeCLICommand, GalbeCLIOptions } from 'galbe/extras'
 
 export const transform = (commands: GalbeCLICommand[]): GalbeCLICommand[] =>
-  commands
-    .filter(c => !c.tags.includes('internal'))
-    .map(c => ({ ...c, name: c.name.replace(/^get-/, '') }))
+  commands.filter(c => !c.tags.includes('internal')).map(c => ({ ...c, name: c.name.replace(/^get-/, '') }))
 
 export const options: GalbeCLIOptions = {
   baseUrl: () => process.env.API_URL ?? 'http://localhost:3000',
@@ -383,8 +380,8 @@ Generate the spec of your Galbe application.
 
 #### Arguments
 
-| Name  | Description                                               |
-| ----- | --------------------------------------------------------- |
+| Name  | Description                                                |
+| ----- | ---------------------------------------------------------- |
 | index | The js or ts file that exports your Galbe server instance. |
 
 #### Options
@@ -444,26 +441,26 @@ The command is **non-destructive**: re-running it on an existing project diffs t
 
 #### Options
 
-| Short | Long             | Description                                                                     | Default                    |
-| ----- | ---------------- | ------------------------------------------------------------------------------- | -------------------------- |
-| -f    | --format         | input format [openapi:3.0:yaml, openapi:3.0:json]                               | openapi:3.0:(yaml \| json) |
-| -t    | --target         | source target [ts, js]                                                          | ts                         |
-| -o    | --out            | output dir                                                                      | src                        |
-| -n    | --dry-run        | show planned changes without writing                                            | false                      |
-|       | --remove-stale   | delete routes present in code but absent from the spec                          | false                      |
-|       | --rename         | `"OLD=NEW"` — preserve handler when a route id changes (repeatable)             |                            |
-|       | --ignore-route   | `"METHOD /path"` — leave a stale route alone, treat as user-managed (repeatable) |                            |
+| Short | Long           | Description                                                                      | Default                    |
+| ----- | -------------- | -------------------------------------------------------------------------------- | -------------------------- |
+| -f    | --format       | input format [openapi:3.0:yaml, openapi:3.0:json]                                | openapi:3.0:(yaml \| json) |
+| -t    | --target       | source target [ts, js]                                                           | ts                         |
+| -o    | --out          | output dir                                                                       | src                        |
+| -n    | --dry-run      | show planned changes without writing                                             | false                      |
+|       | --remove-stale | delete routes present in code but absent from the spec                           | false                      |
+|       | --rename       | `"OLD=NEW"` — preserve handler when a route id changes (repeatable)              |                            |
+|       | --ignore-route | `"METHOD /path"` — leave a stale route alone, treat as user-managed (repeatable) |                            |
 
 #### How re-generation handles each route
 
-| Situation                                            | Action                                                                                          |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| In spec, not in code                                 | Added — fresh stub appended to the route file.                                                  |
-| In spec, in code (same `METHOD path`)                | Updated — JSDoc + schema argument refreshed; handler body and hook array left untouched.        |
-| In code, not in spec                                 | Stale — command exits with the list and prompts for `--rename`, `--ignore-route`, or `--remove-stale`. |
-| In code, with `--rename "OLD=NEW"`                   | Treated as an update of `NEW`. Handler preserved; path string and schema arg rewired.           |
-| In code, with `--ignore-route "METHOD /path"`        | Left alone, including its schema import.                                                        |
-| In code, with `--remove-stale`                       | Deleted; unused schema imports pruned.                                                          |
+| Situation                                     | Action                                                                                                 |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| In spec, not in code                          | Added — fresh stub appended to the route file.                                                         |
+| In spec, in code (same `METHOD path`)         | Updated — JSDoc + schema argument refreshed; handler body and hook array left untouched.               |
+| In code, not in spec                          | Stale — command exits with the list and prompts for `--rename`, `--ignore-route`, or `--remove-stale`. |
+| In code, with `--rename "OLD=NEW"`            | Treated as an update of `NEW`. Handler preserved; path string and schema arg rewired.                  |
+| In code, with `--ignore-route "METHOD /path"` | Left alone, including its schema import.                                                               |
+| In code, with `--remove-stale`                | Deleted; unused schema imports pruned.                                                                 |
 
 User-added imports, helpers, and other top-level statements in route files are preserved.
 
@@ -575,13 +572,13 @@ Generate TypeScript types from a database schema.
 
 #### Options
 
-| Short | Long     | Description                                                    | Default     |
-| ----- | -------- | -------------------------------------------------------------- | ----------- |
-| -u    | --url    | database connection url (e.g. `postgres://user:pwd@host:port`) | _required_  |
-| -t    | --table  | table name (e.g. `users` or `public.users`)                    | _all tables_|
-| -s    | --schema | schema name                                                    | `public`    |
-| -o    | --out    | output file (`.ts`) or directory                               | `.`         |
-| -F    | --force  | force overriding output                                        | false       |
+| Short | Long     | Description                                                    | Default      |
+| ----- | -------- | -------------------------------------------------------------- | ------------ |
+| -u    | --url    | database connection url (e.g. `postgres://user:pwd@host:port`) | _required_   |
+| -t    | --table  | table name (e.g. `users` or `public.users`)                    | _all tables_ |
+| -s    | --schema | schema name                                                    | `public`     |
+| -o    | --out    | output file (`.ts`) or directory                               | `.`          |
+| -F    | --force  | force overriding output                                        | false        |
 
 #### Example
 
