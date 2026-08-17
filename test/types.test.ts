@@ -1,4 +1,4 @@
-import { $T, Galbe } from '../src'
+import { $T, Galbe, middleware } from '../src'
 import type { Static } from '../src/schema'
 import type { ContextSet, Route } from '../src/types'
 import type { SocketAddress } from 'bun'
@@ -7,6 +7,8 @@ import { formdata } from './test.utils'
 
 // Test utils
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+// assignability, for context types that carry more keys than the ones asserted
+type Extends<A, B> = A extends B ? true : false
 type Expect<T extends true> = T
 
 // Basic Schema types
@@ -820,6 +822,48 @@ ctxG.post('/ctx/stream', { body: { 'application/octet-stream': $T.stream($T.byte
   >
 })
 
+// Middleware defs and group fragments
+
+const tenantMw = middleware({
+  schema: { headers: { 'x-tenant-id': $T.string() }, query: { page: $T.optional($T.integer()) } },
+  hooks: (ctx, next) => {
+    // a def's schema types the def's own hooks, with no annotation
+    type _mw_headers = Expect<Extends<typeof ctx.headers, { 'x-tenant-id': string }>>
+    type _mw_query = Expect<Extends<typeof ctx.query, { page?: number }>>
+    return next()
+  },
+})
+
+g.group('/mw', tenantMw, group => {
+  group.get('/frag', ctx => {
+    const { headers, query } = ctx
+    type _grp_headers = Expect<Extends<typeof headers, { 'x-tenant-id': string }>>
+    type _grp_query = Expect<Extends<typeof query, { page?: number }>>
+    ctx.set.status = typeof headers['x-tenant-id'] === 'string' ? 200 : 500
+  })
+
+  // route-declared keys win over the fragment, in the types as at runtime
+  group.get('/override', { headers: { 'x-tenant-id': $T.integer() } }, ctx => {
+    const { headers } = ctx
+    type _grp_override = Expect<Extends<typeof headers, { 'x-tenant-id': number }>>
+    ctx.set.status = typeof headers['x-tenant-id'] === 'number' ? 200 : 500
+  })
+
+  // nested groups stack fragments
+  group.group('/nested', middleware({ schema: { headers: { 'x-nested': $T.string() } } }), nested => {
+    nested.get('/leaf', ctx => {
+      const { headers } = ctx
+      type _grp_nested = Expect<Extends<typeof headers, { 'x-tenant-id': string; 'x-nested': string }>>
+      ctx.set.status = typeof headers['x-nested'] === 'string' ? 200 : 500
+    })
+  })
+})
+
+// no fragment in scope: header access stays permissive
+g.get('/nofrag', ctx => {
+  ctx.set.status = ctx.headers.anything === undefined ? 200 : 500
+})
+
 const port = 7362
 describe('types', () => {
   beforeAll(async () => {
@@ -833,6 +877,7 @@ describe('types', () => {
       type?: string
       path: string
       expected: number
+      headers?: Record<string, string>
     }
     const cases: Case[] = [
       { method: 'get', path: '/params/noschema/foo/and/42', expected: 200 },
@@ -841,6 +886,17 @@ describe('types', () => {
       { method: 'get', path: '/params/schema/true/x/1/foo/42', expected: 400 },
       { method: 'get', path: '/params/schema/true/0/y/foo/42', expected: 400 },
       { method: 'get', path: '/params/schema/true/0/y/foo/43', expected: 400 },
+
+      // middleware fragments: merged into matched routes, validated like route-declared keys
+      { method: 'get', path: 'mw/frag', expected: 400 },
+      { method: 'get', path: 'mw/frag', headers: { 'x-tenant-id': 'acme' }, expected: 200 },
+      { method: 'get', path: 'mw/frag?page=2', headers: { 'x-tenant-id': 'acme' }, expected: 200 },
+      { method: 'get', path: 'mw/frag?page=abc', headers: { 'x-tenant-id': 'acme' }, expected: 400 },
+      { method: 'get', path: 'mw/override', headers: { 'x-tenant-id': '42' }, expected: 200 },
+      { method: 'get', path: 'mw/override', headers: { 'x-tenant-id': 'abc' }, expected: 400 },
+      { method: 'get', path: 'mw/nested/leaf', headers: { 'x-tenant-id': 'acme', 'x-nested': 'y' }, expected: 200 },
+      { method: 'get', path: 'mw/nested/leaf', headers: { 'x-tenant-id': 'acme' }, expected: 400 },
+      { method: 'get', path: 'nofrag', expected: 200 },
 
       { method: 'get', path: '/query', expected: 200 },
       { method: 'get', path: '/query?anything=42', expected: 200 },
@@ -1087,11 +1143,11 @@ describe('types', () => {
         expected: 400,
       },
     ]
-    for (let { method, path, type, body, expected } of cases) {
+    for (let { method, path, type, body, expected, headers: reqHeaders } of cases) {
       let resp = await fetch(`http://localhost:${port}/${path}`, {
         method: method.toUpperCase(),
         body,
-        headers: { ...(type ? { 'content-type': type } : {}) },
+        headers: { ...(type ? { 'content-type': type } : {}), ...(reqHeaders ?? {}) },
       })
       if (resp.status !== expected) console.log(await resp.json())
       expect(resp.status).toBe(expected)

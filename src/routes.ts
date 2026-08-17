@@ -1,4 +1,4 @@
-import type { GalbeConfig, Hook, Method, Route } from './types'
+import type { GalbeConfig, Method, MiddlewareDef, Route } from './types'
 
 import { readdir, lstat } from 'fs/promises'
 import { extname, dirname, relative, resolve, sep } from 'path'
@@ -273,17 +273,31 @@ export const defineRoutes = async (
         const metadata = await metaAnalysis(file)
         if (metadata?.ignore) continue
         const imported = await import(file)
-        const def = imported?.default
-        const hooks: Hook[] = Array.isArray(def) ? def : def ? [def] : []
-        if (!hooks.length || hooks.some(h => typeof h !== 'function'))
-          throw new Error('Middleware file must default-export a hook function or an array of hooks')
+        const exported = imported?.default
         const scopeExport = imported.scope
         if (scopeExport !== undefined && typeof scopeExport !== 'string')
           throw new Error(`invalid scope export in ${file} — must be a middleware pattern string`)
-        const scope = scopeExport !== undefined ? joinPath(dirScope, scopeExport) : dirScope ? `${dirScope}/*` : '*'
-        galbe.middleware(scope, hooks)
-        galbe.metaMiddleware.push({ file, scope, header: metadata.header })
-        result.middlewareFiles.push({ file, scope })
+        const fileScope = (pattern?: string) =>
+          pattern !== undefined ? joinPath(dirScope, pattern) : dirScope ? `${dirScope}/*` : '*'
+        const before = galbe.middlewares.length
+        if (typeof exported === 'function') {
+          // registration function: a scoped registrar, like a route file gets
+          if (scopeExport !== undefined)
+            throw new Error(`unsupported scope export in ${file} — pass a pattern to g.middleware() instead`)
+          exported(new GalbeGroup(galbe, dirScope))
+        } else if (exported && !Array.isArray(exported) && typeof exported === 'object') {
+          galbe.middleware(fileScope(scopeExport), exported as MiddlewareDef)
+        } else {
+          throw new Error(
+            'Middleware file must default-export a middleware definition (see `middleware()`) or a registration function'
+          )
+        }
+        for (const entry of galbe.middlewares.slice(before)) {
+          // '/*' and '*' are the same pattern; record the canonical global form
+          const scope = entry.pattern === '/*' ? '*' : entry.pattern
+          galbe.metaMiddleware.push({ file, scope, header: metadata.header })
+          result.middlewareFiles.push({ file, scope })
+        }
       } catch (err: any) {
         if (cb) await cb({ type: 'error', error: err, filepath: file, route: undefined, meta: undefined })
       }

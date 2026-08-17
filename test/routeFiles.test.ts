@@ -356,7 +356,10 @@ describe('routeFiles, dependency directories', () => {
     await mkdir(`${DEPS}/node_modules/leaky/routes`, { recursive: true })
     await mkdir(`${DEPS}/.git/hooks`, { recursive: true })
     await writeFile(`${DEPS}/app.route.ts`, `export default (g: any) => {\n  g.get('/app', () => 'app')\n}\n`)
-    await writeFile(`${DEPS}/app.middleware.ts`, `export default (_ctx: any, next: any) => next()\n`)
+    await writeFile(
+      `${DEPS}/app.middleware.ts`,
+      `import { middleware } from '../../../src'\nexport default middleware({ hooks: (_ctx: any, next: any) => next() })\n`
+    )
     await writeFile(
       `${DEPS}/node_modules/leaky/bad dir/x.route.ts`,
       `export default (g: any) => {\n  g.get('/x', () => 'x')\n}\n`
@@ -367,7 +370,7 @@ describe('routeFiles, dependency directories', () => {
     )
     await writeFile(
       `${DEPS}/node_modules/leaky/leak.middleware.ts`,
-      `export default (_ctx: any, next: any) => next()\n`
+      `import { middleware } from '../../../../../src'\nexport default middleware({ hooks: (_ctx: any, next: any) => next() })\n`
     )
     await writeFile(
       `${DEPS}/.git/hooks/hook.route.ts`,

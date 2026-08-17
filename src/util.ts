@@ -1,4 +1,4 @@
-import type { Method, Route, RouteNode } from '.'
+import type { GalbeMiddleware, Method, Route, RouteNode } from '.'
 import type { RouteFileMeta, RouteMeta } from './routes'
 
 const METHOD_COLOR: Record<string, string> = {
@@ -175,6 +175,37 @@ export const matchMiddleware = (pattern: string[], path: string[]): boolean => {
     if (i >= path.length || (p !== '*' && p !== path[i])) return false
   }
   return pattern.length === path.length
+}
+
+/** The route's schema as declared, kept aside so recomposition re-merges from a clean base. */
+const Declared = Symbol.for('Galbe.Route.DeclaredSchema')
+
+/**
+ * Merges the matched middlewares' schema fragments into a route's request
+ * schema — fragments in registration order, route-declared keys last, so a
+ * route can always tighten or override. Returns false when there was nothing
+ * to merge.
+ *
+ * Merging is always redone from the declared schema, never from the result of
+ * a previous merge: a route recomposes whenever a later `middleware()` call
+ * matches it, and a fragment key already merged in would otherwise shadow the
+ * newcomer's, making the outcome depend on registration order.
+ *
+ * Copy-on-merge: a `RequestSchema` object may be shared by several routes, so
+ * the route gets its own copy instead of the user's being mutated.
+ */
+export const mergeMiddlewareSchema = (route: Route, middlewares: GalbeMiddleware[]): boolean => {
+  const fragments = middlewares.flatMap(m => (m.schema ? [m.schema] : []))
+  if (!fragments.length) return false
+  const declared: Record<string, any> = (route as any)[Declared] ?? route.schema ?? {}
+  ;(route as any)[Declared] = declared
+  const schema: Record<string, any> = { ...declared }
+  for (const key of ['headers', 'query', 'params'] as const) {
+    const parts = fragments.flatMap(f => (f[key] ? [f[key]] : []))
+    if (parts.length) schema[key] = Object.assign({}, ...parts, declared[key])
+  }
+  route.schema = schema
+  return true
 }
 
 export const HttpStatus = {

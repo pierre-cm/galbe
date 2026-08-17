@@ -373,6 +373,34 @@ describe('openapi serializer', () => {
     expect(op('/health').tags).toBeUndefined()
   })
 
+  test('a middleware schema fragment documents like a route-declared schema', async () => {
+    const auth = { headers: { authorization: $T.string({ pattern: /^Bearer / }) } }
+    const g = new Galbe()
+    g.middleware('/api/*', { schema: auth })
+    g.get('/api/items', () => [])
+    g.get('/declared', auth, () => [])
+    g.get('/plain', () => [])
+
+    const spec = await OpenAPISerializer(g)
+    const op = (p: string) => (spec.paths[p] as any).get
+    expect(op('/api/items')).toEqual(op('/declared'))
+    expect(op('/api/items').security).toEqual([{ bearerAuth: [] }])
+    expect(spec.components?.securitySchemes?.bearerAuth).toMatchObject({ type: 'http', scheme: 'bearer' })
+    expect(op('/plain').security).toBeUndefined()
+  })
+
+  test('a query fragment becomes a documented parameter', async () => {
+    const g = new Galbe()
+    g.middleware('/api/*', { schema: { query: { page: $T.optional($T.integer()) } } })
+    g.get('/api/items', { query: { size: $T.optional($T.integer()) } }, () => [])
+
+    const spec = await OpenAPISerializer(g)
+    expect((spec.paths['/api/items'] as any).get.parameters).toMatchObject([
+      { name: 'page', in: 'query', schema: { type: 'integer' } },
+      { name: 'size', in: 'query', schema: { type: 'integer' } },
+    ])
+  })
+
   test('Bearer-pattern auth header does not clobber other security schemes', async () => {
     // Two operations: one declares `bearerAuth` via meta-style (synthetic),
     // another declares it via the Authorization-pattern path. The serializer

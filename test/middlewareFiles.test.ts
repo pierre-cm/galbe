@@ -12,7 +12,7 @@ const runChain = async (g: Galbe, path: string): Promise<string[]> => {
   const order: string[] = []
   ;(globalThis as any).__mwOrder = order
   try {
-    await g.router.find('get', path).composed({ set: {}, state: {}, params: {} } as any)
+    await g.router.find('get', path).composed({ set: {}, state: {}, params: {}, headers: {}, query: {} } as any)
   } finally {
     delete (globalThis as any).__mwOrder
   }
@@ -27,19 +27,67 @@ describe('middleware files', () => {
     })
     const { middlewareFiles } = await defineRoutes({ routes: ROUTES, middleware: MW }, g)
 
-    expect(middlewareFiles.map(m => m.scope)).toEqual(['*', '/api/*', '/api/users/*', '/api/admin/*'])
+    // one entry per registration: multi.middleware.ts registers at two scopes
+    expect(middlewareFiles.map(m => m.scope)).toEqual([
+      '*',
+      '/api/*',
+      '/api/*',
+      '/api/users/*',
+      '/api/users/*',
+      '/api/users/*',
+      '/api/admin/*',
+    ])
 
     // entry-file registrations first, then files by depth/path, then in-file
     expect(await runChain(g, '/api/admin/stats')).toEqual(['entry', 'log', 'auth', 'audit1', 'audit2', 'infile'])
-    expect(await runChain(g, '/api/users')).toEqual(['entry', 'log', 'auth', 'scoped', 'infile'])
+    expect(await runChain(g, '/api/users')).toEqual(['entry', 'log', 'auth', 'scoped', 'tenant', 'infile'])
     expect(await runChain(g, '/health')).toEqual(['entry', 'log'])
   })
 
-  test('array export registers every hook, in order', async () => {
+  test('a def default export registers hooks, fragment and security', async () => {
+    const g = new Galbe()
+    await defineRoutes({ routes: ROUTES, middleware: `${TREE}/**/tenant.middleware.ts` }, g)
+
+    expect(await runChain(g, '/api/users')).toEqual(['tenant', 'infile'])
+    // the fragment lands on the scoped routes' schemas, nowhere else
+    expect(Object.keys(g.router.find('get', '/api/users').schema.headers ?? {})).toEqual(['x-tenant-id'])
+    expect(g.router.find('get', '/health').schema.headers).toBeUndefined()
+    expect(g.middlewares[0]).toMatchObject({ pattern: '/api/users/*', security: 'apiKey' })
+  })
+
+  test('a file exporting neither a def nor a registration function errors', async () => {
+    const g = new Galbe()
+    const errors: any[] = []
+    const { middlewareFiles } = await defineRoutes(
+      { routes: ROUTES, middleware: `${TREE}/invalid.middleware.ts` },
+      g,
+      ({ type, error }) => {
+        if (type === 'error') errors.push(error)
+      }
+    )
+
+    expect(middlewareFiles).toEqual([])
+    expect(errors[0]?.message).toContain('must default-export')
+  })
+
+  test('a registration function registers every hook, in order', async () => {
     const g = new Galbe()
     await defineRoutes({ routes: ROUTES, middleware: `${TREE}/api/admin/*.middleware.ts` }, g)
 
     expect(await runChain(g, '/api/admin/stats')).toEqual(['audit1', 'audit2', 'infile'])
+  })
+
+  test('a registration function may register several scopes, each recorded on its own', async () => {
+    const g = new Galbe()
+    const { middlewareFiles } = await defineRoutes({ routes: ROUTES, middleware: `${TREE}/**/multi.middleware.ts` }, g)
+
+    expect(middlewareFiles.map(m => m.scope)).toEqual(['/api/*', '/api/users/*'])
+    expect(g.metaMiddleware.map(m => m.scope)).toEqual(['/api/*', '/api/users/*'])
+    // and each fragment merges into the routes its own scope matches
+    expect(Object.keys(g.router.find('get', '/api/users').schema.headers ?? {})).toEqual(['x-api'])
+    expect(Object.keys(g.router.find('get', '/api/users').schema.query ?? {})).toEqual(['page'])
+    expect(g.router.find('get', '/api/admin/stats').schema.query).toBeUndefined()
+    expect(g.router.find('get', '/health').schema.headers).toBeUndefined()
   })
 
   test('scope export narrows relative to the file directory scope', async () => {

@@ -1,5 +1,9 @@
+import { middleware } from '../../../../src'
+
 export const scope = '/users/*'
 
-export default () => {
-  ;(globalThis as any).__mwOrder?.push('scoped')
-}
+export default middleware({
+  hooks: () => {
+    ;(globalThis as any).__mwOrder?.push('scoped')
+  },
+})

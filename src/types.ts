@@ -232,8 +232,8 @@ export type GalbeConfig = {
   routes?: boolean | string | string[] | { pattern?: string | string[]; dirPrefix?: boolean }
   /**
    * Middleware files discovered by the Automatic Route Analyzer (default `src/**­/*.middleware.{js,ts}`).
-   * Files default-export `Hook | Hook[]`, scoped to their directory subtree. `false` disables
-   * middleware discovery only; `routes: false` disables the whole analyzer.
+   * Files default-export `Hook | Hook[] | MiddlewareDef`, scoped to their directory subtree. `false`
+   * disables middleware discovery only; `routes: false` disables the whole analyzer.
    */
   middleware?: boolean | string | string[]
   router?: { cacheEnabled: boolean; cacheLimit?: number; warn?: (message: string) => void }
@@ -386,10 +386,71 @@ export type Handler<
   Path extends string = string,
   S extends RequestSchema = RequestSchema,
 > = (ctx: Context<M, Path, S>) => any
+/** Request contract a middleware imposes, merged into the schema of every route it matches. */
+export type MiddlewareSchema = Pick<RequestSchema, 'headers' | 'query' | 'params'>
+type IsAny<T> = 0 extends 1 & T ? true : false
+type FragHeaders<F extends MiddlewareSchema> = F['headers'] extends STHeaders ? F['headers'] : {}
+type FragQuery<F extends MiddlewareSchema> = F['query'] extends STQuery ? F['query'] : {}
+/**
+ * Fragment keys merged under route-declared ones — route wins, as at runtime.
+ * A route that declares no schema of its own keeps today's permissive `any`
+ * when there is no fragment, and gets exactly the fragment's keys when there is.
+ */
+type MergeFragment<Frag, Declared> = [keyof Frag] extends [never]
+  ? Declared
+  : IsAny<Declared> extends true
+    ? Frag
+    : Omit<Frag, keyof Declared> & Declared
+/** The request schema a fragment implies for the middleware's own hooks. */
+type FragmentRequest<F extends MiddlewareSchema> = RequestSchema<Method, string, FragHeaders<F>, {}, FragQuery<F>>
+/** Reserved for the `beforeParse` slot: at that point the body, params and query are not parsed yet. */
+export type PreParseHook = (
+  ctx: Pick<Context, 'request' | 'set' | 'state' | 'route' | 'cookies' | 'remoteAddress'>
+) => MaybePromise<Response | void>
+/** Reserved for the `afterHandle` slot: a transform over the parsed response, not an onion. */
+export type ResponseHook = (response: Response, ctx: Context) => MaybePromise<Response | void>
+/**
+ * #### MiddlewareDef
+ * Middleware as a value: the hooks to run, plus the request contract they
+ * impose. Accepted everywhere a hook is — `galbe.middleware`, `group.middleware`
+ * and middleware files — so a packaged middleware is one exportable thing.
+ *
+ * The `schema` fragment types the def's own `hooks`: declaring a header means
+ * reading it back typed, with no annotation. Wrap the def in `middleware()` to
+ * get that inference — a bare object literal has nothing to contextually type
+ * its handlers against.
+ *
+ * ---
+ * @example
+ * ```typescript
+ * galbe.middleware('/api/*', middleware({
+ *   schema: { headers: { authorization: $T.string() } },
+ *   hooks: ctx => { ctx.headers.authorization }, // string
+ *   security: 'bearerAuth'
+ * }))
+ * ```
+ */
+export type MiddlewareDef<F extends MiddlewareSchema = any> = {
+  /** Reserved slot, declared for forward compatibility — not run yet. */
+  beforeParse?: MaybeArray<PreParseHook>
+  /** Hooks composed into the chain of every matched route, ahead of the route's own hooks. */
+  hooks?: MaybeArray<Hook<Method, string, FragmentRequest<F>>>
+  /** Reserved slot, declared for forward compatibility — not run yet. */
+  afterHandle?: MaybeArray<ResponseHook>
+  /**
+   * Headers, query and params the hooks require, merged into matched routes.
+   * Route-declared keys win. `params` is merged and validated at runtime but
+   * cannot type the hooks: a middleware pattern is not a typed route path.
+   */
+  schema?: F
+  /** OpenAPI security scheme name(s) enforced by the hooks. Carried for the spec serializer. */
+  security?: string | string[]
+}
 /**
  * Prefix middleware entry registered via `galbe.middleware`. Patterns match
  * registered route paths (not request URLs) and are resolved at registration:
- * matched hooks are composed into the route's hook chain.
+ * matched hooks are composed into the route's hook chain and the schema
+ * fragment is merged into the route's schema.
  */
 export type GalbeMiddleware = {
   /** the pattern as registered, e.g. `/api/*` */
@@ -397,10 +458,14 @@ export type GalbeMiddleware = {
   /** pattern split into segments, precomputed at registration */
   segments: string[]
   hooks: Hook[]
+  schema?: MiddlewareSchema
+  security?: string | string[]
 }
 // Prefix is prepended to Path at the type level (route groups): context params,
-// schemas and the returned Route are typed against the full, joined path.
-export type Endpoint<M extends Method, Prefix extends string = ''> = {
+// schemas and the returned Route are typed against the full, joined path. F is
+// the schema fragment of the group's middleware def, merged under the route's
+// own declarations so handlers read fragment-declared entries typed.
+export type Endpoint<M extends Method, Prefix extends string = '', F extends MiddlewareSchema = {}> = {
   <
     Path extends string,
     P extends Partial<STParams<`${Prefix}${Path}`>>,
@@ -409,12 +474,14 @@ export type Endpoint<M extends Method, Prefix extends string = ''> = {
     B extends STBody = any,
     R extends STResponse = STResponse,
     C extends STCookies = any,
+    MH extends STHeaders = MergeFragment<FragHeaders<F>, H>,
+    MQ extends STQuery = MergeFragment<FragQuery<F>, Q>,
   >(
     path: Path,
     schema: RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R, C>,
-    hooks: Hook<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R, C>>[],
-    handler: Handler<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R, C>>
-  ): Route<M, `${Prefix}${Path}`, P, H, Q, B, R, C>
+    hooks: Hook<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, MH, P, MQ, B, R, C>>[],
+    handler: Handler<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, MH, P, MQ, B, R, C>>
+  ): Route<M, `${Prefix}${Path}`, P, MH, MQ, B, R, C>
   <
     Path extends string,
     P extends Partial<STParams<`${Prefix}${Path}`>>,
@@ -423,11 +490,13 @@ export type Endpoint<M extends Method, Prefix extends string = ''> = {
     B extends STBody = any,
     R extends STResponse = STResponse,
     C extends STCookies = any,
+    MH extends STHeaders = MergeFragment<FragHeaders<F>, H>,
+    MQ extends STQuery = MergeFragment<FragQuery<F>, Q>,
   >(
     path: Path,
     schema: RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R, C>,
-    handler: Handler<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R, C>>
-  ): Route<M, `${Prefix}${Path}`, P, H, Q, B, R, C>
+    handler: Handler<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, MH, P, MQ, B, R, C>>
+  ): Route<M, `${Prefix}${Path}`, P, MH, MQ, B, R, C>
   <
     Path extends string,
     P extends Partial<STParams<`${Prefix}${Path}`>>,
@@ -436,11 +505,13 @@ export type Endpoint<M extends Method, Prefix extends string = ''> = {
     B extends STBody = any,
     R extends STResponse = STResponse,
     C extends STCookies = any,
+    MH extends STHeaders = MergeFragment<FragHeaders<F>, H>,
+    MQ extends STQuery = MergeFragment<FragQuery<F>, Q>,
   >(
     path: Path,
-    hooks: Hook<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R, C>>[],
-    handler: Handler<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R, C>>
-  ): Route<M, `${Prefix}${Path}`, P, H, Q, B, R, C>
+    hooks: Hook<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, MH, P, MQ, B, R, C>>[],
+    handler: Handler<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, MH, P, MQ, B, R, C>>
+  ): Route<M, `${Prefix}${Path}`, P, MH, MQ, B, R, C>
   <
     Path extends string,
     P extends Partial<STParams<`${Prefix}${Path}`>>,
@@ -449,10 +520,12 @@ export type Endpoint<M extends Method, Prefix extends string = ''> = {
     B extends STBody = any,
     R extends STResponse = STResponse,
     C extends STCookies = any,
+    MH extends STHeaders = MergeFragment<FragHeaders<F>, H>,
+    MQ extends STQuery = MergeFragment<FragQuery<F>, Q>,
   >(
     path: Path,
-    handler: Handler<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, H, P, Q, B, R, C>>
-  ): Route<M, `${Prefix}${Path}`, P, H, Q, B, R, C>
+    handler: Handler<M, `${Prefix}${Path}`, RequestSchema<M, `${Prefix}${Path}`, MH, P, MQ, B, R, C>>
+  ): Route<M, `${Prefix}${Path}`, P, MH, MQ, B, R, C>
 }
 
 export type StaticEndpointOptions = {

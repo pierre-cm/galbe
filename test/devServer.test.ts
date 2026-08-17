@@ -108,7 +108,7 @@ export default (g: Galbe) => {
       'hello.route.ts': HELLO_ROUTE,
       'node_modules/leaky/bad dir/x.route.ts': `export default (g: any) => {\n  g.get('/x', () => 'x')\n}\n`,
       'node_modules/leaky/routes/leak.route.ts': `export default (g: any) => {\n  g.get('/leak', () => 'leak')\n}\n`,
-      'node_modules/leaky/leak.middleware.ts': `export default (ctx: any, next: any) => {\n  ctx.state.who = 'leak'\n  return next()\n}\n`,
+      'node_modules/leaky/leak.middleware.ts': `import { middleware } from 'galbe'\nexport default middleware({\n  hooks: (ctx: any, next: any) => {\n    ctx.state.who = 'leak'\n    return next()\n  },\n})\n`,
     })
 
     expect(await waitForBody(server, '/hello')).toBe('hello world')
@@ -121,7 +121,7 @@ export default (g: Galbe) => {
       'index.ts': INDEX,
       'galbe.config.ts': config({ routes: 'src/**/*.route.ts', middleware: 'src/**/*.middleware.ts' }),
       'src/hello.route.ts': HELLO_ROUTE,
-      'src/who.middleware.ts': `export default (ctx: any, next: any) => {\n  ctx.state.who = 'mw'\n  return next()\n}\n`,
+      'src/who.middleware.ts': `import { middleware } from 'galbe'\nexport default middleware({\n  hooks: (ctx: any, next: any) => {\n    ctx.state.who = 'mw'\n    return next()\n  },\n})\n`,
     })
 
     expect(await waitForBody(server, '/hello')).toBe('hello mw')

@@ -65,7 +65,7 @@ export default {
 
 ### middleware
 
-A glob pattern (or array of glob patterns) defining the [middleware files](../concepts/middleware.md#middleware-files) discovered by the Automatic Route Analyzer. Each file default-exports a hook (or array of hooks) scoped to its directory subtree. Set to `false` to disable middleware discovery only; `routes: false` disables the whole analyzer, middleware files included. Default: `src/**/*.middleware.{js,ts}`.
+A glob pattern (or array of glob patterns) defining the [middleware files](../concepts/middleware.md#middleware-files) discovered by the Automatic Route Analyzer. Each file default-exports a [middleware definition](../concepts/middleware.md#middleware-files) — or a registration function receiving a registrar — scoped to its directory subtree. Set to `false` to disable middleware discovery only; `routes: false` disables the whole analyzer, middleware files included. Default: `src/**/*.middleware.{js,ts}`.
 
 ### plugin
 

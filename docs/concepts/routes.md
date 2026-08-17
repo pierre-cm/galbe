@@ -76,14 +76,14 @@ galbe.get(
 Route groups register a set of routes under a shared path prefix:
 
 ```ts
-galbe.group(prefix: string, hooks?: Hook[], cb: (group) => void)
+galbe.group(prefix: string, def?: Hook[] | MiddlewareDef, cb: (group) => void)
 ```
 
 - **prefix** (string)
   - Prepended to every path registered on the group. Follows the same rules as route paths and may contain `:param` segments.
 
-- **hooks** (Hook[]) _(Optional)_
-  - [Middleware](middleware.md) covering the whole `<prefix>/*` subtree — including matching routes registered outside the group.
+- **def** (Hook[] | MiddlewareDef) _(Optional)_
+  - [Middleware](middleware.md) covering the whole `<prefix>/*` subtree — including matching routes registered outside the group. Passing a [middleware definition](middleware.md#request-contract) also merges its schema fragment into those routes, and **types** the routes registered through the group registrar with it.
 
 - **cb** (`(group) => void`)
   - Receives a group registrar exposing the route methods (`get`, `post`, ..., `static`), plus `middleware` (patterns relative to the group prefix) and `group` for nesting.
@@ -96,6 +96,12 @@ galbe.group('/v1', [authHook], g => {
   g.get('/users', ctx => listUsers())        // GET /v1/users, runs authHook first
   g.group('/admin', a => {
     a.get('/stats', ctx => stats())          // GET /v1/admin/stats
+  })
+})
+
+galbe.group('/v2', tenantMiddleware, g => {
+  g.get('/users', ctx => {
+    ctx.headers['x-tenant-id']               // typed by the definition's schema fragment
   })
 })
 ```

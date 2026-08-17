@@ -5,15 +5,39 @@ Middleware lets you run [Hooks](hooks.md) across many routes at once, instead of
 ## Declaring Middleware
 
 ```ts
-galbe.middleware(hooks: Hook | Hook[])                   // every route
-galbe.middleware(pattern: string, hooks: Hook | Hook[])  // routes matching the pattern
+galbe.middleware(def: Hook | Hook[] | MiddlewareDef)                   // every route
+galbe.middleware(pattern: string, def: Hook | Hook[] | MiddlewareDef)  // routes matching the pattern
 ```
 
 - **pattern** (string) _(Optional)_
-  - A path pattern selecting the routes the hooks apply to. See [Patterns](#patterns) below. When omitted, the hooks apply to every route.
+  - A path pattern selecting the routes the middleware applies to. See [Patterns](#patterns) below. When omitted, it applies to every route.
 
-- **hooks** (Hook | Hook[])
+- **def** (Hook | Hook[] | MiddlewareDef)
   - One or more regular [Hooks](hooks.md): they receive the same `context` and `next` arguments, run in the same chain as route hooks, and short-circuit the same way by returning a response.
+  - Or a **middleware definition**, which bundles the hooks with the request contract they impose — see [Request Contract](#request-contract):
+
+    ```ts
+    type MiddlewareDef = {
+      hooks?: Hook | Hook[]
+      schema?: { headers?: ...; query?: ...; params?: ... }
+      security?: string | string[]
+    }
+    ```
+
+    A bare hook (or hook array) is sugar for `{ hooks }`.
+
+Wrap a definition in `middleware()` to have its `schema` type its own hooks. The helper is the identity at runtime — it exists so the object literal has something to be contextually typed against, exactly like [`config()`](../reference/configuration.md):
+
+```ts
+import { $T, middleware } from 'galbe'
+
+const tenant = middleware({
+  schema: { headers: { 'x-tenant-id': $T.string() } },
+  hooks: ctx => {
+    ctx.state.tenant = ctx.headers['x-tenant-id'] // string — inferred, no annotation
+  },
+})
+```
 
 ### Examples
 
@@ -37,6 +61,60 @@ galbe.middleware(async (ctx, next) => {
   console.log(`${ctx.route?.path} took ${(performance.now() - start).toFixed(1)}ms`)
 })
 ```
+
+## Request Contract
+
+Hooks usually expect something from the request: an `Authorization` header, an API key, a tenant id. A middleware definition declares that contract once, as a `schema` fragment, and Galbe merges it into the [Schema](schemas.md) of every route it matches:
+
+```ts
+galbe.middleware(
+  '/api/*',
+  middleware({
+    schema: { headers: { authorization: $T.string({ pattern: /^Bearer / }) } },
+    security: 'bearerAuth',
+    hooks: authHook,
+  })
+)
+
+galbe.get('/api/users', ctx => listUsers()) // requires the authorization header
+```
+
+The fragment covers `headers`, `query` and `params` — the parts of a request a route-scoped middleware can reasonably constrain. Merged keys behave exactly as if the route had declared them: they are validated on every request, and they appear in the generated OpenAPI spec, client and CLI.
+
+`security` names the OpenAPI security scheme(s) the hooks enforce. It is metadata: it never affects runtime behavior.
+
+> [!NOTE]
+> `security` is recorded on the middleware but not read by the OpenAPI serializer yet — it currently derives security from the middleware-file `@security` annotation and from an `authorization` header matching the `/^Bearer /` pattern, which the fragment above satisfies.
+
+- **Merging is per key, and the route wins.** A route that declares the same key keeps its own definition, so it can always tighten or override a fragment.
+- **Fragments are merged at registration**, whether the middleware is declared before or after the routes it matches, and re-merging is idempotent.
+
+### Fragments and Types
+
+A fragment types the code that can be linked to it statically:
+
+| Where                                                    | Typed by the fragment               |
+| -------------------------------------------------------- | ----------------------------------- |
+| The definition's own `hooks`                             | ✅ — wrap the def in `middleware()` |
+| Routes registered through `galbe.group(prefix, def, cb)` | ✅                                  |
+| Routes matched by `galbe.middleware(pattern, def)`       | ❌                                  |
+| Routes in other files matched by a middleware file       | ❌                                  |
+
+```ts
+galbe.group('/v1', tenant, g => {
+  g.get('/users', ctx => {
+    ctx.headers['x-tenant-id'] // string — from the group's fragment
+  })
+
+  g.get('/orders', { headers: { 'x-tenant-id': $T.integer() } }, ctx => {
+    ctx.headers['x-tenant-id'] // number — the route's own declaration wins
+  })
+})
+```
+
+Nested groups stack: an inner def's fragment merges over the outer one, in types as at runtime.
+
+The pattern form cannot be typed, and that is deliberate as much as it is technical. `'/api/*'` is a runtime string matched against route paths at registration — including routes registered later, in other files, discovered by a glob — so there is no static link from the pattern to any particular `galbe.get(...)` call. A fragment still merges into those routes and is validated on every request; it just does not reach `ctx`'s type. When a handler needs the value typed, declare the key on the route as well (the route wins, so nothing changes at runtime), read it from `ctx.state` if a hook puts it there, or scope the middleware with a group instead of a pattern.
 
 ## Patterns
 
@@ -100,21 +178,49 @@ Middleware can be declared at any time, including after the routes it targets: m
 > [!NOTE]
 > Like [Route Files](routes.md#route-files), this feature requires running or building the app with the [Galbe CLI](../reference/cli.md).
 
-The [Automatic Route Analyzer](routes.md#automatic-route-analyzer) also discovers middleware files, matching the [`middleware`](../reference/configuration.md#middleware) configuration glob (default: `src/**/*.middleware.{js,ts}`). A middleware file default-exports a hook or an array of hooks — not a registration function:
+The [Automatic Route Analyzer](routes.md#automatic-route-analyzer) also discovers middleware files, matching the [`middleware`](../reference/configuration.md#middleware) configuration glob (default: `src/**/*.middleware.{js,ts}`). A middleware file default-exports a **middleware definition**:
+
+```ts
+// src/api/tenant.middleware.ts
+import { $T, middleware } from 'galbe'
+
+export default middleware({
+  schema: { headers: { 'x-tenant-id': $T.string() } },
+  hooks: ctx => {
+    ctx.state.tenant = ctx.headers['x-tenant-id'] // string
+  },
+})
+```
+
+A packaged middleware is a definition, so installing one is the export itself — no wrapper:
 
 ```ts
 // src/api/auth.middleware.ts
-export default ctx => {
-  if (!isAuthenticated(ctx.headers.authorization)) throw new UnauthorizedError()
+export default jwt({ publicKey })
+```
+
+Alternatively, a file may default-export a **registration function**, which receives a registrar scoped to the file's directory. Use it when one file registers several middlewares, or registers conditionally:
+
+```ts
+// src/api/admin.middleware.ts
+import { type Galbe } from 'galbe'
+
+export default (g: Galbe) => {
+  g.middleware(auditDef) // /api/admin/*
+  g.middleware('/billing/*', billingDef) // /api/admin/billing/*
+  if (Bun.env.BUN_ENV === 'development') g.middleware(debugDef)
 }
 ```
 
-**Placement decides scope**: the file's directory, relative to the glob's static base, becomes the pattern — `src/api/auth.middleware.ts` registers as `galbe.middleware('/api/*', ...)`; a file at the base applies globally. An optional named export narrows the pattern, relative to the file's directory scope:
+> [!NOTE]
+> A bare hook or array of hooks is **not** a valid default export — a function is read as a registration function. Wrap hooks in a definition (`middleware({ hooks })`); you get the fragment typing with it.
+
+**Placement decides scope**: the file's directory, relative to the glob's static base, becomes the pattern — `src/api/auth.middleware.ts` registers as `galbe.middleware('/api/*', ...)`; a file at the base applies globally. For a definition export, an optional named export narrows the pattern, relative to the file's directory scope (a registration function narrows with its pattern argument instead):
 
 ```ts
 // src/api/admin.middleware.ts — applies to /api/admin/*
 export const scope = '/admin/*'
-export default auditHook
+export default middleware({ hooks: auditHook })
 ```
 
 **Ordering** is deterministic; since the chain runs in registration order, this is user-visible:
@@ -129,24 +235,27 @@ A `@galbe-ignore` comment above the default export skips the file. Header annota
 
 Code-level API:
 
-| Definition              | Example                                         | Scope                                                                |
-| ----------------------- | ----------------------------------------------- | -------------------------------------------------------------------- |
-| Global middleware       | `galbe.middleware(log)`                         | every route                                                          |
-| Prefix middleware       | `galbe.middleware('/api/*', auth)`              | routes matching the pattern, wherever registered                     |
-| Route hooks             | `galbe.get('/x', [h], handler)`                 | that route only                                                      |
-| Group                   | `galbe.group('/v1', g => ...)`                  | prefixes the routes registered through `g`                           |
-| Group hooks             | `galbe.group('/v1', [auth], g => ...)`          | the whole `/v1/*` subtree, incl. routes registered outside the group |
-| Group-scoped middleware | `g.middleware(h)` / `g.middleware('/sub/*', h)` | group subtree / pattern relative to the group prefix                 |
+| Definition              | Example                                                     | Scope                                                                  |
+| ----------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Global middleware       | `galbe.middleware(log)`                                     | every route                                                            |
+| Prefix middleware       | `galbe.middleware('/api/*', auth)`                          | routes matching the pattern, wherever registered                       |
+| Middleware definition   | `galbe.middleware('/api/*', middleware({ hooks, schema }))` | as above, and the schema fragment is merged into every matched route   |
+| Route hooks             | `galbe.get('/x', [h], handler)`                             | that route only                                                        |
+| Group                   | `galbe.group('/v1', g => ...)`                              | prefixes the routes registered through `g`                             |
+| Group hooks             | `galbe.group('/v1', [auth], g => ...)`                      | the whole `/v1/*` subtree, incl. routes registered outside the group   |
+| Group definition        | `galbe.group('/v1', def, g => ...)`                         | as above, and the fragment **types** the routes registered through `g` |
+| Group-scoped middleware | `g.middleware(h)` / `g.middleware('/sub/*', h)`             | group subtree / pattern relative to the group prefix                   |
 
 Analyzer level:
 
-| Definition                     | Example                                                  | Scope                                             |
-| ------------------------------ | -------------------------------------------------------- | ------------------------------------------------- |
-| Directory group _(default on)_ | `src/api/users.route.ts`                                 | the file's routes get `/api`; nested dirs compose |
-| `@prefix` annotation           | `/** @prefix /v2 */` atop a route file                   | replaces the dir-derived prefix for that file     |
-| Middleware file                | `src/api/auth.middleware.ts` exporting `Hook \| Hook[]`  | `/api/*` — the file's directory subtree           |
-| Scope override export          | `export const scope = '/admin/*'` in a middleware file   | narrows within the directory scope                |
-| In-file registration           | `g.middleware(...)` / `g.group(...)` inside a route file | relative to the file's prefix                     |
+| Definition                     | Example                                                       | Scope                                                          |
+| ------------------------------ | ------------------------------------------------------------- | -------------------------------------------------------------- |
+| Directory group _(default on)_ | `src/api/users.route.ts`                                      | the file's routes get `/api`; nested dirs compose              |
+| `@prefix` annotation           | `/** @prefix /v2 */` atop a route file                        | replaces the dir-derived prefix for that file                  |
+| Middleware file                | `src/api/auth.middleware.ts` exporting a `MiddlewareDef`      | `/api/*` — the file's directory subtree                        |
+| Middleware file (registrar)    | `src/api/auth.middleware.ts` exporting `(g: Galbe) => void`   | each `g.middleware(...)` call, relative to the directory scope |
+| Scope override export          | `export const scope = '/admin/*'` next to a definition export | narrows within the directory scope                             |
+| In-file registration           | `g.middleware(...)` / `g.group(...)` inside a route file      | relative to the file's prefix                                  |
 
 ## Route Groups
 

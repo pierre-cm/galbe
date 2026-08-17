@@ -55,6 +55,11 @@ const buildRoutes = (g: Galbe, metaRoutes?: Record<string, any>): GalbeClientRou
       query[k] = { type: schemaToTypeStr({ ...s, [Optional]: false }), optional: !!(s as any)[Optional] }
     }
 
+    const headers: GalbeClientRoute['headers'] = {}
+    for (const [k, s] of Object.entries((r.schema.headers ?? {}) as Record<string, STSchema>)) {
+      headers[k] = { type: schemaToTypeStr({ ...s, [Optional]: false }), optional: !!(s as any)[Optional] }
+    }
+
     routes.push({
       method: r.method,
       path: r.path,
@@ -67,7 +72,7 @@ const buildRoutes = (g: Galbe, metaRoutes?: Record<string, any>): GalbeClientRou
         })
       ),
       query,
-      headers: {},
+      headers,
       body,
       response: (r.schema.response as STResponse) ?? null,
       tags: meta?.tags ?? [],
@@ -85,7 +90,11 @@ const META: Record<string, Record<string, { operationId?: string }>> = {
   '/users': { get: { operationId: 'listUsers' }, post: { operationId: 'createUser' } },
   '/users/:id': { get: { operationId: 'getUser' } },
   '/ping': { get: {} }, // no operationId → auto-derived
+  '/secure/data': { get: { operationId: 'getSecure' } },
 }
+
+// the header comes from a middleware schema fragment, not from the route
+g.middleware('/secure/*', { schema: { headers: { 'x-api-key': $T.string() } } })
 
 g.get(
   '/users',
@@ -122,11 +131,14 @@ g.get(
 
 g.get('/ping', {}, () => {})
 
+g.get('/secure/data', { response: { 200: $T.object({ ok: $T.boolean() }) } }, () => {})
+
 // ─── setup / teardown ─────────────────────────────────────────────────────────
 
 let tmpDir: string
 let clientPath: string
 let client: any
+let code: string
 
 beforeAll(async () => {
   await instanciateRoutes(g)
@@ -135,7 +147,7 @@ beforeAll(async () => {
   const routes = buildRoutes(g, META)
   const runtimeContent = await Bun.file(resolve(__dirname, '../bin/res/client.runtime.ts')).text()
 
-  const code = await generateClientCode({
+  code = await generateClientCode({
     routes,
     namedTypes: {},
     className: 'TestClient',
@@ -180,6 +192,9 @@ beforeAll(async () => {
       }
       if (req.method === 'GET' && url.pathname === '/ping') {
         return new Response('pong', { headers: { 'content-type': 'text/plain' } })
+      }
+      if (req.method === 'GET' && url.pathname === '/secure/data') {
+        return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } })
       }
       return new Response('not found', { status: 404 })
     },
@@ -233,6 +248,14 @@ describe('simple API — happy paths', () => {
     const result = await client['get-ping']()
     expect(captured[0].url).toBe('/ping')
     expect(result).toBe('pong')
+  })
+
+  test('middleware schema fragment: header is typed and sent', async () => {
+    captured.length = 0
+    expect(code).toContain("headers?:{'x-api-key':string}")
+    const result = await client.getSecure({ headers: { 'x-api-key': 'secret' } })
+    expect(captured[0].headers['x-api-key']).toBe('secret')
+    expect(result).toEqual({ ok: true })
   })
 })
 

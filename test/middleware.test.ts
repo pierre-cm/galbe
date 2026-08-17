@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { Galbe, UnauthorizedError } from '../src'
+import { $T, Galbe, UnauthorizedError } from '../src'
 import { OpenAPISerializer } from '../src/extras/spec/openapi.serializer'
+import { Kind } from '../src/schema'
+import { Compiled } from '../src/validator.compile'
 
 describe('middleware', async () => {
   const port = 7376
@@ -114,6 +116,86 @@ describe('middleware', async () => {
     expect(() => galbe.middleware('/a/:id/*', () => {})).toThrow(SyntaxError)
     expect(() => galbe.middleware('/a/b*', () => {})).toThrow(SyntaxError)
     expect(() => galbe.middleware('', () => {})).toThrow(SyntaxError)
+  })
+})
+
+describe('middleware schema fragments', async () => {
+  const port = 7380
+  const galbe = new Galbe()
+  await galbe.listen(port)
+  const get = (path: string, init?: RequestInit) => fetch(`http://localhost:${port}${path}`, init)
+  const schemaOf = (path: string) => galbe.router.find('get', path).schema
+
+  test('fragment lands on matched routes only', async () => {
+    galbe.middleware('/frag/*', { schema: { headers: { 'x-key': $T.string() } } })
+    galbe.get('/frag/a', () => 'a')
+    galbe.get('/frag-other', () => 'other')
+
+    expect(Object.keys(schemaOf('/frag/a').headers ?? {})).toEqual(['x-key'])
+    expect(schemaOf('/frag-other').headers).toBeUndefined()
+    expect((await get('/frag/a')).status).toBe(400)
+    expect((await get('/frag/a', { headers: { 'x-key': 'k' } })).status).toBe(200)
+    expect((await get('/frag-other')).status).toBe(200)
+  })
+
+  test('route-declared keys win over fragments', async () => {
+    galbe.middleware('/win/*', { schema: { headers: { 'x-num': $T.string() } } })
+    galbe.get('/win/a', { headers: { 'x-num': $T.integer() } }, ctx => typeof ctx.headers['x-num'])
+
+    expect(await (await get('/win/a', { headers: { 'x-num': '42' } })).text()).toBe('number')
+    expect((await get('/win/a', { headers: { 'x-num': 'nope' } })).status).toBe(400)
+  })
+
+  test('fragments merge for middleware registered after the routes', async () => {
+    galbe.get('/late-frag', () => 'ok')
+    expect((await get('/late-frag')).status).toBe(200)
+
+    galbe.middleware('/late-frag', { schema: { query: { q: $T.string() } } })
+    expect((await get('/late-frag')).status).toBe(400)
+    expect((await get('/late-frag?q=1')).status).toBe(200)
+  })
+
+  test('repeated recomposition is idempotent', async () => {
+    galbe.middleware('/idem/*', { hooks: () => {}, schema: { headers: { 'x-a': $T.optional($T.string()) } } })
+    galbe.get('/idem/a', { headers: { 'x-b': $T.optional($T.string()) } }, () => 'ok')
+    const merged = { ...schemaOf('/idem/a').headers }
+
+    // any later matching registration recomposes the route
+    galbe.middleware('/idem/*', () => {})
+    galbe.middleware('/idem/a', () => {})
+
+    expect(schemaOf('/idem/a').headers).toEqual(merged)
+    expect((await get('/idem/a')).status).toBe(200)
+  })
+
+  test('a fragment registered after the route wins over an earlier one, as when both precede it', async () => {
+    galbe.middleware('/order/*', { schema: { headers: { 'x-k': $T.optional($T.string()) } } })
+    galbe.get('/order/a', () => 'ok')
+    galbe.middleware('/order/*', { schema: { headers: { 'x-k': $T.integer() } } })
+
+    expect((schemaOf('/order/a').headers as Record<string, any>)['x-k'][Kind]).toBe('integer')
+    expect((await get('/order/a', { headers: { 'x-k': '1' } })).status).toBe(200)
+    expect((await get('/order/a', { headers: { 'x-k': 'nope' } })).status).toBe(400)
+  })
+
+  test('fragment-declared params are validated by a compiled validator', async () => {
+    galbe.middleware('/tenant/*', { schema: { params: { tid: $T.integer() } } })
+    galbe.get('/tenant/:tid', ctx => typeof ctx.params.tid)
+
+    expect((schemaOf('/tenant/7').params as Record<string, any>)?.tid?.[Compiled]).toBeDefined()
+    expect(await (await get('/tenant/7')).text()).toBe('number')
+    expect((await get('/tenant/abc')).status).toBe(400)
+  })
+
+  test('a shared schema object is not contaminated across routes', async () => {
+    const schema = { headers: { 'x-own': $T.optional($T.string()) } }
+    galbe.middleware('/shared/in/*', { schema: { headers: { 'x-frag': $T.string() } } })
+    galbe.get('/shared/in/a', schema, () => 'in')
+    galbe.get('/shared/out', schema, () => 'out')
+
+    expect(Object.keys(schema.headers)).toEqual(['x-own'])
+    expect(Object.keys(schemaOf('/shared/in/a').headers ?? {})).toEqual(['x-frag', 'x-own'])
+    expect((await get('/shared/out')).status).toBe(200)
   })
 })
 

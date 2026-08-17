@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
 import { generate } from '../bin/commands/generate/cli/targets/cac'
 import { tmpdir } from 'os'
-import { mkdtemp, rm } from 'fs/promises'
+import { mkdir, mkdtemp, rm, symlink } from 'fs/promises'
 import { resolve } from 'path'
 import type { GalbeCLICommand } from '../src'
 
@@ -279,5 +279,49 @@ describe('module CLI — error handling', () => {
     expect(exitCode).toBe(1)
     expect(stderr).toContain('error:')
     expect(stderr).not.toMatch(/at .+:\d+/)
+  })
+})
+
+// ── middleware schema fragments ───────────────────────────────────────────────
+
+describe('generated CLI — middleware schema fragment', () => {
+  const PROJECT = resolve(__dirname, '..')
+  let dir: string
+
+  beforeAll(async () => {
+    dir = await mkdtemp(resolve(tmpdir(), 'galbe-cli-frag-'))
+    await mkdir(resolve(dir, 'node_modules'), { recursive: true })
+    await symlink(PROJECT, resolve(dir, 'node_modules', 'galbe'))
+    await mkdir(resolve(dir, 'src'), { recursive: true })
+    await Bun.write(
+      resolve(dir, 'package.json'),
+      JSON.stringify({ name: 'frag', version: '0.0.0', type: 'module', dependencies: { galbe: '*' } })
+    )
+    await Bun.write(resolve(dir, 'index.ts'), `import { Galbe } from 'galbe'\nexport default new Galbe()\n`)
+    await Bun.write(
+      resolve(dir, 'src/api.middleware.ts'),
+      `import { $T } from 'galbe'\nexport default { schema: { query: { page: $T.optional($T.integer()) } } }\n`
+    )
+    await Bun.write(
+      resolve(dir, 'src/items.route.ts'),
+      `import type { Galbe } from 'galbe'\nexport default (g: Galbe) => {\n  g.get('/items', () => [])\n}\n`
+    )
+  })
+
+  afterAll(async () => {
+    if (dir) await rm(dir, { recursive: true, force: true })
+  })
+
+  test('a fragment-declared query param becomes a CLI option', async () => {
+    const proc = Bun.spawn(['bun', resolve(PROJECT, 'bin/cli.ts'), 'generate', 'cli', './index.ts', '-m', 'module'], {
+      cwd: dir,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    await proc.exited
+    expect(proc.exitCode).toBe(0)
+
+    const cli = await Bun.file(resolve(dir, 'dist/cli.ts')).text()
+    expect(cli).toContain('--page')
   })
 })

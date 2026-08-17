@@ -20,12 +20,14 @@ import type {
   StaticEndpointOptions,
   GalbeMiddleware,
   MaybeArray,
+  MiddlewareDef,
+  MiddlewareSchema,
 } from './types'
 
 import { existsSync, readdirSync, statSync } from 'fs'
 import { resolve as resolvePath } from 'path'
 import server from './server'
-import { joinPath, matchMiddleware, parseMiddlewarePattern, walkRoutes } from './util'
+import { joinPath, matchMiddleware, mergeMiddlewareSchema, parseMiddlewarePattern, walkRoutes } from './util'
 import { GalbeRouter } from './router'
 import { SchemaType } from './schema'
 import { compileRoute } from './validator.compile'
@@ -115,6 +117,14 @@ const composeHooks = <M extends Method, Path extends string, S extends RequestSc
 // segment matches like '*'
 const patternFromPath = (path: string) => path.replace(/:[^/]+/g, '*')
 
+// a bare hook (or hook array) is sugar for { hooks }
+const toMiddlewareDef = (arg?: MaybeArray<Hook> | MiddlewareDef): Omit<GalbeMiddleware, 'pattern' | 'segments'> => {
+  const def: MiddlewareDef = typeof arg === 'function' || Array.isArray(arg) ? { hooks: arg } : (arg ?? {})
+  if (def.beforeParse || def.afterHandle)
+    console.warn("middleware: 'beforeParse' and 'afterHandle' are reserved slot names and are not run yet")
+  return { hooks: def.hooks ? [def.hooks].flat() : [], schema: def.schema, security: def.security }
+}
+
 const galbeMethod = <
   M extends Method,
   Path extends string,
@@ -151,6 +161,27 @@ export { RequestError } from './types'
 export type { STResponseContent, STResponseBodyKey, STResponseEntry } from './types'
 
 export const config = (config: GalbeConfig) => config
+
+/**
+ * #### Middleware
+ * Define a middleware as a value: hooks, the request contract they impose, and
+ * the security scheme they enforce, in one exportable thing. Identity at
+ * runtime — it exists so the `schema` fragment types the def's own handlers,
+ * which a bare object literal cannot do.
+ *
+ * ---
+ * @example
+ * ```typescript
+ * // src/api/tenant.middleware.ts — the directory is the scope
+ * export default middleware({
+ *   schema: { headers: { 'x-tenant-id': $T.string() } },
+ *   hooks: ctx => {
+ *     ctx.state.tenant = ctx.headers['x-tenant-id'] // string
+ *   }
+ * })
+ * ```
+ */
+export const middleware = <F extends MiddlewareSchema>(def: MiddlewareDef<F>): MiddlewareDef<F> => def
 
 /**
  * #### Galbe Server
@@ -207,36 +238,42 @@ export class Galbe {
   }
   private composeMiddleware(route: Route) {
     const segments = this.routeSegments(route)
-    const matched = this.middlewares.filter(m => matchMiddleware(m.segments, segments)).flatMap(m => m.hooks)
-    route.composed = composeHooks([...matched, ...route.hooks], route.handler)
+    const matched = this.middlewares.filter(m => matchMiddleware(m.segments, segments))
+    // merged fragments bring in schemas that were never compiled; compile()
+    // caches per schema object, so only the new ones are built
+    if (mergeMiddlewareSchema(route, matched)) compileRoute(route.schema)
+    route.composed = composeHooks([...matched.flatMap(m => m.hooks), ...route.hooks], route.handler)
   }
   async use(plugin: GalbePlugin) {
     this.plugins.push(plugin)
   }
   /**
    * #### Middleware
-   * Register hooks that run for every route whose path matches the given
-   * pattern, ahead of the route's own hooks. Pattern segments are literals or
-   * `*` (any single segment); a trailing `*` matches the whole subtree,
-   * including the prefix itself. Patterns match registered route paths (not
-   * request URLs) and are resolved at registration time: matched hooks are
-   * composed into the route chain, adding no per-request matching cost.
+   * Register hooks — or a {@link MiddlewareDef} — that apply to every route
+   * whose path matches the given pattern, ahead of the route's own hooks.
+   * Pattern segments are literals or `*` (any single segment); a trailing `*`
+   * matches the whole subtree, including the prefix itself. Patterns match
+   * registered route paths (not request URLs) and are resolved at registration
+   * time: matched hooks are composed into the route chain and the def's schema
+   * fragment is merged into the route schema, adding no per-request cost.
    *
    * ---
    * @example
    * ```typescript
    * galbe.middleware(logger)              // every route
    * galbe.middleware('/api/*', authHook)  // the /api subtree
+   * galbe.middleware('/api/*', middleware({ schema: { headers: { authorization: $T.string() } }, hooks: authHook }))
    * ```
    */
   middleware(hooks: MaybeArray<Hook>): void
+  middleware<F extends MiddlewareSchema>(def: MiddlewareDef<F>): void
   middleware(pattern: string, hooks: MaybeArray<Hook>): void
-  middleware(arg1: string | MaybeArray<Hook>, arg2?: MaybeArray<Hook>): void {
+  middleware<F extends MiddlewareSchema>(pattern: string, def: MiddlewareDef<F>): void
+  middleware(arg1: string | MaybeArray<Hook> | MiddlewareDef, arg2?: MaybeArray<Hook> | MiddlewareDef): void {
     const pattern = typeof arg1 === 'string' ? arg1 : '*'
-    const hooks = typeof arg1 === 'string' ? arg2 : arg1
-    const hookList = Array.isArray(hooks) ? hooks : hooks ? [hooks] : []
-    if (!hookList.length) return
-    const entry = { pattern, segments: parseMiddlewarePattern(pattern), hooks: hookList }
+    const def = toMiddlewareDef(typeof arg1 === 'string' ? arg2 : arg1)
+    if (!def.hooks.length && !def.schema && !def.security) return
+    const entry = { pattern, segments: parseMiddlewarePattern(pattern), ...def }
     this.middlewares.push(entry)
     // routes registered before this call: recompose the ones the new entry matches
     walkRoutes(this.router.routes, route => {
@@ -245,9 +282,11 @@ export class Galbe {
   }
   /**
    * #### Route group
-   * Register routes under a shared path prefix. Optional hooks apply to the
-   * whole `<prefix>/*` subtree — they are prefix middleware, so they also
-   * cover matching routes registered outside the group.
+   * Register routes under a shared path prefix. Optional hooks — or a
+   * middleware def — apply to the whole `<prefix>/*` subtree: they are prefix
+   * middleware, so they also cover matching routes registered outside the
+   * group. A def's schema fragment types the routes registered through the
+   * group registrar, on top of merging into their schemas.
    *
    * ---
    * @example
@@ -256,18 +295,24 @@ export class Galbe {
    *   g.get('/users', listUsers)      // GET /v1/users
    *   g.group('/admin', a => { ... }) // /v1/admin/...
    * })
+   *
+   * galbe.group('/v1', middleware({ schema: { headers: { authorization: $T.string() } } }), g => {
+   *   g.get('/users', ctx => ctx.headers.authorization) // string
+   * })
    * ```
    */
   group<P extends string>(prefix: P, cb: (group: GalbeGroup<P>) => void): GalbeGroup<P>
   group<P extends string>(prefix: P, hooks: Hook[], cb: (group: GalbeGroup<P>) => void): GalbeGroup<P>
-  group<P extends string>(
+  group<P extends string, F extends MiddlewareSchema>(
     prefix: P,
-    arg2: Hook[] | ((group: GalbeGroup<P>) => void),
-    arg3?: (group: GalbeGroup<P>) => void
-  ): GalbeGroup<P> {
+    def: MiddlewareDef<F>,
+    cb: (group: GalbeGroup<P, F>) => void
+  ): GalbeGroup<P, F>
+  group(prefix: string, arg2: any, arg3?: any): any {
     const cb = typeof arg2 === 'function' ? arg2 : arg3
-    if (Array.isArray(arg2) && arg2.length) this.middleware(patternFromPath(joinPath(prefix, '/*')), arg2)
-    const group = new GalbeGroup<P>(this, prefix)
+    const scoped = Array.isArray(arg2) ? arg2.length > 0 : !!arg2 && typeof arg2 === 'object'
+    if (scoped) this.middleware(patternFromPath(joinPath(prefix, '/*')), arg2)
+    const group = new GalbeGroup(this, prefix)
     cb?.(group)
     return group
   }
@@ -502,9 +547,11 @@ export class Galbe {
  * #### GalbeGroup
  * Route sub-registrar created by {@link Galbe.group}. Paths are prefixed at
  * registration time: router matching and precedence are unchanged, and the
- * prefixed paths flow as-is into the generated OpenAPI spec.
+ * prefixed paths flow as-is into the generated OpenAPI spec. `F` carries the
+ * schema fragment of the group's middleware def, so routes registered here are
+ * typed with it — route-declared keys win, as they do at runtime.
  */
-export class GalbeGroup<Prefix extends string = string> {
+export class GalbeGroup<Prefix extends string = string, F extends MiddlewareSchema = {}> {
   #galbe: Galbe
   #prefix: string
   constructor(galbe: Galbe, prefix: string) {
@@ -516,29 +563,46 @@ export class GalbeGroup<Prefix extends string = string> {
     // has no common call signature — the dispatch is checked at the call sites
     return (this.#galbe[method] as (path: string, ...args: any[]) => any)(joinPath(this.#prefix, path), ...args)
   }
-  get: Endpoint<'get', Prefix> = (path: any, ...args: any[]): any => this.#route('get', path, args)
-  post: Endpoint<'post', Prefix> = (path: any, ...args: any[]): any => this.#route('post', path, args)
-  put: Endpoint<'put', Prefix> = (path: any, ...args: any[]): any => this.#route('put', path, args)
-  patch: Endpoint<'patch', Prefix> = (path: any, ...args: any[]): any => this.#route('patch', path, args)
-  delete: Endpoint<'delete', Prefix> = (path: any, ...args: any[]): any => this.#route('delete', path, args)
-  options: Endpoint<'options', Prefix> = (path: any, ...args: any[]): any => this.#route('options', path, args)
-  head: Endpoint<'head', Prefix> = (path: any, ...args: any[]): any => this.#route('head', path, args)
+  get: Endpoint<'get', Prefix, F> = (path: any, ...args: any[]): any => this.#route('get', path, args)
+  post: Endpoint<'post', Prefix, F> = (path: any, ...args: any[]): any => this.#route('post', path, args)
+  put: Endpoint<'put', Prefix, F> = (path: any, ...args: any[]): any => this.#route('put', path, args)
+  patch: Endpoint<'patch', Prefix, F> = (path: any, ...args: any[]): any => this.#route('patch', path, args)
+  delete: Endpoint<'delete', Prefix, F> = (path: any, ...args: any[]): any => this.#route('delete', path, args)
+  options: Endpoint<'options', Prefix, F> = (path: any, ...args: any[]): any => this.#route('options', path, args)
+  head: Endpoint<'head', Prefix, F> = (path: any, ...args: any[]): any => this.#route('head', path, args)
   static: StaticEndpoint = (path: any, target: any, options?: any): any =>
     this.#galbe.static(joinPath(this.#prefix, path), target, options)
-  /** Register middleware scoped to the group: bare hooks cover the group subtree, patterns are relative to the group prefix. */
+  /**
+   * Register middleware scoped to the group: bare hooks or a def cover the
+   * group subtree, patterns are relative to the group prefix. The fragment is
+   * merged and validated, but only `group(prefix, def, cb)` can type the
+   * routes — a mutating call has no value to carry the type on.
+   */
   middleware(hooks: MaybeArray<Hook>): void
+  middleware<G extends MiddlewareSchema>(def: MiddlewareDef<G>): void
   middleware(pattern: string, hooks: MaybeArray<Hook>): void
-  middleware(arg1: string | MaybeArray<Hook>, arg2?: MaybeArray<Hook>): void {
+  middleware<G extends MiddlewareSchema>(pattern: string, def: MiddlewareDef<G>): void
+  middleware(arg1: string | MaybeArray<Hook> | MiddlewareDef, arg2?: MaybeArray<Hook> | MiddlewareDef): void {
     const prefix = patternFromPath(this.#prefix)
-    if (typeof arg1 === 'string') this.#galbe.middleware(joinPath(prefix, arg1), arg2!)
-    else this.#galbe.middleware(joinPath(prefix, '/*'), arg1)
+    // the overloads discriminate hooks from defs; the implementation forwards the union
+    const scope = typeof arg1 === 'string' ? joinPath(prefix, arg1) : joinPath(prefix, '/*')
+    this.#galbe.middleware(scope, (typeof arg1 === 'string' ? arg2! : arg1) as MaybeArray<Hook>)
   }
-  group<P extends string>(prefix: P, cb: (group: GalbeGroup<`${Prefix}${P}`>) => void): GalbeGroup<`${Prefix}${P}`>
+  group<P extends string>(
+    prefix: P,
+    cb: (group: GalbeGroup<`${Prefix}${P}`, F>) => void
+  ): GalbeGroup<`${Prefix}${P}`, F>
   group<P extends string>(
     prefix: P,
     hooks: Hook[],
-    cb: (group: GalbeGroup<`${Prefix}${P}`>) => void
-  ): GalbeGroup<`${Prefix}${P}`>
+    cb: (group: GalbeGroup<`${Prefix}${P}`, F>) => void
+  ): GalbeGroup<`${Prefix}${P}`, F>
+  // nested defs stack: the inner fragment merges over the outer one
+  group<P extends string, G extends MiddlewareSchema>(
+    prefix: P,
+    def: MiddlewareDef<G>,
+    cb: (group: GalbeGroup<`${Prefix}${P}`, F & G>) => void
+  ): GalbeGroup<`${Prefix}${P}`, F & G>
   group(prefix: string, arg2: any, arg3?: any): any {
     return this.#galbe.group(joinPath(this.#prefix, prefix), arg2, arg3)
   }

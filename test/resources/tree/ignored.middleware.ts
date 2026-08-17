@@ -1,4 +1,8 @@
+import { middleware } from '../../../src'
+
 // @galbe-ignore
-export default () => {
-  ;(globalThis as any).__mwOrder?.push('ignored')
-}
+export default middleware({
+  hooks: () => {
+    ;(globalThis as any).__mwOrder?.push('ignored')
+  },
+})
