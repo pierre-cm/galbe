@@ -110,11 +110,22 @@ Enables _request_ schema validation (see [Request Schema Definition](../concepts
 
 ### responseValidator.enabled
 
-Enables _response_ schema validation (see [response](../concepts/schemas.md#response)). Default: `true`.
+Enables _response_ schema validation (see [response](../concepts/schemas.md#response)). Default: `true`. Only routes declaring a `response` schema are affected, and handlers returning a raw `Response` are never validated.
+
+Validation is not free: it costs roughly **10 % throughput**. What it buys is catching handler bugs — a response drifting from the shape the schema, the generated OpenAPI spec and the generated clients all promise. A common pattern is keeping it on in development and test, and disabling it in production once handlers are covered by tests:
+
+```ts
+export default {
+  responseValidator: { enabled: Bun.env.BUN_ENV !== 'production' },
+}
+```
+
+> [!NOTE]
+> Measured over loopback with ±15–20 % cross-session variance — treat the figures as an order of magnitude, and benchmark your own handlers before trading the safety net away.
 
 ### router.cacheEnabled
 
-Enables route caching for dynamic routes (see [Router Caching](../concepts/router.md#caching)). Default: `false`.
+Enables route caching for dynamic routes (see [Router Caching](../concepts/router.md#caching)). Default: `false`. It is opt-in for a reason: on shallow tries a cache hit can cost more than the trie walk it avoids — see the [tradeoff note](../concepts/router.md#caching) before enabling it.
 
 ### router.cacheLimit
 
