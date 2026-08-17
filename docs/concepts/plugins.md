@@ -39,6 +39,8 @@ It is **preemptable**, meaning that if a response is returned, it will be sent t
 
 Executed after the router identifies a matching route for the request. It takes a restricted `context` argument (same as `onFetch` plus `route`) and is **preemptable**, meaning it can return an early response.
 
+Path-scoped work at this stage belongs in a middleware's [`beforeParse`](middleware.md#before-parsing) slot instead, which runs right after this loop; `onRoute` stays for what has to run for every route.
+
 ### beforeHandle
 
 Runs after request validation but before route hooks and the handler are called. Like the previous lifecycle methods, it is **preemptable**.

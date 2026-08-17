@@ -403,10 +403,18 @@ type MergeFragment<Frag, Declared> = [keyof Frag] extends [never]
     : Omit<Frag, keyof Declared> & Declared
 /** The request schema a fragment implies for the middleware's own hooks. */
 type FragmentRequest<F extends MiddlewareSchema> = RequestSchema<Method, string, FragHeaders<F>, {}, FragQuery<F>>
-/** Reserved for the `beforeParse` slot: at that point the body, params and query are not parsed yet. */
-export type PreParseHook = (
-  ctx: Pick<Context, 'request' | 'set' | 'state' | 'route' | 'cookies' | 'remoteAddress'>
-) => MaybePromise<Response | void>
+/**
+ * The context a {@link PreParseHook} receives. It deliberately lacks `body`,
+ * `params` and the parsed `query`: none of them exist yet at that point. Raw
+ * headers and search params remain reachable through `ctx.request`.
+ */
+export type PreParseContext = Pick<Context, 'request' | 'set' | 'state' | 'route' | 'cookies' | 'remoteAddress'>
+/**
+ * A `beforeParse` hook: runs once the route is known but before the body is
+ * read or the request validated. No `next()` — hooks run sequentially and
+ * short-circuit by returning a `Response`, like a plugin's `onRoute`.
+ */
+export type PreParseHook = (ctx: PreParseContext) => MaybePromise<Response | void>
 /** Reserved for the `afterHandle` slot: a transform over the parsed response, not an onion. */
 export type ResponseHook = (response: Response, ctx: Context) => MaybePromise<Response | void>
 /**
@@ -431,7 +439,11 @@ export type ResponseHook = (response: Response, ctx: Context) => MaybePromise<Re
  * ```
  */
 export type MiddlewareDef<F extends MiddlewareSchema = any> = {
-  /** Reserved slot, declared for forward compatibility — not run yet. */
+  /**
+   * Hooks run on every matched route after routing and before the body is
+   * parsed — the point where auth or rate limiting can reject a request
+   * without reading it. See {@link PreParseHook}.
+   */
   beforeParse?: MaybeArray<PreParseHook>
   /** Hooks composed into the chain of every matched route, ahead of the route's own hooks. */
   hooks?: MaybeArray<Hook<Method, string, FragmentRequest<F>>>
@@ -457,6 +469,7 @@ export type GalbeMiddleware = {
   pattern: string
   /** pattern split into segments, precomputed at registration */
   segments: string[]
+  beforeParse: PreParseHook[]
   hooks: Hook[]
   schema?: MiddlewareSchema
   security?: string | string[]
@@ -589,6 +602,14 @@ export type Route<
    * response — or a hook's short-circuit value.
    */
   composed: (context: Context<M, Path, RequestSchema<M, Path, H, P, Q, B, R, C>>) => Promise<any>
+  /**
+   * Matched middleware `beforeParse` hooks, composed at registration like
+   * {@link Route.composed}. Left `undefined` when no matched middleware fills
+   * the slot, so the request path skips the stage with a single check. Runs
+   * after the plugins' `onRoute` and before the body is read; a returned
+   * `Response` short-circuits the request.
+   */
+  composedPre?: (context: PreParseContext) => Promise<Response | void>
   static?: { path: SP; root: SR }
 }
 

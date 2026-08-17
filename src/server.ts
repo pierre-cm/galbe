@@ -98,6 +98,14 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
           if (r) return r
         }
 
+        // middleware pre-parse slot, composed at registration (see composePreParse):
+        // the route is known, nothing has been committed yet — an auth or rate
+        // limit rejection here answers before a byte of body is read
+        if (route.composedPre) {
+          const r = await route.composedPre(context)
+          if (r) return r
+        }
+
         // parse request
         const schema = route.schema
         // null-prototype map: keys are untrusted, a plain {} would collide with

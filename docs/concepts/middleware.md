@@ -18,13 +18,14 @@ galbe.middleware(pattern: string, def: Hook | Hook[] | MiddlewareDef)  // routes
 
     ```ts
     type MiddlewareDef = {
+      beforeParse?: PreParseHook | PreParseHook[]
       hooks?: Hook | Hook[]
       schema?: { headers?: ...; query?: ...; params?: ... }
       security?: string | string[]
     }
     ```
 
-    A bare hook (or hook array) is sugar for `{ hooks }`.
+    A bare hook (or hook array) is sugar for `{ hooks }`. `beforeParse` holds hooks that must run before the request body is read — see [Before Parsing](#before-parsing).
 
 Wrap a definition in `middleware()` to have its `schema` type its own hooks. The helper is the identity at runtime — it exists so the object literal has something to be contextually typed against, exactly like [`config()`](../reference/configuration.md):
 
@@ -169,9 +170,37 @@ middleware end
 ```
 
 > [!NOTE]
-> Like route hooks, middleware runs after the request has been parsed and validated: an invalid request is rejected before any middleware runs. Logic that must run before parsing belongs in a [Plugin](plugins.md).
+> Like route hooks, middleware hooks run after the request has been parsed and validated: an invalid request is rejected with a 400 before any of them runs. To act earlier, use the [`beforeParse`](#before-parsing) slot.
 
 Middleware can be declared at any time, including after the routes it targets: matching routes are recomposed on registration.
+
+## Before Parsing
+
+A definition's `beforeParse` hooks run earlier than everything above: right after routing, and before the body is read or the request validated.
+
+```ts
+galbe.middleware(
+  '/api/*',
+  middleware({
+    beforeParse: ctx => {
+      if (!isAuthenticated(ctx.request.headers.get('authorization'))) throw new UnauthorizedError()
+    },
+  })
+)
+```
+
+The full order:
+
+```
+plugins.onFetch → routing → plugins.onRoute → beforeParse → parsing & validation → plugins.beforeHandle → middleware hooks → route hooks → handler
+```
+
+That position is the whole point of the slot. An authentication or rate-limiting check written as a regular hook lets an unauthenticated request be read and validated first, so a malformed unauthenticated request is answered with a **400 before the 401** — leaking the shape of your schema to a caller that should have been turned away outright. In `beforeParse`, the rejection comes first and the body is never read.
+
+The context is restricted to what actually exists at that point: `request`, `route`, `state`, `set`, `cookies` and `remoteAddress`. There is no `body`, no `params` and no parsed `query`; raw headers and search params remain reachable through `ctx.request`. Hooks take no `next()` — they run sequentially in registration order and preempt the request by returning a `Response`, like a [Plugin](plugins.md)'s `onRoute`. Throwing works as well: errors take the usual [Error Handler](error-handler.md) path. Anything a hook leaves on `ctx.state` is visible to the rest of the chain.
+
+> [!NOTE]
+> `beforeParse` is still middleware: it runs only for requests that matched a route, and only for routes matching its pattern. Work that must also cover unrouted requests belongs in a [Plugin](plugins.md)'s `onFetch`.
 
 ## Middleware Files
 

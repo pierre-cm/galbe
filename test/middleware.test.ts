@@ -199,17 +199,178 @@ describe('middleware schema fragments', async () => {
   })
 })
 
+describe('middleware beforeParse', async () => {
+  const port = 7381
+  const galbe = new Galbe()
+  await galbe.listen(port)
+  const get = (path: string) => fetch(`http://localhost:${port}${path}`)
+  const post = (path: string, body: string, contentType = 'application/json') =>
+    fetch(`http://localhost:${port}${path}`, { method: 'POST', headers: { 'content-type': contentType }, body })
+
+  test('a returned Response short-circuits before hooks and handler', async () => {
+    galbe.middleware('/bp/short/*', { beforeParse: () => new Response('nope', { status: 401 }) })
+    galbe.get(
+      '/bp/short',
+      [
+        () => {
+          expect.unreachable()
+        },
+      ],
+      () => {
+        expect.unreachable()
+      }
+    )
+
+    const resp = await get('/bp/short')
+    expect(resp.status).toBe(401)
+    expect(await resp.text()).toBe('nope')
+  })
+
+  test('hooks run in registration order, falling through when they return nothing', async () => {
+    const calls: string[] = []
+    galbe.middleware('/bp/order/*', {
+      beforeParse: [
+        () => {
+          calls.push('a')
+        },
+        () => {
+          calls.push('b')
+        },
+      ],
+    })
+    galbe.middleware('/bp/order/*', {
+      beforeParse: () => {
+        calls.push('c')
+      },
+    })
+    galbe.get('/bp/order', () => {
+      calls.push('handler')
+      return 'ok'
+    })
+
+    expect((await get('/bp/order')).status).toBe(200)
+    expect(calls).toEqual(['a', 'b', 'c', 'handler'])
+  })
+
+  test('a later hook does not run once one short-circuits', async () => {
+    const calls: string[] = []
+    galbe.middleware('/bp/stop/*', {
+      beforeParse: [
+        () => {
+          calls.push('first')
+          return new Response('halt', { status: 403 })
+        },
+        () => {
+          calls.push('second')
+        },
+      ],
+    })
+    galbe.get('/bp/stop', () => 'ok')
+
+    expect((await get('/bp/stop')).status).toBe(403)
+    expect(calls).toEqual(['first'])
+  })
+
+  test('pattern scoping applies as it does for hooks', async () => {
+    const calls: string[] = []
+    galbe.middleware('/bp/scope/*', {
+      beforeParse: ctx => {
+        calls.push(ctx.route!.path)
+      },
+    })
+    galbe.get('/bp/scope/a', () => 'a')
+    galbe.get('/bp/scope-other', () => 'other')
+
+    for (const p of ['/bp/scope/a', '/bp/scope-other']) expect((await get(p)).status).toBe(200)
+    expect(calls).toEqual(['/bp/scope/a'])
+  })
+
+  test('a thrown RequestError maps like a hook error', async () => {
+    galbe.middleware('/bp/throw/*', {
+      beforeParse: () => {
+        throw new UnauthorizedError()
+      },
+    })
+    galbe.get('/bp/throw/secret', () => expect.unreachable())
+
+    expect((await get('/bp/throw/secret')).status).toBe(401)
+  })
+
+  test('rejects before validation: 401, not 400, on a malformed body', async () => {
+    galbe.middleware('/bp/guard/*', {
+      beforeParse: () => {
+        throw new UnauthorizedError()
+      },
+    })
+    const schema = { body: { 'application/json': $T.object({ n: $T.integer() }) } }
+    galbe.post('/bp/guard/x', schema, () => expect.unreachable())
+    galbe.post('/bp/unguarded', schema, () => 'ok')
+
+    expect((await post('/bp/unguarded', '{')).status).toBe(400)
+    expect((await post('/bp/guard/x', '{')).status).toBe(401)
+  })
+
+  test('the body is never read when the slot short-circuits', async () => {
+    galbe.middleware('/bp/limit/*', { beforeParse: () => new Response('', { status: 401 }) })
+    const schema = { bodyLimit: 8, body: { 'text/plain': $T.string() } }
+    galbe.post('/bp/limit/x', schema, () => expect.unreachable())
+    galbe.post('/bp/unlimited', schema, () => 'ok')
+
+    // a body this size is refused with 413 on the content-length check, which
+    // sits after the slot: reaching 401 proves nothing of it was read
+    expect((await post('/bp/unlimited', 'a'.repeat(128), 'text/plain')).status).toBe(413)
+    expect((await post('/bp/limit/x', 'a'.repeat(128), 'text/plain')).status).toBe(401)
+  })
+
+  test('state set before parsing reaches the handler', async () => {
+    galbe.middleware('/bp/state/*', {
+      beforeParse: ctx => {
+        ctx.state.user = 'mom'
+      },
+    })
+    galbe.get('/bp/state', ctx => `Hello ${ctx.state.user}!`)
+
+    expect(await (await get('/bp/state')).text()).toBe('Hello mom!')
+  })
+
+  test('a def registered after the routes recomposes them', async () => {
+    galbe.get('/bp/late/x', () => 'x')
+    expect((await get('/bp/late/x')).status).toBe(200)
+
+    galbe.middleware('/bp/late/*', { beforeParse: () => new Response('', { status: 401 }) })
+    expect((await get('/bp/late/x')).status).toBe(401)
+  })
+
+  test('composedPre stays undefined for routes with no matching beforeParse', async () => {
+    galbe.middleware('/bp/cost/*', { hooks: () => {}, schema: { headers: { 'x-k': $T.optional($T.string()) } } })
+    galbe.get('/bp/cost/plain', () => 'plain')
+    galbe.middleware('/bp/cost/pre/*', { beforeParse: () => {} })
+    galbe.get('/bp/cost/pre/a', () => 'a')
+
+    expect(galbe.router.find('get', '/bp/cost/plain').composedPre).toBeUndefined()
+    expect(galbe.router.find('get', '/bp/cost/pre/a').composedPre).toBeDefined()
+  })
+})
+
 describe('middleware ordering', async () => {
   const port = 7377
   const order: string[] = []
   const galbe = new Galbe()
   await galbe.use({
     name: 'test.order',
+    onRoute: () => {
+      order.push('plugin:onRoute')
+    },
     beforeHandle: () => {
       order.push('plugin:before')
     },
     afterHandle: () => {
       order.push('plugin:after')
+    },
+  })
+  galbe.middleware('/ord/*', {
+    beforeParse: () => {
+      order.push('mw:beforeParse')
     },
   })
   galbe.middleware('/ord/*', async (_, next) => {
@@ -236,10 +397,12 @@ describe('middleware ordering', async () => {
   )
   await galbe.listen(port)
 
-  test('plugins → middleware (registration order) → route hooks → handler', async () => {
+  test('plugins.onRoute → beforeParse → plugins.beforeHandle → middleware (registration order) → route hooks → handler', async () => {
     const resp = await fetch(`http://localhost:${port}/ord`)
     expect(resp.status).toBe(200)
     expect(order).toEqual([
+      'plugin:onRoute',
+      'mw:beforeParse',
       'plugin:before',
       'mw1:in',
       'mw2',
