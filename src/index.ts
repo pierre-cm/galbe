@@ -142,6 +142,7 @@ const toMiddlewareDef = (arg?: MaybeArray<Hook> | MiddlewareDef): Omit<GalbeMidd
     hooks: def.hooks ? [def.hooks].flat() : [],
     schema: def.schema,
     security: def.security,
+    securitySchemes: def.securitySchemes,
   }
 }
 
@@ -293,7 +294,7 @@ export class Galbe {
   middleware(arg1: string | MaybeArray<Hook> | MiddlewareDef, arg2?: MaybeArray<Hook> | MiddlewareDef): void {
     const pattern = typeof arg1 === 'string' ? arg1 : '*'
     const def = toMiddlewareDef(typeof arg1 === 'string' ? arg2 : arg1)
-    if (!def.hooks.length && !def.beforeParse.length && !def.schema && !def.security) return
+    if (!def.hooks.length && !def.beforeParse.length && !def.schema && !def.security && !def.securitySchemes) return
     const entry = { pattern, segments: parseMiddlewarePattern(pattern), ...def }
     this.middlewares.push(entry)
     // routes registered before this call: recompose the ones the new entry matches

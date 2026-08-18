@@ -434,7 +434,8 @@ export type ResponseHook = (response: Response, ctx: Context) => MaybePromise<Re
  * galbe.middleware('/api/*', middleware({
  *   schema: { headers: { authorization: $T.string() } },
  *   hooks: ctx => { ctx.headers.authorization }, // string
- *   security: 'bearerAuth'
+ *   security: 'bearerAuth',
+ *   securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } }
  * }))
  * ```
  */
@@ -455,8 +456,20 @@ export type MiddlewareDef<F extends MiddlewareSchema = any> = {
    * cannot type the hooks: a middleware pattern is not a typed route path.
    */
   schema?: F
-  /** OpenAPI security scheme name(s) enforced by the hooks. Carried for the spec serializer. */
+  /**
+   * OpenAPI security scheme name(s) enforced by the hooks, applied to every
+   * matched operation exactly like a middleware file's `@security` header.
+   * Scopes follow the name, space-separated (`'oauth2 read write'`); `'none'`
+   * documents the scope as public. Metadata only — never affects runtime.
+   */
   security?: string | string[]
+  /**
+   * Definitions for the schemes {@link MiddlewareDef.security} names, merged
+   * into `components.securitySchemes`. A packaged middleware that is not bearer
+   * auth needs this: `apiKey` and `basic` cannot be expressed by a name alone.
+   * Same shape as `config.openapi.securitySchemes`, which wins on conflict.
+   */
+  securitySchemes?: Record<string, OpenAPIV3.SecuritySchemeObject | OpenAPIV3.ReferenceObject>
 }
 /**
  * Prefix middleware entry registered via `galbe.middleware`. Patterns match
@@ -473,6 +486,7 @@ export type GalbeMiddleware = {
   hooks: Hook[]
   schema?: MiddlewareSchema
   security?: string | string[]
+  securitySchemes?: Record<string, OpenAPIV3.SecuritySchemeObject | OpenAPIV3.ReferenceObject>
 }
 // Prefix is prepended to Path at the type level (route groups): context params,
 // schemas and the returned Route are typed against the full, joined path. F is

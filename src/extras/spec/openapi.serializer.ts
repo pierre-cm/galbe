@@ -76,6 +76,20 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
   // inferred from a route's Authorization header.
   const declaredSchemes = new Set(Object.keys(g.config?.openapi?.securitySchemes ?? {}))
 
+  // A middleware def may define the scheme it enforces, not just name it: an
+  // `apiKey` or `basic` middleware is not expressible as a name alone. Kept
+  // aside because a def-defined scheme also says which request field carries
+  // the credential, so the fragment's own parameter is not documented twice.
+  const defSchemes = new Map<string, OpenAPIV3.SecuritySchemeObject>()
+  for (const m of g.middlewares) {
+    for (const [name, scheme] of Object.entries(m.securitySchemes ?? {})) {
+      if (declaredSchemes.has(name)) continue
+      components.securitySchemes![name] = scheme
+      declaredSchemes.add(name)
+      if (!('$ref' in scheme)) defSchemes.set(name, scheme)
+    }
+  }
+
   const schemaToOpenapi = (
     schema: STSchema
   ): { schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject; isJson?: boolean } => {
@@ -293,6 +307,23 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     .filter(m => m.header && Object.keys(m.header).length)
     .map(m => ({ segments: parseMiddlewarePattern(m.scope), header: m.header }))
 
+  // Middleware-scope security, from both ways a middleware can carry it: a
+  // middleware file's `@security` header and a def's `security` field. One rung
+  // of the precedence chain, so a packaged middleware documents itself the same
+  // whether it was registered in code or discovered as a file.
+  const hasSecurity = (s: unknown) => s !== undefined && !(Array.isArray(s) && !s.length)
+  // Nearest scope wins: a longer pattern is more specific, and an exact pattern
+  // beats a subtree wildcard of the same length. Ties keep declaration order,
+  // which puts a file's `@security` header ahead of the def it annotates — the
+  // annotation is the app's own word on a middleware it may not own.
+  const scopeRank = (s: string[]) => s.length * 2 + (s[s.length - 1] === '*' ? 0 : 1)
+  const mwSecurity = [
+    ...mwMeta
+      .filter(m => hasSecurity(m.header.security))
+      .map(m => ({ segments: m.segments, security: m.header.security })),
+    ...g.middlewares.filter(m => hasSecurity(m.security)).map(m => ({ segments: m.segments, security: m.security! })),
+  ].sort((a, b) => scopeRank(b.segments) - scopeRank(a.segments))
+
   // meta keys and spec paths are relative to basePath; route paths carry it
   const prefix = g.router.prefix || ''
   const relPath = (p: string) => (prefix && p.startsWith(prefix) ? p.slice(prefix.length) || '/' : p)
@@ -303,12 +334,8 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     const fileHeader = metaFileHeaders[rPath]
     if (r.static?.root) meta = metaStatic[r.static?.root]?.static
     if (meta?.hide) return
-    const inherited = mwMeta.filter(m =>
-      matchMiddleware(
-        m.segments,
-        rPath.split('/').filter(s => s !== '')
-      )
-    )
+    const rSegments = rPath.split('/').filter(s => s !== '')
+    const inherited = mwMeta.filter(m => matchMiddleware(m.segments, rSegments))
     let path = rPath.replaceAll(/:([^\/]+)/g, '{$1}')
     if (!(path in paths)) paths[path] = {}
     const metaTags = (m?: Record<string, any>) => [
@@ -317,13 +344,13 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     ]
     // tags accumulate from every scope that names one, nearest first
     let tags = [...new Set([...metaTags(meta), ...metaTags(fileHeader), ...inherited.flatMap(m => metaTags(m.header))])]
-    let security: Record<string, any> = []
+    let security: Record<string, any>[] = []
     let securityExplicitlyEmpty = false
 
     // nearest scope wins outright: the route, then its file's header, then the
-    // middleware files covering it
+    // middleware covering it — file annotation or def, already ordered
     const metaSecRaw =
-      meta?.security ?? fileHeader?.security ?? inherited.find(m => m.header.security !== undefined)?.header.security
+      meta?.security ?? fileHeader?.security ?? mwSecurity.find(m => matchMiddleware(m.segments, rSegments))?.security
     if (metaSecRaw !== undefined) {
       const entries = Array.isArray(metaSecRaw) ? metaSecRaw : [metaSecRaw]
       for (const e of entries) {
@@ -341,6 +368,20 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       }
     }
 
+    // A def-defined scheme says which request field carries the credential, so
+    // the fragment's own parameter for it is redundant — drop it, exactly like
+    // the legacy Bearer branch below drops `authorization`.
+    const credentialParams = new Set<string>()
+    for (const req of security) {
+      for (const name of Object.keys(req)) {
+        const scheme = defSchemes.get(name)
+        if (!scheme) continue
+        if (scheme.type === 'http') credentialParams.add('header:authorization')
+        else if (scheme.type === 'apiKey' && scheme.name)
+          credentialParams.add(`${scheme.in}:${scheme.name.toLowerCase()}`)
+      }
+    }
+
     let pathParam = r.schema?.params
       ? Object.entries(r.schema?.params as Record<string, STSchema>).map(([k, v]) => parseParam(k, v, 'path'))
       : []
@@ -353,7 +394,10 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
           .map(([k, v]) => {
             let p = parseParam(k, v, 'header')
             if (k.match(/authorization/i)) {
-              // TODO: handle other auth methods
+              // Legacy: sniffing a `Bearer ` pattern is how a hand-declared
+              // route schema — one with no middleware behind it — still gets a
+              // bearerAuth scheme. Declared security (`@security`, a def's
+              // `security`) is the mechanism; this covers nothing else.
               const str = v as STString
               if (str.pattern && str.pattern.toString() === '/^Bearer /') {
                 if (!metaSecuritySet) security.push({ bearerAuth: [] })
@@ -373,6 +417,8 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       ? Object.entries(r.schema?.cookies as Record<string, STSchema>).map(([k, v]) => parseParam(k, v, 'cookie'))
       : []
     let parameters = [...pathParam, ...queryParam, ...headerParam, ...cookieParam]
+    if (credentialParams.size)
+      parameters = parameters.filter(p => p && !credentialParams.has(`${p.in}:${p.name.toLowerCase()}`))
 
     let requestBody
     if (r.schema.body) {

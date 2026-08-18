@@ -176,7 +176,7 @@ export default {
 - **openapi.tags**: the document's [Tag Object](https://spec.openapis.org/oas/v3.0.3#tag-object) list — the descriptions behind the names operations use. Operations _name_ their tags through the `@tags` annotation; this is where a tag is described.
 - **openapi.security**: the document-level [Security Requirement](https://spec.openapis.org/oas/v3.0.3#security-requirement-object) list, applied to every operation that does not declare its own through `@security`.
 - **openapi.externalDocs**: the document's [External Documentation Object](https://spec.openapis.org/oas/v3.0.3#external-documentation-object). Route-level docs come from the `@externalDocs` annotation instead.
-- **openapi.securitySchemes**: the spec's [Security Schemes](https://spec.openapis.org/oas/v3.0.3#security-scheme-object), keyed by name. A route's `@security <name>` annotation _names_ a scheme; this is where the scheme itself is defined. A scheme declared here always wins over the `bearerAuth` the serializer infers from an `Authorization: Bearer` header.
+- **openapi.securitySchemes**: the spec's [Security Schemes](https://spec.openapis.org/oas/v3.0.3#security-scheme-object), keyed by name. A route's `@security <name>` annotation _names_ a scheme; this is where the scheme itself is defined. A scheme declared here wins over one a [middleware def declares](../concepts/middleware.md#security) under the same name, and over the `bearerAuth` the serializer infers from an `Authorization: Bearer` header.
 
 When generating a spec with `galbe generate spec`, values set here take precedence over the `package.json` inference (`name`, `description`, `author`, `license`, `version`), which itself takes precedence over the built-in defaults.
 

@@ -22,10 +22,11 @@ galbe.middleware(pattern: string, def: Hook | Hook[] | MiddlewareDef)  // routes
       hooks?: Hook | Hook[]
       schema?: { headers?: ...; query?: ...; params?: ... }
       security?: string | string[]
+      securitySchemes?: Record<string, SecuritySchemeObject>
     }
     ```
 
-    A bare hook (or hook array) is sugar for `{ hooks }`. `beforeParse` holds hooks that must run before the request body is read — see [Before Parsing](#before-parsing).
+    A bare hook (or hook array) is sugar for `{ hooks }`. `beforeParse` holds hooks that must run before the request body is read — see [Before Parsing](#before-parsing). `security` and `securitySchemes` document the auth the hooks enforce — see [Security](#security).
 
 Wrap a definition in `middleware()` to have its `schema` type its own hooks. The helper is the identity at runtime — it exists so the object literal has something to be contextually typed against, exactly like [`config()`](../reference/configuration.md):
 
@@ -82,13 +83,34 @@ galbe.get('/api/users', ctx => listUsers()) // requires the authorization header
 
 The fragment covers `headers`, `query` and `params` — the parts of a request a route-scoped middleware can reasonably constrain. Merged keys behave exactly as if the route had declared them: they are validated on every request, and they appear in the generated OpenAPI spec, client and CLI.
 
-`security` names the OpenAPI security scheme(s) the hooks enforce. It is metadata: it never affects runtime behavior.
-
-> [!NOTE]
-> `security` is recorded on the middleware but not read by the OpenAPI serializer yet — it currently derives security from the middleware-file `@security` annotation and from an `authorization` header matching the `/^Bearer /` pattern, which the fragment above satisfies.
-
 - **Merging is per key, and the route wins.** A route that declares the same key keeps its own definition, so it can always tighten or override a fragment.
 - **Fragments are merged at registration**, whether the middleware is declared before or after the routes it matches, and re-merging is idempotent.
+
+### Security
+
+`security` names the OpenAPI security scheme(s) the hooks enforce, and `securitySchemes` defines them. Both are metadata: they never affect runtime behavior, they document what the hooks already do.
+
+```ts
+export const apiKey = middleware({
+  schema: { headers: { 'x-api-key': $T.string() } },
+  security: 'apiKeyAuth',
+  securitySchemes: { apiKeyAuth: { type: 'apiKey', in: 'header', name: 'x-api-key' } },
+  hooks: checkKey,
+})
+```
+
+Every operation the middleware matches gets `security: [{ apiKeyAuth: [] }]`, and `components.securitySchemes` gets the definition — the same output a [middleware file's `@security` header](#middleware-files) produces, so a packaged middleware documents itself the same whether it is registered in code or discovered as a file.
+
+- **`security`** is a name, or a list of names for alternatives (`['bearerAuth', 'apiKeyAuth']`). Scopes follow the name, space-separated: `'oauth2 read write'` becomes `{ oauth2: ['read', 'write'] }`. `'none'` documents the scope as public (`security: []`), the same escape the annotation has.
+- **`securitySchemes`** has the same shape as [`config.openapi.securitySchemes`](../reference/configuration.md#openapi), which wins on conflict. It is only needed for a scheme the app does not already declare — naming `bearerAuth` alone is enough to get `{ type: 'http', scheme: 'bearer' }`.
+- **The scheme owns its credential.** A scheme that says where the credential travels (`http` ⇒ `Authorization`, `apiKey` ⇒ its `name`/`in`) replaces the fragment's own parameter for it, rather than documenting the same header twice. The header is still validated at runtime.
+
+**Precedence** runs from the nearest scope outwards, first declaration winning outright — unlike `@tags`, which accumulate:
+
+1. the route's own `@security`;
+2. its [route file's header](routes.md#route-files);
+3. the middleware covering it — nearest pattern first (`/api/admin/*` before `/api/*` before `*`), and at one scope a file's `@security` header ahead of the `security` of the def it annotates;
+4. failing all of those, a route schema declaring an `authorization` header with a `/^Bearer /` pattern still infers `bearerAuth`. That inference is legacy support for hand-declared schemas, not the mechanism.
 
 ### Fragments and Types
 
@@ -258,7 +280,7 @@ export default middleware({ hooks: auditHook })
 2. middleware files, sorted by directory depth (shallowest first) then path — outer scopes wrap inner ones;
 3. registrations inside route files, in file import order.
 
-A `@galbe-ignore` comment above the default export skips the file. Header annotations (`/** @security bearerAuth */`, `@tags`) apply to every operation in the file's scope in the generated OpenAPI spec. Precedence runs from the nearest scope outwards: the route's own metadata, then its [route file's header](routes.md#route-files), then the middleware files covering it.
+A `@galbe-ignore` comment above the default export skips the file. Header annotations (`/** @security bearerAuth */`, `@tags`) apply to every operation in the file's scope in the generated OpenAPI spec, and a `@security` header overrides the `security` of the def it annotates — the app's own word on a middleware it may not own. See [Security](#security) for the whole precedence chain.
 
 ### Scoping Summary
 

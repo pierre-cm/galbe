@@ -195,7 +195,7 @@ export default galbe => {
 }
 ```
 
-Precedence runs from the nearest scope outwards — the route, then its file's header, then the middleware files covering it. `@security` takes the first one that names anything (`none` being the explicit "no security" escape); `@tags` accumulate across all three.
+Precedence runs from the nearest scope outwards — the route, then its file's header, then the [middleware](middleware.md#security) covering it (a middleware file's header, or a def's own `security`). `@security` takes the first one that names anything (`none` being the explicit "no security" escape); `@tags` accumulate across all three.
 
 The head convention expresses "summary, then description" and nothing else. Two annotations override it, each on its own half:
 

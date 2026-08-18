@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Galbe } from '../src'
 import { defineRoutes } from '../src/routes'
+import { OpenAPISerializer } from '../src/extras/spec/openapi.serializer'
 
 const TREE = 'test/resources/tree'
 const ROUTES = `${TREE}/**/*.route.ts`
@@ -53,6 +54,28 @@ describe('middleware files', () => {
     expect(Object.keys(g.router.find('get', '/api/users').schema.headers ?? {})).toEqual(['x-tenant-id'])
     expect(g.router.find('get', '/health').schema.headers).toBeUndefined()
     expect(g.middlewares[0]).toMatchObject({ pattern: '/api/users/*', security: 'apiKey' })
+  })
+
+  test("a discovered def's security reaches the spec, nearest scope winning", async () => {
+    const g = new Galbe()
+    await defineRoutes({ routes: ROUTES, middleware: MW }, g)
+    const spec = await OpenAPISerializer(g)
+    const op = (p: string) => (spec.paths![p] as any).get
+
+    // the def at /api/users/* is nearer than auth.middleware.ts's @security at /api/*
+    expect(op('/api/users').security).toEqual([{ apiKey: [] }])
+    // the def defines the scheme it names, so it needs no config entry
+    expect(spec.components?.securitySchemes?.apiKey).toEqual({ type: 'apiKey', in: 'header', name: 'x-tenant-id' })
+    // and the scheme documents x-tenant-id, so the fragment's parameter is dropped
+    // (shared parameters are promoted to components and referenced by $ref)
+    const params = op('/api/users').parameters.map(
+      (p: any) => p.name ?? (spec.components!.parameters as any)[p.$ref.split('/').pop()].name
+    )
+    expect(params).toContain('x-api')
+    expect(params).not.toContain('x-tenant-id')
+    // outside the def's scope, the middleware-file header still applies
+    expect(op('/api/admin/stats').security).toEqual([{ bearerAuth: [] }])
+    expect(op('/health').security).toBeUndefined()
   })
 
   test('a file exporting neither a def nor a registration function errors', async () => {

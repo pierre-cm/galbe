@@ -373,6 +373,136 @@ describe('openapi serializer', () => {
     expect(op('/health').tags).toBeUndefined()
   })
 
+  test("a code-registered middleware's security documents like a middleware file's @security", async () => {
+    const g = new Galbe()
+    g.middleware('/api/*', { security: 'bearerAuth', hooks: (_, next) => next() })
+    g.get('/api/items', () => [])
+    g.get('/health', () => 'ok')
+
+    const spec = await OpenAPISerializer(g)
+    const op = (p: string) => (spec.paths![p] as any).get
+    expect(op('/api/items').security).toEqual([{ bearerAuth: [] }])
+    // naming bearerAuth is enough to get the scheme defined, as an annotation is
+    expect(spec.components?.securitySchemes?.bearerAuth).toEqual({ type: 'http', scheme: 'bearer' })
+    // outside the pattern: untouched
+    expect(op('/health').security).toBeUndefined()
+  })
+
+  test('a def can carry scopes, several requirements and the public escape', async () => {
+    const g = new Galbe()
+    g.middleware('/api/*', { security: 'oauth2 read write' })
+    g.middleware('/alt/*', { security: ['bearerAuth', 'apiKeyAuth'] })
+    g.middleware('/open/*', { security: 'none' })
+    for (const p of ['/api/items', '/alt/items', '/open/items']) g.get(p, () => [])
+
+    const spec = await OpenAPISerializer(g)
+    const op = (p: string) => (spec.paths![p] as any).get
+    expect(op('/api/items').security).toEqual([{ oauth2: ['read', 'write'] }])
+    // a list is a list of alternatives, exactly like a repeated @security
+    expect(op('/alt/items').security).toEqual([{ bearerAuth: [] }, { apiKeyAuth: [] }])
+    // 'none' documents the scope as public, not as "nothing declared"
+    expect(op('/open/items').security).toEqual([])
+  })
+
+  test('an apiKey-shaped def registers its own scheme instead of bearerAuth', async () => {
+    const g = new Galbe()
+    g.middleware('/api/*', {
+      schema: { headers: { 'x-api-key': $T.string() } },
+      security: 'apiKeyAuth',
+      securitySchemes: { apiKeyAuth: { type: 'apiKey', in: 'header', name: 'x-api-key' } },
+    })
+    g.get('/api/items', { query: { page: $T.optional($T.integer()) } }, () => [])
+
+    const spec = await OpenAPISerializer(g)
+    const op = (spec.paths!['/api/items'] as any).get
+    expect(op.security).toEqual([{ apiKeyAuth: [] }])
+    expect(spec.components?.securitySchemes).toEqual({
+      apiKeyAuth: { type: 'apiKey', in: 'header', name: 'x-api-key' },
+    })
+    expect(spec.components?.securitySchemes?.bearerAuth).toBeUndefined()
+    // the scheme already says where the credential goes: no duplicate parameter
+    expect(op.parameters).toEqual([
+      { name: 'page', in: 'query', description: undefined, required: undefined, schema: { type: 'integer' } },
+    ])
+  })
+
+  test('an http-scheme def drops the fragment authorization header, pattern or not', async () => {
+    const g = new Galbe()
+    g.middleware('/basic/*', {
+      schema: { headers: { authorization: $T.string() } },
+      security: 'basicAuth',
+      securitySchemes: { basicAuth: { type: 'http', scheme: 'basic' } },
+    })
+    // a def naming what the Bearer pattern would have sniffed: one requirement
+    g.middleware('/jwt/*', {
+      schema: { headers: { authorization: $T.string({ pattern: /^Bearer /, format: 'JWT' }) } },
+      security: 'bearerAuth',
+    })
+    g.get('/basic/items', () => [])
+    g.get('/jwt/items', () => [])
+
+    const spec = await OpenAPISerializer(g)
+    const op = (p: string) => (spec.paths![p] as any).get
+    expect(op('/basic/items').security).toEqual([{ basicAuth: [] }])
+    expect(op('/basic/items').parameters).toBeUndefined()
+    expect(spec.components?.securitySchemes?.basicAuth).toEqual({ type: 'http', scheme: 'basic' })
+    expect(op('/jwt/items').security).toEqual([{ bearerAuth: [] }])
+    expect(op('/jwt/items').parameters).toBeUndefined()
+    expect(spec.components?.securitySchemes?.bearerAuth).toMatchObject({ scheme: 'bearer', bearerFormat: 'JWT' })
+  })
+
+  test('a config-declared scheme wins over a def-declared one of the same name', async () => {
+    const g = new Galbe({
+      openapi: { securitySchemes: { apiKeyAuth: { type: 'apiKey', in: 'query', name: 'token' } } },
+    })
+    g.middleware('/api/*', {
+      security: 'apiKeyAuth',
+      securitySchemes: { apiKeyAuth: { type: 'apiKey', in: 'header', name: 'x-api-key' } },
+    })
+    g.get('/api/items', () => [])
+
+    const spec = await OpenAPISerializer(g)
+    expect(spec.components?.securitySchemes?.apiKeyAuth).toEqual({ type: 'apiKey', in: 'query', name: 'token' })
+  })
+
+  test('route and route-file metadata still override a def, including @security none', async () => {
+    const g = new Galbe()
+    g.middleware('/api/*', { security: 'bearerAuth' })
+    g.meta = [
+      {
+        file: 'api.route.ts',
+        header: {},
+        routes: { '/api/open': { get: { security: 'none' } }, '/api/key': { get: { security: 'apiKeyAuth' } } },
+      },
+      { file: 'other.route.ts', header: { security: 'oauth2' }, routes: { '/api/file': { get: {} } } },
+    ]
+    for (const p of ['/api/open', '/api/key', '/api/file']) g.get(p, () => [])
+
+    const spec = await OpenAPISerializer(g)
+    const op = (p: string) => (spec.paths![p] as any).get
+    expect(op('/api/open').security).toEqual([])
+    expect(op('/api/key').security).toEqual([{ apiKeyAuth: [] }])
+    expect(op('/api/file').security).toEqual([{ oauth2: [] }])
+  })
+
+  test('among middleware scopes the nearest one wins, and an annotation beats the def it annotates', async () => {
+    const g = new Galbe()
+    g.middleware('*', { security: 'globalAuth' })
+    g.middleware('/api/*', { security: 'bearerAuth' })
+    g.middleware('/api/admin/*', { security: 'adminAuth' })
+    // a middleware file: the header annotates the def registered from that file
+    g.middleware('/tenant/*', { security: 'defAuth' })
+    g.metaMiddleware.push({ file: 'tenant.middleware.ts', scope: '/tenant/*', header: { security: 'headerAuth' } })
+    for (const p of ['/free', '/api/items', '/api/admin/users', '/tenant/items']) g.get(p, () => [])
+
+    const spec = await OpenAPISerializer(g)
+    const op = (p: string) => (spec.paths![p] as any).get
+    expect(op('/free').security).toEqual([{ globalAuth: [] }])
+    expect(op('/api/items').security).toEqual([{ bearerAuth: [] }])
+    expect(op('/api/admin/users').security).toEqual([{ adminAuth: [] }])
+    expect(op('/tenant/items').security).toEqual([{ headerAuth: [] }])
+  })
+
   test('a middleware schema fragment documents like a route-declared schema', async () => {
     const auth = { headers: { authorization: $T.string({ pattern: /^Bearer / }) } }
     const g = new Galbe()
