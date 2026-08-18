@@ -401,11 +401,16 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
               const str = v as STString
               if (str.pattern && str.pattern.toString() === '/^Bearer /') {
                 if (!metaSecuritySet) security.push({ bearerAuth: [] })
-                const scheme: OpenAPIV3.HttpSecurityScheme = { type: 'http', scheme: 'bearer' }
-                if (typeof str.format === 'string') scheme.bearerFormat = str.format
-                if (typeof str.description === 'string') scheme.description = str.description
-                if (!components.securitySchemes) components.securitySchemes = {}
-                if (!declaredSchemes.has('bearerAuth')) components.securitySchemes.bearerAuth = scheme
+                // A declared scheme already owning the header leaves nothing to
+                // infer: defining bearerAuth here would add a scheme no
+                // operation references.
+                if (!credentialParams.has('header:authorization')) {
+                  const scheme: OpenAPIV3.HttpSecurityScheme = { type: 'http', scheme: 'bearer' }
+                  if (typeof str.format === 'string') scheme.bearerFormat = str.format
+                  if (typeof str.description === 'string') scheme.description = str.description
+                  if (!components.securitySchemes) components.securitySchemes = {}
+                  if (!declaredSchemes.has('bearerAuth')) components.securitySchemes.bearerAuth = scheme
+                }
                 return null
               }
             }

@@ -20,6 +20,14 @@
       "types": "./src/schema.ts",
       "default": "./src/schema.ts"
     },
+    "./middlewares": {
+      "types": "./src/middlewares.ts",
+      "default": "./src/middlewares.ts"
+    },
+    "./middlewares/*": {
+      "types": "./src/middlewares/*.ts",
+      "default": "./src/middlewares/*.ts"
+    },
     "./extras": {
       "types": "./src/extras.ts",
       "default": "./src/extras.ts"

@@ -451,6 +451,21 @@ describe('openapi serializer', () => {
     expect(spec.components?.securitySchemes?.bearerAuth).toMatchObject({ scheme: 'bearer', bearerFormat: 'JWT' })
   })
 
+  test('a def naming its own http scheme leaves no unreferenced bearerAuth behind', async () => {
+    const g = new Galbe()
+    g.middleware('/api/*', {
+      schema: { headers: { authorization: $T.string({ pattern: /^Bearer /, format: 'JWT' }) } },
+      security: 'tenantAuth',
+      securitySchemes: { tenantAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
+    })
+    g.get('/api/items', () => [])
+
+    const spec = await OpenAPISerializer(g)
+    expect(Object.keys(spec.components?.securitySchemes ?? {})).toEqual(['tenantAuth'])
+    expect((spec.paths!['/api/items'] as any).get.security).toEqual([{ tenantAuth: [] }])
+    expect((spec.paths!['/api/items'] as any).get.parameters).toBeUndefined()
+  })
+
   test('a config-declared scheme wins over a def-declared one of the same name', async () => {
     const g = new Galbe({
       openapi: { securitySchemes: { apiKeyAuth: { type: 'apiKey', in: 'query', name: 'token' } } },

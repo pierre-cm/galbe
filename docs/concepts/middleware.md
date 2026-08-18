@@ -224,6 +224,18 @@ The context is restricted to what actually exists at that point: `request`, `rou
 > [!NOTE]
 > `beforeParse` is still middleware: it runs only for requests that matched a route, and only for routes matching its pattern. Work that must also cover unrouted requests belongs in a [Plugin](plugins.md)'s `onFetch`.
 
+## Built-in Middlewares
+
+The middlewares most applications end up writing ship with Galbe, under `galbe/middlewares`. Each is an ordinary definition — hooks, request contract and security metadata in one value — so installing one is a single registration:
+
+```ts
+import { jwt } from 'galbe/middlewares'
+
+galbe.middleware('/api/*', jwt({ publicKey: Bun.env.JWT_SECRET! }))
+```
+
+See the [Middlewares reference](../reference/middlewares.md) for the full list and their configuration.
+
 ## Middleware Files
 
 > [!NOTE]
