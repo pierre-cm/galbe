@@ -1,9 +1,11 @@
-import type { OpenAPIV3 } from 'openapi-types'
-import type { MiddlewareDef, PreParseContext, PreParseHook } from '../types'
+import type { MiddlewareDef, PreParseContext } from '../types'
 import type { STOptional, STString } from '../schema'
+import type { AuthErrorHandler } from './_auth'
 
 import { $T } from '../index'
-import { UnauthorizedError } from '../types'
+import { AuthError, authHook, bearerChallenge, checkRealm, readCredential, securityMetadata } from './_auth'
+
+export { AuthError } from './_auth'
 
 // `none` is deliberately absent, and nothing outside this list is ever accepted.
 const ALGORITHMS = ['HS256', 'HS384', 'HS512', 'RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'] as const
@@ -28,7 +30,11 @@ export type JwtPayload = {
   iat?: number
   jti?: string
 } & Record<string, any>
-/** Why verification failed. Available to {@link JwtConfig.errorHandler}; never sent to the client. */
+/**
+ * Why verification failed — the three {@link AuthError} codes plus everything
+ * specific to a signed token. Available to {@link JwtConfig.errorHandler};
+ * never sent to the client.
+ */
 export type JwtErrorCode =
   | 'missing'
   | 'malformed'
@@ -42,12 +48,10 @@ export type JwtErrorCode =
   | 'invalid'
 
 /** Thrown internally on every rejection, and handed to {@link JwtConfig.errorHandler}. */
-export class JwtError extends Error {
-  code: JwtErrorCode
+export class JwtError extends AuthError<JwtErrorCode> {
   constructor(code: JwtErrorCode, message: string) {
-    super(message)
+    super(code, message)
     this.name = 'JwtError'
-    this.code = code
   }
 }
 
@@ -79,12 +83,14 @@ export type JwtConfig = {
   clockTolerance?: number
   /** Extra payload check run after the standard claims. Returning `false` rejects the request. */
   validate?: (payload: JwtPayload, ctx: PreParseContext) => boolean | Promise<boolean>
+  /** Protection space named in the `WWW-Authenticate` challenge. Omitted by default. */
+  realm?: string
   /**
    * Replaces the default rejection. Return a `Response` to answer the request,
    * or nothing to let it through **unauthenticated** (optional auth); throwing
    * takes the usual error handler path.
    */
-  errorHandler?: (error: JwtError, ctx: PreParseContext) => Response | void | Promise<Response | void>
+  errorHandler?: AuthErrorHandler<JwtError>
   /**
    * Name of the OpenAPI security scheme contributed — `bearerAuth` for the
    * bearer source, `cookieAuth` for a cookie one. Rename it when two instances
@@ -266,18 +272,16 @@ export const jwt = (config: JwtConfig): MiddlewareDef<JwtFragment> => {
   for (const source of sources)
     if (source !== 'bearer' && !source.startsWith('cookie:'))
       throw new SyntaxError(`jwt: invalid source '${source}', expected 'bearer' or 'cookie:<name>'`)
+  const realm = checkRealm('jwt', config.realm)
   const bearer = sources.includes('bearer')
 
   const read = (ctx: PreParseContext) => {
     for (const source of sources) {
-      if (source === 'bearer') {
-        const token = ctx.request.headers.get('authorization')?.match(/^Bearer +(.+)$/i)?.[1]
-        if (token) return token
-      } else {
-        // cookie names are request-controlled keys: never reach through the prototype
-        const name = source.slice(7)
-        if (Object.hasOwn(ctx.cookies, name) && ctx.cookies[name]) return String(ctx.cookies[name])
-      }
+      const token =
+        source === 'bearer'
+          ? readCredential(ctx, 'header', 'authorization', 'Bearer ')
+          : readCredential(ctx, 'cookie', source.slice(7))
+      if (token) return token
     }
   }
 
@@ -320,8 +324,8 @@ export const jwt = (config: JwtConfig): MiddlewareDef<JwtFragment> => {
       throw new JwtError('subject', `unexpected subject '${payload.sub}'`)
   }
 
-  const beforeParse: PreParseHook = async ctx => {
-    try {
+  const beforeParse = authHook(
+    async ctx => {
       const token = read(ctx)
       if (!token) throw new JwtError('missing', 'no token found in the request')
       const payload = await verify(token)
@@ -329,40 +333,28 @@ export const jwt = (config: JwtConfig): MiddlewareDef<JwtFragment> => {
       if (config.validate && !(await config.validate(payload, ctx)))
         throw new JwtError('invalid', 'payload rejected by validate()')
       ctx.state[stateHolder] = payload
-    } catch (error) {
-      // anything that is not a verification failure — a bad key, a throwing
-      // validate() — is a real error and must not be flattened into a 401
-      if (!(error instanceof JwtError)) throw error
-      if (config.errorHandler) return config.errorHandler(error, ctx)
-      throw new UnauthorizedError(
-        undefined,
-        bearer
-          ? { 'www-authenticate': error.code === 'missing' ? 'Bearer' : 'Bearer error="invalid_token"' }
-          : undefined
-      )
+    },
+    {
+      errorHandler: config.errorHandler,
+      // a cookie-sourced token has no challenge to answer with
+      challenge: bearer ? error => bearerChallenge(realm, error.code) : undefined,
     }
-  }
+  )
 
-  // One scheme per source, so a cookie-sourced token documents as the cookie it
-  // is. Names are deduplicated: two sources of the same kind get a numeric suffix.
-  const securitySchemes: Record<string, OpenAPIV3.SecuritySchemeObject> = Object.create(null)
-  const security: string[] = []
-  if (config.securityScheme !== false)
-    for (const source of sources) {
-      const wanted = config.securityScheme ?? (source === 'bearer' ? 'bearerAuth' : 'cookieAuth')
-      let name = wanted
-      for (let i = 2; Object.hasOwn(securitySchemes, name); i++) name = `${wanted}${i}`
-      securitySchemes[name] =
-        source === 'bearer'
-          ? { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }
-          : { type: 'apiKey', in: 'cookie', name: source.slice(7) }
-      security.push(name)
-    }
+  // One scheme per source, so a cookie-sourced token documents as the cookie it is
+  const { security, securitySchemes } = securityMetadata(
+    sources.map(source =>
+      source === 'bearer'
+        ? { name: 'bearerAuth', scheme: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } as const }
+        : { name: 'cookieAuth', scheme: { type: 'apiKey', in: 'cookie', name: source.slice(7) } as const }
+    ),
+    config.securityScheme
+  )
 
-  // The `Bearer ` pattern is what the serializer's legacy sniffing infers a
-  // bearerAuth scheme from — left out when security metadata is opted out of,
-  // so `securityScheme: false` really emits none.
-  const authorization = $T.optional($T.string({ ...(security.length ? { pattern: /^Bearer / } : {}), format: 'JWT' }))
+  // the pattern is case-insensitive because the scheme name is (RFC 9110 §11.1)
+  // and the hook reads it that way: a fragment that rejected `bearer <token>`
+  // would 400 a request its own middleware just authenticated
+  const authorization = $T.optional($T.string({ pattern: /^Bearer /i, format: 'JWT' }))
   return {
     beforeParse,
     ...(bearer ? { schema: { headers: { authorization } } } : {}),

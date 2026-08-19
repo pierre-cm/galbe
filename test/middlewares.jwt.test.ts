@@ -399,7 +399,7 @@ describe('jwt schema fragment and security metadata', async () => {
     g.get('/other', () => 'other')
 
     const headers = g.router.find('get', '/api/x').schema.headers as Record<string, any>
-    expect(headers.authorization).toMatchObject({ format: 'JWT', pattern: /^Bearer / })
+    expect(headers.authorization).toMatchObject({ format: 'JWT', pattern: /^Bearer /i })
     expect(g.router.find('get', '/other').schema.headers).toBeUndefined()
   })
 

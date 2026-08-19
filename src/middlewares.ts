@@ -16,6 +16,9 @@
  * galbe.middleware('/api/*', jwt({ publicKey: Bun.env.JWT_SECRET! }))
  * ```
  */
+export { AuthError } from './middlewares/_auth'
+export type { AuthErrorCode, AuthErrorHandler } from './middlewares/_auth'
+
 export { jwt, JwtError, signJwt } from './middlewares/jwt'
 export type {
   JwtAlgorithm,
@@ -27,3 +30,12 @@ export type {
   JwtSignOptions,
   JwtSource,
 } from './middlewares/jwt'
+
+export { bearer } from './middlewares/bearer'
+export type { BearerConfig, BearerFragment } from './middlewares/bearer'
+
+export { apiKey } from './middlewares/apiKey'
+export type { ApiKeyConfig, ApiKeyFragment } from './middlewares/apiKey'
+
+export { basicAuth } from './middlewares/basicAuth'
+export type { BasicAuthConfig, BasicAuthFragment } from './middlewares/basicAuth'

@@ -72,21 +72,17 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     requestBodies: {},
     responses: {},
   }
-  // A scheme the app declared is authoritative: never overwrite it with one
-  // inferred from a route's Authorization header.
+  // A scheme the app declared is authoritative: a middleware def may not
+  // redefine a name the config already owns.
   const declaredSchemes = new Set(Object.keys(g.config?.openapi?.securitySchemes ?? {}))
 
   // A middleware def may define the scheme it enforces, not just name it: an
-  // `apiKey` or `basic` middleware is not expressible as a name alone. Kept
-  // aside because a def-defined scheme also says which request field carries
-  // the credential, so the fragment's own parameter is not documented twice.
-  const defSchemes = new Map<string, OpenAPIV3.SecuritySchemeObject>()
+  // `apiKey` or `basic` middleware is not expressible as a name alone.
   for (const m of g.middlewares) {
     for (const [name, scheme] of Object.entries(m.securitySchemes ?? {})) {
       if (declaredSchemes.has(name)) continue
       components.securitySchemes![name] = scheme
       declaredSchemes.add(name)
-      if (!('$ref' in scheme)) defSchemes.set(name, scheme)
     }
   }
 
@@ -368,14 +364,15 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
       }
     }
 
-    // A def-defined scheme says which request field carries the credential, so
-    // the fragment's own parameter for it is redundant — drop it, exactly like
-    // the legacy Bearer branch below drops `authorization`.
+    // A scheme says which request field carries the credential, so the schema's
+    // own parameter for it is redundant: the operation documents it as auth, not
+    // as a plain header. Schemes are resolved wherever they were defined — the
+    // app config, a middleware def, or the bearerAuth default just above.
     const credentialParams = new Set<string>()
     for (const req of security) {
       for (const name of Object.keys(req)) {
-        const scheme = defSchemes.get(name)
-        if (!scheme) continue
+        const scheme = components.securitySchemes?.[name]
+        if (!scheme || '$ref' in scheme) continue
         if (scheme.type === 'http') credentialParams.add('header:authorization')
         else if (scheme.type === 'apiKey' && scheme.name)
           credentialParams.add(`${scheme.in}:${scheme.name.toLowerCase()}`)
@@ -388,35 +385,8 @@ export const OpenAPISerializer = async (g: Galbe, version = '3.0.3'): Promise<Op
     let queryParam = r.schema?.query
       ? Object.entries(r.schema?.query as Record<string, STSchema>).map(([k, v]) => parseParam(k, v, 'query'))
       : []
-    const metaSecuritySet = security.length > 0
     let headerParam = r.schema?.headers
-      ? Object.entries(r.schema?.headers as Record<string, STSchema>)
-          .map(([k, v]) => {
-            let p = parseParam(k, v, 'header')
-            if (k.match(/authorization/i)) {
-              // Legacy: sniffing a `Bearer ` pattern is how a hand-declared
-              // route schema — one with no middleware behind it — still gets a
-              // bearerAuth scheme. Declared security (`@security`, a def's
-              // `security`) is the mechanism; this covers nothing else.
-              const str = v as STString
-              if (str.pattern && str.pattern.toString() === '/^Bearer /') {
-                if (!metaSecuritySet) security.push({ bearerAuth: [] })
-                // A declared scheme already owning the header leaves nothing to
-                // infer: defining bearerAuth here would add a scheme no
-                // operation references.
-                if (!credentialParams.has('header:authorization')) {
-                  const scheme: OpenAPIV3.HttpSecurityScheme = { type: 'http', scheme: 'bearer' }
-                  if (typeof str.format === 'string') scheme.bearerFormat = str.format
-                  if (typeof str.description === 'string') scheme.description = str.description
-                  if (!components.securitySchemes) components.securitySchemes = {}
-                  if (!declaredSchemes.has('bearerAuth')) components.securitySchemes.bearerAuth = scheme
-                }
-                return null
-              }
-            }
-            return p
-          })
-          .filter(p => p)
+      ? Object.entries(r.schema?.headers as Record<string, STSchema>).map(([k, v]) => parseParam(k, v, 'header'))
       : []
     let cookieParam = r.schema?.cookies
       ? Object.entries(r.schema?.cookies as Record<string, STSchema>).map(([k, v]) => parseParam(k, v, 'cookie'))

@@ -72,7 +72,7 @@ Hooks usually expect something from the request: an `Authorization` header, an A
 galbe.middleware(
   '/api/*',
   middleware({
-    schema: { headers: { authorization: $T.string({ pattern: /^Bearer / }) } },
+    schema: { headers: { authorization: $T.string({ pattern: /^Bearer /i }) } },
     security: 'bearerAuth',
     hooks: authHook,
   })
@@ -109,8 +109,9 @@ Every operation the middleware matches gets `security: [{ apiKeyAuth: [] }]`, an
 
 1. the route's own `@security`;
 2. its [route file's header](routes.md#route-files);
-3. the middleware covering it — nearest pattern first (`/api/admin/*` before `/api/*` before `*`), and at one scope a file's `@security` header ahead of the `security` of the def it annotates;
-4. failing all of those, a route schema declaring an `authorization` header with a `/^Bearer /` pattern still infers `bearerAuth`. That inference is legacy support for hand-declared schemas, not the mechanism.
+3. the middleware covering it — nearest pattern first (`/api/admin/*` before `/api/*` before `*`), and at one scope a file's `@security` header ahead of the `security` of the def it annotates.
+
+Security is **declared, never inferred**: an operation with no `security` at any of those scopes documents as public, whatever its headers happen to look like. A route declaring an `authorization` header is documenting a header — to document authentication, name the scheme.
 
 ### Fragments and Types
 
@@ -229,12 +230,15 @@ The context is restricted to what actually exists at that point: `request`, `rou
 The middlewares most applications end up writing ship with Galbe, under `galbe/middlewares`. Each is an ordinary definition — hooks, request contract and security metadata in one value — so installing one is a single registration:
 
 ```ts
-import { jwt } from 'galbe/middlewares'
+import { jwt, bearer, apiKey, basicAuth } from 'galbe/middlewares'
 
 galbe.middleware('/api/*', jwt({ publicKey: Bun.env.JWT_SECRET! }))
+galbe.middleware('/hooks/*', bearer({ token: Bun.env.WEBHOOK_TOKEN! }))
+galbe.middleware('/svc/*', apiKey({ key: Bun.env.API_KEY! }))
+galbe.middleware('/metrics/*', basicAuth({ users: { prometheus: Bun.env.METRICS_PASSWORD! } }))
 ```
 
-See the [Middlewares reference](../reference/middlewares.md) for the full list and their configuration.
+Each declares the credential it reads and the security scheme that enforces it, so the routes it matches document themselves. See the [Middlewares reference](../reference/middlewares.md) for the full list and their configuration.
 
 ## Middleware Files
 

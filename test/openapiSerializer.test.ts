@@ -433,7 +433,8 @@ describe('openapi serializer', () => {
       security: 'basicAuth',
       securitySchemes: { basicAuth: { type: 'http', scheme: 'basic' } },
     })
-    // a def naming what the Bearer pattern would have sniffed: one requirement
+    // a def naming bearerAuth without defining it: the default scheme owns the
+    // header just the same, so the fragment's parameter is still dropped
     g.middleware('/jwt/*', {
       schema: { headers: { authorization: $T.string({ pattern: /^Bearer /, format: 'JWT' }) } },
       security: 'bearerAuth',
@@ -448,7 +449,8 @@ describe('openapi serializer', () => {
     expect(spec.components?.securitySchemes?.basicAuth).toEqual({ type: 'http', scheme: 'basic' })
     expect(op('/jwt/items').security).toEqual([{ bearerAuth: [] }])
     expect(op('/jwt/items').parameters).toBeUndefined()
-    expect(spec.components?.securitySchemes?.bearerAuth).toMatchObject({ scheme: 'bearer', bearerFormat: 'JWT' })
+    // a bearerFormat needs the scheme declared: nothing is inferred from the header
+    expect(spec.components?.securitySchemes?.bearerAuth).toEqual({ type: 'http', scheme: 'bearer' })
   })
 
   test('a def naming its own http scheme leaves no unreferenced bearerAuth behind', async () => {
@@ -529,9 +531,13 @@ describe('openapi serializer', () => {
     const spec = await OpenAPISerializer(g)
     const op = (p: string) => (spec.paths[p] as any).get
     expect(op('/api/items')).toEqual(op('/declared'))
-    expect(op('/api/items').security).toEqual([{ bearerAuth: [] }])
-    expect(spec.components?.securitySchemes?.bearerAuth).toMatchObject({ type: 'http', scheme: 'bearer' })
-    expect(op('/plain').security).toBeUndefined()
+    // an authorization header is a header and nothing more: auth is documented
+    // by a declared scheme, never inferred from what a header looks like
+    expect(op('/api/items').parameters).toMatchObject([{ $ref: '#/components/parameters/Authorization' }])
+    expect(spec.components?.parameters?.Authorization).toMatchObject({ name: 'authorization', in: 'header' })
+    expect(op('/api/items').security).toBeUndefined()
+    expect(spec.components?.securitySchemes).toBeUndefined()
+    expect(op('/plain').parameters).toBeUndefined()
   })
 
   test('a query fragment becomes a documented parameter', async () => {
@@ -546,27 +552,18 @@ describe('openapi serializer', () => {
     ])
   })
 
-  test('Bearer-pattern auth header does not clobber other security schemes', async () => {
-    // Two operations: one declares `bearerAuth` via meta-style (synthetic),
-    // another declares it via the Authorization-pattern path. The serializer
-    // used to overwrite the whole `securitySchemes` object on the second one.
-    const g = new Galbe()
-    // Manually seed a custom scheme to ensure the merge keeps it.
-    g.get('/a', { headers: { authorization: $T.string({ pattern: /^Bearer / }) } }, () => 'a')
+  test('a config-declared scheme owns its credential, so the route header is not documented twice', async () => {
+    const g = new Galbe({
+      openapi: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } },
+    })
+    g.middleware('/api/*', { security: 'bearerAuth' })
+    g.get('/api/items', { headers: { authorization: $T.string() } }, () => [])
+    g.get('/plain', { headers: { authorization: $T.string() } }, () => [])
 
     const spec = await OpenAPISerializer(g)
-    // Fake a pre-existing scheme by rerunning the serializer with a
-    // pre-populated components object — easier: we just check that the
-    // bearerAuth scheme is present and structured.
-    expect(spec.components?.securitySchemes?.bearerAuth).toMatchObject({
-      type: 'http',
-      scheme: 'bearer',
-    })
-
-    // Add a second route with the same pattern; previously this could have
-    // wiped any other entry on `securitySchemes`. Verify bearerAuth survives.
-    g.get('/b', { headers: { authorization: $T.string({ pattern: /^Bearer / }) } }, () => 'b')
-    const spec2 = await OpenAPISerializer(g)
-    expect(spec2.components?.securitySchemes?.bearerAuth).toBeDefined()
+    const op = (p: string) => (spec.paths![p] as any).get
+    expect(op('/api/items').parameters).toBeUndefined()
+    // no requirement on it, so the same header stays an ordinary parameter
+    expect(op('/plain').parameters).toMatchObject([{ name: 'authorization', in: 'header' }])
   })
 })
