@@ -96,6 +96,16 @@ It is `undefined` for `GET`, `OPTIONS`, and `HEAD` requests.
 
 A [SocketAddress](https://bun.com/docs/api/http#bun-serve) instance representing the remote address of the client (or `null` if unavailable).
 
+### clientAddress
+
+The address of the client as a string, or `null` if unavailable. Identical to `remoteAddress.address` unless [`trustProxy`](../reference/configuration.md#trustproxy) is configured, in which case it is resolved from the `X-Forwarded-For` header — the address of the caller rather than of the proxy in front of it.
+
+```ts
+galbe.get('/whoami', ctx => ctx.clientAddress)
+```
+
+It is resolved on first access, and is the right key for anything client-scoped: rate limiting, audit logs, geolocation. Reach for `remoteAddress` when you specifically mean the machine that opened the connection.
+
 ### route
 
 The matched [Route](routes.md) for the current request. Available from `onRoute` onwards in the request lifecycle.

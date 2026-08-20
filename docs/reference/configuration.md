@@ -88,6 +88,31 @@ Enables TLS support. Accepts a [Bun TLSOptions](https://bun.com/docs/api/http#tl
 - **tls.cert**: Path to the certificate file (or its contents).
 - **tls.ca**: Path to the certificate authority file (or its contents).
 
+### trustProxy
+
+How much of the `X-Forwarded-For` header to believe, which is what [`ctx.clientAddress`](../concepts/context.md#clientaddress) is resolved from. Default: `false` — the header is ignored entirely and the client is the socket peer.
+
+| Value      | Meaning                                                                       |
+| ---------- | ----------------------------------------------------------------------------- |
+| `false`    | No proxy. The client is whoever opened the connection.                        |
+| `number`   | How many hops in front of the app are yours.                                  |
+| `string[]` | The addresses or CIDR ranges your proxies connect from (IPv4 and IPv6 alike). |
+
+```ts
+export default {
+  trustProxy: 1, // one load balancer in front, and nothing else
+}
+```
+
+The header is a list the client writes the first entry of, so it is only usable with the deployment knowledge this setting carries: how many hops in front of the app are yours. Galbe walks the chain **right to left** — the rightmost entry is the nearest hop, and the only one your own infrastructure wrote — discarding the hops you declared trusted and returning the first one you did not.
+
+> [!CAUTION]
+> `trustProxy` must match the real topology. Set too high, a client can forge its own address by prepending entries; set too low, every client behind the proxy shares one address, which turns [`rateLimit`](middlewares.md#ratelimit) and any per-client accounting into a single global bucket. If requests can reach the app without going through the proxy, the count is not a fixed number — list your proxy's addresses instead.
+
+Whatever the setting, a chain that cannot be walked as configured resolves to the socket peer rather than to a client-controlled entry: an entry that is not an IP address, a header with fewer entries than the hop count, or more than 32 hops. Ports and brackets are stripped, and IPv4-mapped addresses (`::ffff:203.0.113.5`) are unwrapped, so one client cannot present itself under several spellings. Invalid configuration — a malformed range, a negative hop count — throws when the server starts.
+
+The RFC 7239 `Forwarded` header is not read: `X-Forwarded-For` is what proxies actually send.
+
 ### server
 
 Custom options passed through to the underlying [Bun.serve](https://bun.com/docs/api/http#bun-serve) call. Useful for fine-grained server tuning beyond what Galbe exposes directly.

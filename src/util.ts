@@ -286,3 +286,143 @@ export const inferBodyType = (contentType?: string | null): ParseMode => {
   if (BA_HEADER_RX.test(contentType)) return 'byteArray'
   return 'default'
 }
+
+/**
+ * Trusted proxy resolution: turning the socket peer and an `X-Forwarded-For`
+ * header into the address of the actual client. Everything below is fed
+ * attacker-controlled text, so nothing here throws and nothing is trusted
+ * before it parses as an IP.
+ */
+
+/** Beyond this many hops the header is treated as unusable and the socket peer wins. */
+const MAX_FORWARDED_HOPS = 32
+const IPV4_RX = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
+const IPV6_GROUP_RX = /^[0-9a-f]{1,4}$/
+
+/** Dotted quad → 4 bytes. Leading zeros are rejected: one address, one spelling. */
+const ipv4Bytes = (ip: string) => {
+  const m = IPV4_RX.exec(ip)
+  if (!m) return undefined
+  const bytes = new Uint8Array(4)
+  for (let i = 0; i < 4; i++) {
+    const part = m[i + 1]!
+    const value = Number(part)
+    if (value > 255 || (part.length > 1 && part[0] === '0')) return undefined
+    bytes[i] = value
+  }
+  return bytes
+}
+
+/** RFC 4291 text form → 16 bytes: one `::` run, and an optional trailing dotted quad. */
+const ipv6Bytes = (ip: string) => {
+  const [head, tail, extra] = ip.split('::')
+  if (extra !== undefined) return undefined
+  const left = head ? head.split(':') : []
+  const right = tail ? tail.split(':') : []
+  const groups = right.length ? right : left
+  let v4: Uint8Array | undefined
+  if (groups.at(-1)?.includes('.')) {
+    v4 = ipv4Bytes(groups.pop()!)
+    if (!v4) return undefined
+  }
+  const count = left.length + right.length + (v4 ? 2 : 0)
+  // without a `::` run every group must be spelled out
+  if (count > 8 || (tail === undefined && count !== 8)) return undefined
+  const bytes = new Uint8Array(16)
+  const write = (group: string, at: number) => {
+    if (!IPV6_GROUP_RX.test(group)) return false
+    const value = parseInt(group, 16)
+    bytes[at] = value >> 8
+    bytes[at + 1] = value & 0xff
+    return true
+  }
+  for (let i = 0; i < left.length; i++) if (!write(left[i]!, i * 2)) return undefined
+  const start = 16 - right.length * 2 - (v4 ? 4 : 0)
+  for (let i = 0; i < right.length; i++) if (!write(right[i]!, start + i * 2)) return undefined
+  if (v4) bytes.set(v4, 12)
+  return bytes
+}
+
+const ipBytes = (ip: string) => (ip.includes(':') ? ipv6Bytes(ip) : ipv4Bytes(ip))
+
+/**
+ * Reads one hop — a socket peer or an `X-Forwarded-For` entry — into its
+ * canonical text form and its bytes. Brackets and a trailing port are stripped
+ * (`[::1]:8080`, `192.0.2.1:8080`) and an IPv4-mapped address is unwrapped, so
+ * one client cannot present itself under several spellings.
+ */
+const parseHop = (raw: string) => {
+  let address = raw.trim().toLowerCase()
+  if (address[0] === '[') {
+    const close = address.indexOf(']')
+    if (close < 0) return undefined
+    address = address.slice(1, close)
+  } else {
+    const colon = address.indexOf(':')
+    if (colon > 0 && address.includes('.') && address.indexOf(':', colon + 1) < 0) address = address.slice(0, colon)
+  }
+  if (address.startsWith('::ffff:') && address.includes('.')) address = address.slice(7)
+  const bytes = ipBytes(address)
+  return bytes && { address, bytes }
+}
+
+type Cidr = { bytes: Uint8Array; bits: number }
+const parseCidr = (entry: string): Cidr => {
+  const slash = entry.lastIndexOf('/')
+  const suffix = slash < 0 ? undefined : entry.slice(slash + 1)
+  const hop = parseHop(slash < 0 ? entry : entry.slice(0, slash))
+  if (!hop) throw new SyntaxError(`trustProxy: '${entry}' is not an IP address or CIDR range`)
+  const bits = suffix === undefined ? hop.bytes.length * 8 : Number(suffix)
+  if (suffix !== undefined && (!/^\d+$/.test(suffix) || bits > hop.bytes.length * 8))
+    throw new SyntaxError(`trustProxy: '${entry}' has an out-of-range prefix length`)
+  return { bytes: hop.bytes, bits }
+}
+const inRange = (ip: Uint8Array, { bytes, bits }: Cidr) => {
+  if (ip.length !== bytes.length) return false
+  const whole = bits >> 3
+  for (let i = 0; i < whole; i++) if (ip[i] !== bytes[i]) return false
+  const rest = bits & 7
+  return !rest || (ip[whole]! ^ bytes[whole]!) >> (8 - rest) === 0
+}
+
+/**
+ * Compiles a `trustProxy` config into the per-request client address resolver.
+ * The hop chain is the socket peer followed by the `X-Forwarded-For` entries
+ * **right to left** — the rightmost entry is the nearest hop, and the only one
+ * your own infrastructure wrote. A hop count discards that many entries; a list
+ * of ranges discards hops it recognizes and stops at the first it does not.
+ *
+ * The socket peer wins whenever the chain cannot be walked as configured — an
+ * unparseable hop, a header shorter than the hop count, more than
+ * {@link MAX_FORWARDED_HOPS} hops — rather than falling through to the
+ * leftmost, client-controlled entry. Config errors throw here, at boot.
+ */
+export const clientAddressResolver = (trustProxy?: false | number | string[]) => {
+  const hops = typeof trustProxy === 'number' ? trustProxy : undefined
+  if (hops !== undefined && (!Number.isInteger(hops) || hops < 0))
+    throw new SyntaxError('trustProxy: hop count must be a positive integer')
+  const trusted = Array.isArray(trustProxy) ? trustProxy.map(parseCidr) : undefined
+  if (!hops && !trusted?.length) return (_req: Request, peer: string | null) => peer
+
+  return (req: Request, peer: string | null) => {
+    const socket = peer ? parseHop(peer) : undefined
+    const header = req.headers.get('x-forwarded-for')
+    if (!socket || !header) return peer
+    let hop: { address: string; bytes: Uint8Array } | undefined
+    let end = header.length
+    for (let i = 0; i < MAX_FORWARDED_HOPS; i++) {
+      // is the hop under examination one of ours? if not, it is the client
+      if (hops !== undefined ? i >= hops : !trusted!.some(range => inRange((hop ?? socket).bytes, range)))
+        return hop?.address ?? peer
+      // out of entries: a hop count that overruns the header is a misconfiguration
+      // and falls back, whereas an all-trusted chain leaves the leftmost entry
+      if (end <= 0) return hops !== undefined ? peer : (hop?.address ?? peer)
+      const comma = header.lastIndexOf(',', end - 1)
+      const next = parseHop(header.slice(comma + 1, end))
+      if (!next) return peer
+      hop = next
+      end = comma
+    }
+    return peer
+  }
+}

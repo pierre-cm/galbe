@@ -299,6 +299,65 @@ galbe.get('/admin/me', ctx => ctx.state.basicAuth.email)
 - The password is everything after the **first** colon, so passwords may contain colons; usernames may not.
 - `users` keeps passwords in memory in clear — the right shape for a handful of machine accounts from the environment, not for real user accounts. Basic also sends the password on every request, protected by nothing but TLS: fine for internal tooling, but reach for `jwt` or `bearer` for anything user-facing.
 
+## rateLimit
+
+Caps how often one client may call the routes it covers. Every key gets `limit` tokens, refilled smoothly over `window` seconds; a request spends one, and a request that finds none is answered `429` with a `Retry-After`. Spending them all at once is allowed — the burst a client may take is the limit itself.
+
+```ts
+import { rateLimit } from 'galbe/middlewares'
+
+// 100 requests per minute per client, everywhere
+galbe.middleware(rateLimit({ limit: 100, window: 60 }))
+
+// a tighter bucket on top, for one subtree
+galbe.middleware('/auth/*', rateLimit({ limit: 5, window: 60 }))
+
+// per account rather than per address, with signed-in users exempt from it
+galbe.middleware('/api/*', rateLimit({ limit: 1000, window: 3600, key: ctx => ctx.state.apiKey?.accountId }))
+```
+
+| Name           | Type                              | Default             | Description                                                            |
+| -------------- | --------------------------------- | ------------------- | ---------------------------------------------------------------------- |
+| `limit`        | `number`                          |                     | Requests allowed per window, and the burst a client may spend at once. |
+| `window`       | `number`                          |                     | Seconds the bucket takes to refill completely. Fractions allowed.      |
+| `key`          | `ctx => string \| undefined`      | `ctx.clientAddress` | Bucket a request is accounted to. Returning nothing exempts it.        |
+| `maxKeys`      | `number`                          | `10000`             | Maximum number of buckets held in memory.                              |
+| `headers`      | `boolean`                         | `true`              | Emit the `RateLimit-*` response headers.                               |
+| `errorHandler` | `(info, ctx) => Response \| void` |                     | Replaces the `429`. Returning nothing lets the request through.        |
+
+It runs in the [`beforeParse`](../concepts/middleware.md#before-parsing) slot, so a throttled request is refused before its body is read. Each call to `rateLimit()` is its own limiter with its own counters, so the two registrations above compose: a request to `/auth/login` spends a token from both.
+
+Every response carries the state of the bucket, and a refused one also says how long to wait:
+
+```http
+RateLimit-Limit: 100
+RateLimit-Remaining: 87
+RateLimit-Reset: 8
+Retry-After: 12
+```
+
+`RateLimit-Reset` counts the seconds until the bucket is full again, `Retry-After` the seconds until one token is back — at least `1`, since HTTP counts in whole seconds. Both are absent when `headers` is `false`, except `Retry-After`, which a `429` always carries.
+
+### Keys
+
+The default key is [`ctx.clientAddress`](../concepts/context.md#clientaddress), so **behind a proxy you must set [`trustProxy`](configuration.md#trustproxy)** — otherwise every client shares the proxy's address, and one caller's flood throttles everyone. A key function returning `undefined` exempts the request, which is how an allow-list or an authenticated tier opts out:
+
+```ts
+rateLimit({
+  limit: 60,
+  window: 60,
+  key: ctx => (ctx.state.jwtPayload ? undefined : ctx.clientAddress),
+})
+```
+
+### What it does not do
+
+- **Counters live in this process's memory.** Each replica of your app enforces the limit on its own, so `n` replicas mean `n` × `limit`. A limit shared across replicas needs a store they all see — a plugin, not a middleware.
+- **It only covers routed paths.** A flood against URLs matching no route is answered `404` without ever reaching a middleware. So is a preflight `OPTIONS`.
+- **The store is bounded**, at `maxKeys` buckets. Past that, refilled buckets are dropped first and then the oldest one — so a flood of distinct keys costs memory it cannot exceed, but can also push out a bucket that was still being enforced. Raise `maxKeys` if you legitimately serve more concurrent clients than the default.
+
+None of these is a reason to skip it — a limiter in the app is the one that knows about accounts and routes — but a public-facing service wants one at the edge as well.
+
 ## Not included
 
 Session management, CSRF and anything needing persistent storage are out of scope, as is [CORS](../concepts/plugins.md) — preflight requests never reach a middleware, since they match no route. Those belong in a plugin.

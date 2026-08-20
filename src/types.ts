@@ -221,6 +221,13 @@ export type GalbeConfig = {
   basePath?: string
   /** Enable or disable TLS support. */
   tls?: TLSOptions
+  /**
+   * How many hops in front of the app are yours, so `ctx.clientAddress` can be resolved from
+   * `X-Forwarded-For`: a hop count, or the addresses/CIDR ranges your proxies connect from.
+   * Default `false` — the header is ignored entirely and the client is the socket peer. Set it
+   * to match the real topology: too high is a spoofing hole, too low buckets every client together.
+   */
+  trustProxy?: false | number | string[]
   /** Extra options passed through to `Bun.serve` (e.g. `maxRequestBodySize`, `idleTimeout`). `port`, `fetch` and `error` are ignored, and the dedicated `hostname`, `reusePort` and `tls` config keys take precedence. */
   server?: Partial<Omit<Parameters<typeof Bun.serve>[0], 'port' | 'fetch' | 'error'>> | TLSOptions
   /**
@@ -365,6 +372,7 @@ type ContextOf<Path extends string, S extends RequestSchema, B> = B extends {
       body: Body
       request: Request
       remoteAddress: SocketAddress | null
+      clientAddress: string | null
       route?: Route
       state: Record<string, any>
       set: ContextSet
@@ -408,7 +416,10 @@ type FragmentRequest<F extends MiddlewareSchema> = RequestSchema<Method, string,
  * `params` and the parsed `query`: none of them exist yet at that point. Raw
  * headers and search params remain reachable through `ctx.request`.
  */
-export type PreParseContext = Pick<Context, 'request' | 'set' | 'state' | 'route' | 'cookies' | 'remoteAddress'>
+export type PreParseContext = Pick<
+  Context,
+  'request' | 'set' | 'state' | 'route' | 'cookies' | 'remoteAddress' | 'clientAddress'
+>
 /**
  * A `beforeParse` hook: runs once the route is known but before the body is
  * read or the request validated. No `next()` — hooks run sequentially and

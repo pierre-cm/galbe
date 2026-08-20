@@ -39,3 +39,6 @@ export type { ApiKeyConfig, ApiKeyFragment } from './middlewares/apiKey'
 
 export { basicAuth } from './middlewares/basicAuth'
 export type { BasicAuthConfig, BasicAuthFragment } from './middlewares/basicAuth'
+
+export { rateLimit } from './middlewares/rateLimit'
+export type { RateLimitConfig, RateLimitInfo } from './middlewares/rateLimit'

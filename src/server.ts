@@ -7,6 +7,7 @@ import { validateResponse } from './validator'
 const normalizeContentType = (ct: string | null): string | undefined =>
   ct ? (ct.split(';')[0] ?? '').trim() || undefined : undefined
 import { readCookies, stringifyCookie } from './cookies'
+import { clientAddressResolver } from './util'
 
 type MakeOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
@@ -33,6 +34,8 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
   if (galbe?.config?.basePath && galbe?.config?.basePath[0] !== '/')
     galbe.config.basePath = `/${galbe?.config?.basePath}`
   let pluginsCb = setupPluginCallbacks(galbe)
+  // compiled once: a trustProxy misconfiguration must fail at boot, not per request
+  const resolveClientAddress = clientAddressResolver(galbe.config?.trustProxy)
 
   // config.server is passed through to Bun.serve; port/fetch/error are owned by
   // Galbe and the dedicated config keys (port, hostname, reusePort, tls) win
@@ -52,6 +55,8 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
       if (!METHODS.includes(req.method)) return new Response('', { status: 501 })
       const cookies: string[] = []
       let reqHeaders: Record<string, any> | undefined
+      let clientAddress: string | null | undefined
+      const peer = server.requestIP(req)
       const context = {
         request: req,
         // null-prototype: header names are untrusted keys and must never reach
@@ -68,7 +73,13 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         contentType: !EMPTY_BODY_METHODS.includes(req.method)
           ? normalizeContentType(req.headers.get('content-type'))
           : undefined,
-        remoteAddress: server.requestIP(req),
+        remoteAddress: peer,
+        // lazy like `headers`: an app that never asks does not pay for the
+        // X-Forwarded-For walk. `remoteAddress` stays the raw socket peer.
+        get clientAddress() {
+          if (clientAddress === undefined) clientAddress = resolveClientAddress(req, peer?.address ?? null)
+          return clientAddress
+        },
         set: {
           headers: { 'set-cookie': [] },
           cookie: (name, value, opt = { path: '/' }) => cookies.push(stringifyCookie(name, value, opt)),

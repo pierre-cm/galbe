@@ -699,7 +699,8 @@ g.post('/body/default/stream/str', { body: { '*/*': $T.stream($T.string()) } }, 
 // Whole-context inference
 //
 // The assertions above pin individual context keys, so a key nobody thought to
-// assert (`request`, `state`, `set`, `remoteAddress`, `route`, `cookies`) can be
+// assert (`request`, `state`, `set`, `remoteAddress`, `clientAddress`, `route`,
+// `cookies`) can be
 // retyped without any test failing. These pin `typeof ctx` in full on a handful
 // of representative routes: any change to the context object — a retyped field,
 // a dropped key, a new key — fails here. Registered on a throwaway instance so
@@ -720,6 +721,7 @@ ctxG.get('/ctx/noschema/:id', ctx => {
         body: null
         request: Request
         remoteAddress: SocketAddress | null
+        clientAddress: string | null
         route?: Route
         state: Record<string, any>
         set: ContextSet
@@ -751,6 +753,7 @@ ctxG.post(
           body: { a: string }
           request: Request
           remoteAddress: SocketAddress | null
+          clientAddress: string | null
           route?: Route
           state: Record<string, any>
           set: ContextSet
@@ -777,6 +780,7 @@ ctxG.post(
             body: { a: string }
             request: Request
             remoteAddress: SocketAddress | null
+            clientAddress: string | null
             route?: Route
             state: Record<string, any>
             set: ContextSet
@@ -790,6 +794,7 @@ ctxG.post(
             body: string
             request: Request
             remoteAddress: SocketAddress | null
+            clientAddress: string | null
             route?: Route
             state: Record<string, any>
             set: ContextSet
@@ -813,6 +818,7 @@ ctxG.post('/ctx/stream', { body: { 'application/octet-stream': $T.stream($T.byte
         body: AsyncGenerator<Uint8Array>
         request: Request
         remoteAddress: SocketAddress | null
+        clientAddress: string | null
         route?: Route
         state: Record<string, any>
         set: ContextSet
