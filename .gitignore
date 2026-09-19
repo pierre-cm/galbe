@@ -8,5 +8,6 @@
 
 node_modules/
 coverage/
+tasks/
 
 dist
