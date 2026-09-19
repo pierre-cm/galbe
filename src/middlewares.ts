@@ -13,7 +13,7 @@
  * ```typescript
  * import { jwt } from 'galbe/middlewares'
  *
- * galbe.middleware('/api/*', jwt({ publicKey: Bun.env.JWT_SECRET! }))
+ * galbe.middleware('/api/*', jwt({ key: Bun.env.JWT_SECRET! }))
  * ```
  */
 export { AuthError } from './middlewares/_auth'

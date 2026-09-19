@@ -3,7 +3,7 @@ import type { STOptional, STString } from '../schema'
 import type { AuthErrorHandler, CredentialIn, MaybePromise } from './_auth'
 
 import { $T } from '../index'
-import { AuthError, authHook, readCredential, secretMatcher, securityMetadata } from './_auth'
+import { AuthError, authHook, readRequired, secretMatcher, securityMetadata } from './_auth'
 
 export { AuthError } from './_auth'
 
@@ -14,8 +14,10 @@ export type ApiKeyConfig<N extends string = 'x-api-key', I extends CredentialIn 
    */
   key?: string | string[]
   /**
-   * Looks the key up instead of comparing it to a constant. Return `false` to
-   * reject, `true` to accept, or the identity to put on `ctx.state`.
+   * Looks the key up instead of comparing it to a constant. Return the
+   * identity to put on `ctx.state`, or `false`/`null`/`undefined` to reject.
+   * Returning `true` accepts the request with no identity to carry: the state
+   * key is then set to `true`, never to the key itself.
    */
   verify?: (key: string, ctx: PreParseContext) => MaybePromise<boolean | object | null | undefined>
   /**
@@ -29,9 +31,15 @@ export type ApiKeyConfig<N extends string = 'x-api-key', I extends CredentialIn 
   /** `ctx.state` key the identity is stored under. Default `apiKey`. */
   stateHolder?: string
   /**
+   * Lets a request carrying **no** key through unauthenticated instead of
+   * answering 401. A key that is present and refused is still rejected.
+   */
+  optional?: boolean
+  /**
    * Replaces the default rejection. Return a `Response` to answer the request,
-   * or nothing to let it through **unauthenticated** (optional auth); throwing
-   * takes the usual error handler path.
+   * or nothing to fall back to the default `401`; throwing takes the usual
+   * error handler path. Optional authentication is {@link ApiKeyConfig.optional},
+   * not something an error handler expresses.
    */
   errorHandler?: AuthErrorHandler
   /**
@@ -80,6 +88,12 @@ export type ApiKeyFragment<N extends string, I extends CredentialIn> = I extends
  *   verify: async key => (await db.tenantByKey(key)) ?? false
  * }))
  *
+ * // public traffic carries no key at all: let it through unauthenticated
+ * galbe.middleware('/v1/public/*', apiKey({
+ *   verify: async key => await db.tenantByKey(key),
+ *   optional: true
+ * }))
+ *
  * galbe.get('/v1/usage', ctx => ctx.state.apiKey.tenantId)
  * ```
  * @param config - see {@link ApiKeyConfig}
@@ -95,11 +109,14 @@ export const apiKey = <N extends string = 'x-api-key', I extends CredentialIn = 
 
   const beforeParse = authHook(
     async ctx => {
-      const key = readCredential(ctx, where, name)
-      if (!key) throw new AuthError('missing', `no ${name} ${where} in the request`)
+      const key = readRequired(ctx, where, name, undefined, config.optional)
+      if (!key) return
       const identity = config.verify ? await config.verify(key, ctx) : await matches!(key)
       if (!identity) throw new AuthError('invalid', 'api key rejected')
-      ctx.state[stateHolder] = identity === true ? key : identity
+      // the key is set whenever the request authenticated — `true` for a
+      // configured constant, so the key itself never lands on `ctx.state`,
+      // where every log line and error report would find it
+      ctx.state[stateHolder] = identity
     },
     // no challenge: an api key scheme has no registered WWW-Authenticate form
     { errorHandler: config.errorHandler }

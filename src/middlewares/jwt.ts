@@ -57,11 +57,11 @@ export class JwtError extends AuthError<JwtErrorCode> {
 
 export type JwtConfig = {
   /**
-   * Key the signature is verified against: an HMAC secret for `HS*`, a public
-   * key for `RS*`/`ES*`. Accepts a PEM SPKI string, a JWK, raw bytes or a
-   * {@link CryptoKey}. Imported once, on the first request.
+   * Key the signature is verified against: the HMAC secret for `HS*`, the
+   * public key for `RS*`/`ES*`. Accepts a PEM SPKI string, a JWK, raw bytes or
+   * a {@link CryptoKey}. Imported once, on the first request.
    */
-  publicKey: JwtKey
+  key: JwtKey
   /**
    * Algorithms accepted, narrowing what the key already allows. Defaults to
    * every algorithm of the key's family (`HS256`/`384`/`512` for a secret,
@@ -73,6 +73,12 @@ export type JwtConfig = {
   sources?: JwtSource[]
   /** `ctx.state` key the verified payload is stored under. Default `jwtPayload`. */
   stateHolder?: string
+  /**
+   * Lets a request carrying **no** token through unauthenticated instead of
+   * answering 401 — the public half of a route that personalizes a signed-in
+   * caller. A token that is present but fails any check is still rejected.
+   */
+  optional?: boolean
   /** Required `iss` claim — one value or a list of accepted ones. */
   issuer?: string | string[]
   /** Required `aud` claim: at least one of these must match the token's audience. */
@@ -87,8 +93,9 @@ export type JwtConfig = {
   realm?: string
   /**
    * Replaces the default rejection. Return a `Response` to answer the request,
-   * or nothing to let it through **unauthenticated** (optional auth); throwing
-   * takes the usual error handler path.
+   * or nothing to fall back to the default `401`; throwing takes the usual
+   * error handler path. Optional authentication is {@link JwtConfig.optional},
+   * not something an error handler expresses.
    */
   errorHandler?: AuthErrorHandler<JwtError>
   /**
@@ -248,15 +255,18 @@ const keyStore = (key: JwtKey, restrict: JwtAlgorithm[] | undefined, usage: KeyU
  * import { jwt } from 'galbe/middlewares'
  *
  * // every /api route, verified with an HMAC secret
- * galbe.middleware('/api/*', jwt({ publicKey: Bun.env.JWT_SECRET! }))
+ * galbe.middleware('/api/*', jwt({ key: Bun.env.JWT_SECRET! }))
  *
- * // RS256 public key, issuer pinned, payload typed on the way out
+ * // the public key of an RS256 signer, issuer pinned, admin role required
  * galbe.middleware('/admin/*', jwt({
- *   publicKey: await Bun.file('public.pem').text(),
+ *   key: await Bun.file('public.pem').text(),
  *   issuer: 'https://auth.example.com',
  *   audience: 'my-api',
  *   validate: payload => payload.role === 'admin'
  * }))
+ *
+ * // a token is welcome but not required
+ * galbe.middleware('/feed/*', jwt({ key: Bun.env.JWT_SECRET!, optional: true }))
  *
  * galbe.get('/api/me', ctx => ctx.state.jwtPayload.sub)
  * ```
@@ -268,7 +278,7 @@ export const jwt = (config: JwtConfig): MiddlewareDef<JwtFragment> => {
   const issuers = config.issuer === undefined ? undefined : [config.issuer].flat()
   const audiences = config.audience === undefined ? undefined : [config.audience].flat()
   const tolerance = config.clockTolerance ?? 0
-  const store = keyStore(config.publicKey, config.algorithms, 'verify')
+  const store = keyStore(config.key, config.algorithms, 'verify')
   for (const source of sources)
     if (source !== 'bearer' && !source.startsWith('cookie:'))
       throw new SyntaxError(`jwt: invalid source '${source}', expected 'bearer' or 'cookie:<name>'`)
@@ -327,7 +337,11 @@ export const jwt = (config: JwtConfig): MiddlewareDef<JwtFragment> => {
   const beforeParse = authHook(
     async ctx => {
       const token = read(ctx)
-      if (!token) throw new JwtError('missing', 'no token found in the request')
+      if (!token) {
+        // optional authentication: nothing to verify is not a rejection
+        if (config.optional) return
+        throw new JwtError('missing', 'no token found in the request')
+      }
       const payload = await verify(token)
       checkClaims(payload)
       if (config.validate && !(await config.validate(payload, ctx)))

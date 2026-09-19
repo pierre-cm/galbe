@@ -8,7 +8,7 @@ import {
   authHook,
   bearerChallenge,
   checkRealm,
-  readCredential,
+  readRequired,
   secretMatcher,
   securityMetadata,
 } from './_auth'
@@ -23,20 +23,29 @@ export type BearerConfig = {
   token?: string | string[]
   /**
    * Looks the token up instead of comparing it to a constant — a database, a
-   * cache, an introspection endpoint. Return `false` to reject, `true` to
-   * accept, or the identity to put on `ctx.state`.
+   * cache, an introspection endpoint. Return the identity to put on
+   * `ctx.state`, or `false`/`null`/`undefined` to reject. Returning `true`
+   * accepts the request with no identity to carry: the state key is then set to
+   * `true`, never to the credential itself.
    */
   verify?: (token: string, ctx: PreParseContext) => MaybePromise<boolean | object | null | undefined>
   /** `ctx.state` key the identity is stored under. Default `bearer`. */
   stateHolder?: string
+  /**
+   * Lets a request carrying **no** token through unauthenticated instead of
+   * answering 401 — the public half of a route that personalizes a signed-in
+   * caller. A token that is present and refused is still rejected.
+   */
+  optional?: boolean
   /** Protection space named in the `WWW-Authenticate` challenge. Omitted by default. */
   realm?: string
   /** Documentation only: the `bearerFormat` of the emitted scheme. */
   format?: string
   /**
    * Replaces the default rejection. Return a `Response` to answer the request,
-   * or nothing to let it through **unauthenticated** (optional auth); throwing
-   * takes the usual error handler path.
+   * or nothing to fall back to the default `401`; throwing takes the usual
+   * error handler path. Optional authentication is {@link BearerConfig.optional},
+   * not something an error handler expresses.
    */
   errorHandler?: AuthErrorHandler
   /**
@@ -75,6 +84,12 @@ export type BearerFragment = { headers: { authorization: STOptional<STString> } 
  *   verify: async token => (await db.session(token)) ?? false
  * }))
  *
+ * // signed in or not: a missing token is not a rejection here
+ * galbe.middleware('/feed/*', bearer({
+ *   verify: async token => await db.session(token),
+ *   optional: true
+ * }))
+ *
  * galbe.get('/api/me', ctx => ctx.state.bearer.userId)
  * ```
  * @param config - see {@link BearerConfig}
@@ -88,11 +103,14 @@ export const bearer = (config: BearerConfig): MiddlewareDef<BearerFragment> => {
 
   const beforeParse = authHook(
     async ctx => {
-      const token = readCredential(ctx, 'header', 'authorization', 'Bearer ')
-      if (!token) throw new AuthError('missing', 'no bearer token in the request')
+      const token = readRequired(ctx, 'header', 'authorization', 'Bearer ', config.optional)
+      if (!token) return
       const identity = config.verify ? await config.verify(token, ctx) : await matches!(token)
       if (!identity) throw new AuthError('invalid', 'bearer token rejected')
-      ctx.state[stateHolder] = identity === true ? token : identity
+      // the key is set whenever the request authenticated — `true` for a
+      // configured constant, so the token itself never lands on `ctx.state`,
+      // where every log line and error report would find it
+      ctx.state[stateHolder] = identity
     },
     { errorHandler: config.errorHandler, challenge: error => bearerChallenge(realm, error.code) }
   )

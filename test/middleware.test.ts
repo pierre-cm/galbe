@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { $T, Galbe, UnauthorizedError } from '../src'
+import { $T, Galbe, NotFoundError, RequestError, UnauthorizedError } from '../src'
+import type { GalbePlugin } from '../src/types'
 import { OpenAPISerializer } from '../src/extras/spec/openapi.serializer'
 import { Kind } from '../src/schema'
 import { Compiled } from '../src/validator.compile'
@@ -562,5 +563,138 @@ describe('groups', async () => {
     const spec = await OpenAPISerializer(g2)
     expect(spec.paths).toHaveProperty('/v1/users')
     expect(spec.paths).toHaveProperty('/v1/users/{id}')
+  })
+})
+
+describe('middleware afterHandle slot', async () => {
+  const port = 7412
+
+  test('a returned Response replaces the parsed one, nothing keeps it', async () => {
+    const galbe = new Galbe()
+    galbe.middleware('/x/*', {
+      afterHandle: res => (res.status === 404 ? new Response('custom', { status: 404 }) : undefined),
+    })
+    galbe.middleware('/y/*', { afterHandle: () => new Response('replaced', { status: 202 }) })
+    galbe.get('/x/miss', () => new Response('gone', { status: 404 }))
+    galbe.get('/x/keep', () => 'kept')
+    galbe.get('/y/a', () => 'never seen')
+    await galbe.listen(port)
+    const get = (p: string) => fetch(`http://localhost:${port}${p}`)
+
+    const kept = await get('/x/keep')
+    expect(kept.status).toBe(200)
+    expect(await kept.text()).toBe('kept')
+
+    const custom = await get('/x/miss')
+    expect(custom.status).toBe(404)
+    expect(await custom.text()).toBe('custom')
+
+    const replaced = await get('/y/a')
+    expect(replaced.status).toBe(202)
+    expect(await replaced.text()).toBe('replaced')
+  })
+
+  test('it runs for the error response too, with the error in hand', async () => {
+    const galbe = new Galbe()
+    const seen: Array<{ status: number; error: unknown }> = []
+    galbe.middleware('/*', {
+      afterHandle: (res, _ctx, error) => {
+        seen.push({ status: res.status, error })
+      },
+    })
+    galbe.get('/ok', () => 'ok')
+    galbe.get('/missing', () => {
+      throw new NotFoundError()
+    })
+    galbe.post('/items', { body: { 'application/json': $T.object({ n: $T.integer() }) } }, () => 'ok')
+    await galbe.listen(port + 1)
+
+    await fetch(`http://localhost:${port + 1}/ok`)
+    expect(seen.at(-1)).toEqual({ status: 200, error: undefined })
+
+    await fetch(`http://localhost:${port + 1}/missing`)
+    expect(seen.at(-1)!.status).toBe(404)
+    expect(seen.at(-1)!.error).toBeInstanceOf(NotFoundError)
+
+    // a 400 from validation never reaches the hook chain: the post slot still runs
+    const invalid = await fetch(`http://localhost:${port + 1}/items`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ n: 'nope' }),
+    })
+    expect(invalid.status).toBe(400)
+    expect(seen.at(-1)!.status).toBe(400)
+    expect(seen.at(-1)!.error).toBeInstanceOf(RequestError)
+  })
+
+  test('registration order decides, and patterns scope it', async () => {
+    const galbe = new Galbe()
+    const order: string[] = []
+    galbe.middleware('/*', { afterHandle: () => void order.push('outer') })
+    galbe.middleware('/scoped/*', { afterHandle: () => void order.push('inner') })
+    galbe.get('/scoped/x', () => 'x')
+    galbe.get('/other', () => 'x')
+    await galbe.listen(port + 2)
+
+    await fetch(`http://localhost:${port + 2}/scoped/x`)
+    expect(order).toEqual(['outer', 'inner'])
+
+    order.length = 0
+    await fetch(`http://localhost:${port + 2}/other`)
+    expect(order).toEqual(['outer'])
+  })
+
+  test('it runs inside the plugins afterHandle, ahead of it', async () => {
+    const galbe = new Galbe()
+    const order: string[] = []
+    galbe.middleware('/*', { afterHandle: () => void order.push('middleware') })
+    const plugin: GalbePlugin = {
+      name: 'dev.galbe.test.after',
+      afterHandle: async res => {
+        order.push('plugin')
+        return res
+      },
+    }
+    await galbe.use(plugin)
+    galbe.get('/x', () => 'x')
+    await galbe.listen(port + 3)
+
+    await fetch(`http://localhost:${port + 3}/x`)
+    expect(order).toEqual(['middleware', 'plugin'])
+  })
+
+  test('a header set after next() still lands on the response', async () => {
+    const galbe = new Galbe()
+    galbe.middleware('/h/*', async (ctx, next) => {
+      await next()
+      ctx.set.headers['x-late'] = 'yes'
+    })
+    galbe.middleware('/h/*', { afterHandle: res => void res.headers.set('x-after', 'yes') })
+    galbe.get('/h/x', () => 'x')
+    await galbe.listen(port + 4)
+
+    const response = await fetch(`http://localhost:${port + 4}/h/x`)
+    expect(response.headers.get('x-late')).toBe('yes')
+    expect(response.headers.get('x-after')).toBe('yes')
+  })
+
+  test('a streamed response passes through without being buffered', async () => {
+    const galbe = new Galbe()
+    const seen: string[] = []
+    galbe.middleware('/*', { afterHandle: res => void seen.push(res.headers.get('content-type') ?? '') })
+    galbe.get('/sse', () =>
+      (async function* () {
+        yield 'one\n'
+        yield 'two\n'
+      })()
+    )
+    await galbe.listen(port + 5)
+
+    const response = await fetch(`http://localhost:${port + 5}/sse`)
+    const body = await response.text()
+    expect(body).toContain('one')
+    expect(body).toContain('two')
+    // the hook saw the stream's own response, not a buffered copy of it
+    expect(seen).toEqual(['text/event-stream'])
   })
 })

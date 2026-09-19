@@ -3,7 +3,7 @@ import type { STOptional, STString } from '../schema'
 import type { AuthErrorHandler, MaybePromise } from './_auth'
 
 import { $T } from '../index'
-import { AuthError, authHook, checkRealm, readCredential, secretMatcher, securityMetadata } from './_auth'
+import { AuthError, authHook, checkRealm, readRequired, secretMatcher, securityMetadata } from './_auth'
 
 export { AuthError } from './_auth'
 
@@ -18,8 +18,9 @@ export type BasicAuthConfig = {
   users?: Record<string, string>
   /**
    * Checks the credentials itself — against a database and a password hash,
-   * typically. Return `false` to reject, `true` to accept, or the identity to
-   * put on `ctx.state`.
+   * typically. Return the identity to put on `ctx.state`, or
+   * `false`/`null`/`undefined` to reject. Returning `true` accepts the request
+   * with no identity to carry: the state key is then set to `true`.
    */
   verify?: (user: string, password: string, ctx: PreParseContext) => MaybePromise<boolean | object | null | undefined>
   /** Protection space named in the `WWW-Authenticate` challenge — what browsers show when prompting. Default `Restricted`. */
@@ -27,9 +28,16 @@ export type BasicAuthConfig = {
   /** `ctx.state` key the identity is stored under — the username, unless `verify` returned one. Default `basicAuth`. */
   stateHolder?: string
   /**
+   * Lets a request carrying **no** credentials through unauthenticated instead
+   * of answering 401. Credentials that are present and refused are still
+   * rejected, as are ones that cannot be decoded.
+   */
+  optional?: boolean
+  /**
    * Replaces the default rejection. Return a `Response` to answer the request,
-   * or nothing to let it through **unauthenticated** (optional auth); throwing
-   * takes the usual error handler path.
+   * or nothing to fall back to the default `401`; throwing takes the usual
+   * error handler path. Optional authentication is {@link BasicAuthConfig.optional},
+   * not something an error handler expresses.
    */
   errorHandler?: AuthErrorHandler
   /**
@@ -80,6 +88,12 @@ const decoder = new TextDecoder()
  *   }
  * }))
  *
+ * // credentials are welcome but not required
+ * galbe.middleware('/status/*', basicAuth({
+ *   users: { prometheus: Bun.env.METRICS_PASSWORD! },
+ *   optional: true
+ * }))
+ *
  * galbe.get('/admin/me', ctx => ctx.state.basicAuth.email)
  * ```
  * @param config - see {@link BasicAuthConfig}
@@ -87,6 +101,10 @@ const decoder = new TextDecoder()
 export const basicAuth = (config: BasicAuthConfig): MiddlewareDef<BasicAuthFragment> => {
   if (!config.verify && config.users === undefined)
     throw new SyntaxError("basicAuth: either 'users' or 'verify' is required")
+  // an empty map is almost always an environment variable that did not arrive:
+  // fail at registration rather than reject every caller as a wrong password
+  if (config.users !== undefined && !Object.keys(config.users).length)
+    throw new SyntaxError('basicAuth: `users` is empty, no credential would ever be accepted')
   const stateHolder = config.stateHolder ?? 'basicAuth'
   const realm = checkRealm('basicAuth', config.realm) ?? 'Restricted'
   // one matcher over the whole `user:password` pair: checking the username
@@ -96,8 +114,8 @@ export const basicAuth = (config: BasicAuthConfig): MiddlewareDef<BasicAuthFragm
 
   const beforeParse = authHook(
     async ctx => {
-      const credentials = readCredential(ctx, 'header', 'authorization', 'Basic ')
-      if (!credentials) throw new AuthError('missing', 'no basic credentials in the request')
+      const credentials = readRequired(ctx, 'header', 'authorization', 'Basic ', config.optional)
+      if (!credentials) return
       let decoded: string
       try {
         // RFC 7617 allows UTF-8 credentials, so decode the bytes rather than
@@ -111,9 +129,11 @@ export const basicAuth = (config: BasicAuthConfig): MiddlewareDef<BasicAuthFragm
       const user = decoded.slice(0, separator)
       const identity = config.verify
         ? await config.verify(user, decoded.slice(separator + 1), ctx)
-        : await matches!(decoded)
+        : (await matches!(decoded)) && user
       if (!identity) throw new AuthError('invalid', 'credentials rejected')
-      ctx.state[stateHolder] = identity === true ? user : identity
+      // a `users` map authenticates a username, so that name is the identity;
+      // `true` from `verify` sets the key without carrying anything more
+      ctx.state[stateHolder] = identity
     },
     { errorHandler: config.errorHandler, challenge: () => `Basic realm="${realm}", charset="UTF-8"` }
   )

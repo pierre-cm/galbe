@@ -27,14 +27,15 @@ describe('rateLimit middleware', async () => {
       },
     })
   )
-  galbe.middleware('/optional/*', rateLimit({ limit: 1, window: 60, key: byClient, errorHandler: () => {} }))
+  // a handler that only observes must not be able to lift the limit
+  galbe.middleware('/silent/*', rateLimit({ limit: 1, window: 60, key: byClient, errorHandler: () => {} }))
   // two limiters over one route: each instance is its own bucket
   galbe.middleware('/outer/*', rateLimit({ limit: 5, window: 60, key: byClient }))
   galbe.middleware('/outer/inner/*', rateLimit({ limit: 1, window: 60, key: byClient }))
 
   for (const p of ['/burst/x', '/refill/x', '/bounded/x', '/quiet/x', '/exempt/x', '/custom/x'])
     galbe.get(p, () => 'ok')
-  galbe.get('/optional/x', () => 'ok')
+  galbe.get('/silent/x', () => 'ok')
   galbe.get('/outer/x', () => 'ok')
   galbe.get('/outer/inner/x', () => 'ok')
   galbe.post('/burst/items', { body: { 'application/json': $T.object({ n: $T.integer() }) } }, () => 'ok')
@@ -126,9 +127,11 @@ describe('rateLimit middleware', async () => {
     expect(seen).toEqual([{ key: 'teapot', limit: 1, retryAfter: 60 }])
   })
 
-  test('an errorHandler returning nothing lets the request through', async () => {
-    expect((await get('/optional/x', 'lenient')).status).toBe(200)
-    expect((await get('/optional/x', 'lenient')).status).toBe(200)
+  test('an errorHandler returning nothing falls back to the default 429', async () => {
+    expect((await get('/silent/x', 'lenient')).status).toBe(200)
+    const refused = await get('/silent/x', 'lenient')
+    expect(refused.status).toBe(429)
+    expect(refused.headers.get('retry-after')).toBe('60')
   })
 
   test('each instance keeps its own count', async () => {

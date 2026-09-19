@@ -426,8 +426,14 @@ export type PreParseContext = Pick<
  * short-circuit by returning a `Response`, like a plugin's `onRoute`.
  */
 export type PreParseHook = (ctx: PreParseContext) => MaybePromise<Response | void>
-/** Reserved for the `afterHandle` slot: a transform over the parsed response, not an onion. */
-export type ResponseHook = (response: Response, ctx: Context) => MaybePromise<Response | void>
+/**
+ * A route-scoped response hook — the `afterHandle` slot. It runs once the
+ * request has a `Response`, whatever it ended on, and transforms it: return a
+ * `Response` to replace it, return nothing to keep it. Not an onion — by the
+ * time a `Response` exists the hook chain has unwound, so there is nothing left
+ * to wrap. `error` is what the request ended on, and is `undefined` on success.
+ */
+export type ResponseHook = (response: Response, ctx: Context, error?: unknown) => MaybePromise<Response | void>
 /**
  * #### MiddlewareDef
  * Middleware as a value: the hooks to run, plus the request contract they
@@ -459,7 +465,11 @@ export type MiddlewareDef<F extends MiddlewareSchema = any> = {
   beforeParse?: MaybeArray<PreParseHook>
   /** Hooks composed into the chain of every matched route, ahead of the route's own hooks. */
   hooks?: MaybeArray<Hook<Method, string, FragmentRequest<F>>>
-  /** Reserved slot, declared for forward compatibility — not run yet. */
+  /**
+   * Hooks run on every matched route once its response is parsed — on success
+   * and on failure alike, the error response included — ahead of the plugins'
+   * `afterHandle`. They transform the `Response`. See {@link ResponseHook}.
+   */
   afterHandle?: MaybeArray<ResponseHook>
   /**
    * Headers, query and params the hooks require, merged into matched routes.
@@ -495,6 +505,7 @@ export type GalbeMiddleware = {
   segments: string[]
   beforeParse: PreParseHook[]
   hooks: Hook[]
+  afterHandle: ResponseHook[]
   schema?: MiddlewareSchema
   security?: string | string[]
   securitySchemes?: Record<string, OpenAPIV3.SecuritySchemeObject | OpenAPIV3.ReferenceObject>
@@ -635,6 +646,14 @@ export type Route<
    * `Response` short-circuits the request.
    */
   composedPre?: (context: PreParseContext) => Promise<Response | void>
+  /**
+   * Matched middleware `afterHandle` hooks, composed at registration like
+   * {@link Route.composedPre}, and left `undefined` when no matched middleware
+   * fills the slot. Runs on the parsed `Response` — the error response
+   * included — ahead of the plugins' `afterHandle`; a returned `Response`
+   * replaces it.
+   */
+  composedPost?: (response: Response, context: Context, error?: unknown) => Promise<Response>
   static?: { path: SP; root: SR }
 }
 

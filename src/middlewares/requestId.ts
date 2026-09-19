@@ -20,7 +20,11 @@ export type RequestIdConfig<N extends string = 'x-request-id', T extends boolean
    * public API, where the id is the caller's to choose and yours to distrust.
    */
   trustHeader?: T
-  /** Makes an id when there is none to reuse. Default `crypto.randomUUID()`. */
+  /**
+   * Makes an id when there is none to reuse. Default `crypto.randomUUID()`.
+   * It must satisfy the same shape an inbound id does, since it ends up in a
+   * response header and in your logs.
+   */
   generate?: () => string
   /** `ctx.state` key the id is stored under. Default `requestId`. */
   stateHolder?: string
@@ -67,7 +71,18 @@ export const requestId = <N extends string = 'x-request-id', T extends boolean =
 
   const beforeParse: PreParseHook = ctx => {
     const inbound = trusted ? ctx.request.headers.get(header) : null
-    const id = inbound && ID.test(inbound) ? inbound : generate()
+    let id: string
+    if (inbound && ID.test(inbound)) id = inbound
+    else {
+      id = generate()
+      // `generate` is caller code and the value becomes a response header:
+      // name the culprit here rather than let the Headers constructor reject it
+      // with a type error three frames away
+      if (typeof id !== 'string' || !ID.test(id))
+        throw new Error(
+          `requestId: generate() must return at most 128 characters of [A-Za-z0-9_.:-], got ${JSON.stringify(id)?.slice(0, 64)}`
+        )
+    }
     ctx.state[stateHolder] = id
     ctx.set.headers[header] = id
   }

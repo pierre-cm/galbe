@@ -54,6 +54,8 @@ Called after the route handler runs but before the response is sent. It receives
 
 It is also **preemptable**: any returned response overrides the original one.
 
+This slot runs on the responses that come out of the handler; a request that ended on an error is answered by the [Error Handler](error-handler.md) without reaching it. Route-scoped response work — and error responses, which a hook chain never reaches — belongs in a middleware's [`afterHandle`](middleware.md#after-handling) slot instead, which runs just before this loop.
+
 ### cli
 
 Lets a plugin register custom commands on the [Galbe CLI](../reference/cli.md). It receives the current list of `GalbeCLICommand` entries (one per registered route) and may return a modified list or `void` to keep the input as-is. Each `GalbeCLICommand` describes a command name, a list of tags, the route it targets, optional `arguments` / `options`, and an optional `action` callback that overrides the default behavior.

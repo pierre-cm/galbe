@@ -88,8 +88,11 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         cookies: readCookies(req.headers.get('cookie')),
       } as MakeOptional<Context, 'params' | 'query' | 'body'>
       const url = new URL(req.url)
-      let route: Route
+      let route: Route | undefined
       let response: any = ''
+      // the route-scoped post-parse stage runs once per request, so a hook that
+      // threw on the success path is not run a second time on the error response
+      let postRan = false
       try {
         for (const p of pluginsCb.onFetch) {
           const r = await p.onFetch(context)
@@ -201,8 +204,16 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         if (galbe.config?.responseValidator?.enabled !== false && schema.response && !(response instanceof Response))
           validateResponse(response, schema.response, parsedResponse.status || 200)
 
+        // middleware post-parse slot, composed at registration (see composePost):
+        // route-scoped, so it runs inside the app-scoped plugin slot below
+        let finalResponse = parsedResponse
+        if (route.composedPost) {
+          postRan = true
+          finalResponse = await route.composedPost(finalResponse, context as Context)
+        }
+
         for (const p of pluginsCb.afterHandle) {
-          const r = await p.afterHandle(parsedResponse, context as Context)
+          const r = await p.afterHandle(finalResponse, context as Context)
           if (r) return r
         }
 
@@ -211,14 +222,29 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
         // status and headers (incl. content-length) the GET would have sent.
         if (req.method === 'HEAD')
           return new Response(null, {
-            status: parsedResponse.status,
-            statusText: parsedResponse.statusText,
-            headers: parsedResponse.headers,
+            status: finalResponse.status,
+            statusText: finalResponse.statusText,
+            headers: finalResponse.headers,
           })
 
-        return parsedResponse
+        return finalResponse
       } catch (error) {
         context.set.status = error instanceof RequestError ? error.status : 500
+        // Route-scoped post-parse hooks run on the error response too: a 400
+        // from validation and a 401 from a `beforeParse` middleware are exactly
+        // the responses an access log exists for. One that throws while an error
+        // is already being answered must not cost us that answer.
+        const post = postRan ? undefined : route?.composedPost
+        const respond = async (res: Response) => {
+          if (!post) return res
+          postRan = true
+          try {
+            return await post(res, context as Context, error)
+          } catch (postError) {
+            console.log(postError)
+            return res
+          }
+        }
         let customError
         for (let eh of galbe.errorCb) {
           const result = await eh(error, context as Context)
@@ -226,16 +252,18 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
           customError = responseParser(result, context as Context, cookies)
           break
         }
-        if (customError) return customError
+        if (customError) return await respond(customError)
         if (error instanceof InternalServerError) {
           let internalPayload = 'Internal Server Error'
           try {
             internalPayload = JSON.stringify(error?.payload || internalPayload)
           } catch {}
-          return new Response(internalPayload, {
-            status: error.status,
-            headers: { 'content-type': 'application/json' },
-          })
+          return await respond(
+            new Response(internalPayload, {
+              status: error.status,
+              headers: { 'content-type': 'application/json' },
+            })
+          )
         } else if (error instanceof RequestError) {
           let payload = error.payload
           // append semantics: context.set.headers always carries the
@@ -262,17 +290,21 @@ export default async (galbe: Galbe, port?: number, hostname?: string) => {
               } catch (err) {}
             }
           }
-          return new Response(payload, {
-            status: error.status,
-            headers,
-          })
+          return await respond(
+            new Response(payload, {
+              status: error.status,
+              headers,
+            })
+          )
         } else console.log(error)
-        return new Response('"Internal Server Error"', {
-          status: 500,
-          headers: {
-            'content-type': 'application/json',
-          },
-        })
+        return await respond(
+          new Response('"Internal Server Error"', {
+            status: 500,
+            headers: {
+              'content-type': 'application/json',
+            },
+          })
+        )
       }
     },
     error(error) {

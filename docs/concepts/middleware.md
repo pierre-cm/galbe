@@ -20,13 +20,14 @@ galbe.middleware(pattern: string, def: Hook | Hook[] | MiddlewareDef)  // routes
     type MiddlewareDef = {
       beforeParse?: PreParseHook | PreParseHook[]
       hooks?: Hook | Hook[]
+      afterHandle?: ResponseHook | ResponseHook[]
       schema?: { headers?: ...; query?: ...; params?: ... }
       security?: string | string[]
       securitySchemes?: Record<string, SecuritySchemeObject>
     }
     ```
 
-    A bare hook (or hook array) is sugar for `{ hooks }`. `beforeParse` holds hooks that must run before the request body is read — see [Before Parsing](#before-parsing). `security` and `securitySchemes` document the auth the hooks enforce — see [Security](#security).
+    A bare hook (or hook array) is sugar for `{ hooks }`. `beforeParse` holds hooks that must run before the request body is read — see [Before Parsing](#before-parsing) — and `afterHandle` holds hooks that run on the parsed response, error responses included — see [After Handling](#after-handling). `security` and `securitySchemes` document the auth the hooks enforce — see [Security](#security).
 
 Wrap a definition in `middleware()` to have its `schema` type its own hooks. The helper is the identity at runtime — it exists so the object literal has something to be contextually typed against, exactly like [`config()`](../reference/configuration.md):
 
@@ -215,7 +216,7 @@ galbe.middleware(
 The full order:
 
 ```
-plugins.onFetch → routing → plugins.onRoute → beforeParse → parsing & validation → plugins.beforeHandle → middleware hooks → route hooks → handler
+plugins.onFetch → routing → plugins.onRoute → beforeParse → parsing & validation → plugins.beforeHandle → middleware hooks → route hooks → handler → response parsing → afterHandle → plugins.afterHandle
 ```
 
 That position is the whole point of the slot. An authentication or rate-limiting check written as a regular hook lets an unauthenticated request be read and validated first, so a malformed unauthenticated request is answered with a **400 before the 401** — leaking the shape of your schema to a caller that should have been turned away outright. In `beforeParse`, the rejection comes first and the body is never read.
@@ -224,6 +225,26 @@ The context is restricted to what actually exists at that point: `request`, `rou
 
 > [!NOTE]
 > `beforeParse` is still middleware: it runs only for requests that matched a route, and only for routes matching its pattern. Work that must also cover unrouted requests belongs in a [Plugin](plugins.md)'s `onFetch`.
+
+## After Handling
+
+A definition's `afterHandle` hooks run once the request has a `Response` — after the handler and after the response is parsed, and **whatever the request ended on**:
+
+```ts
+galbe.middleware(
+  '/api/*',
+  middleware({
+    afterHandle: (response, ctx, error) => {
+      if (error) metrics.failure(ctx.route?.path)
+      response.headers.set('x-request-id', ctx.state.requestId) // echoed on errors too
+    },
+  })
+)
+```
+
+They are a transform, not an onion: by the time a `Response` exists the hook chain has unwound, so there is nothing left to wrap. A hook either returns a replacement `Response` or keeps the one it was handed. The third argument is what the request ended on, and is `undefined` on success.
+
+That slot is the only one that sees a request **rejected before the hook chain**. A `400` from [validation](schemas.md) or a `401` from a [`beforeParse`](#before-parsing) middleware never reaches the chain, but it does produce a `Response` — and the hooks run on it, an error response built by the [Error Handler](error-handler.md) included. The hooks run **once** per request, in registration order among the matched definitions, and ahead of the app-scoped plugins' own `afterHandle`. A hook that throws on the success path turns the request into a `500` rather than running again on the error response it caused, and a throwing hook while an error is being answered leaves that answer alone.
 
 ## Built-in Middlewares
 

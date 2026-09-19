@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { $T, Galbe, NotFoundError } from '../src'
+import { $T, Galbe, NotFoundError, RequestError } from '../src'
 import { bearer, logger, requestId, timing, type LogEntry } from '../src/middlewares'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -54,6 +54,16 @@ describe('requestId middleware', async () => {
     expect(await response.text()).toBe('from-gateway')
   })
 
+  test('a generator that returns something a header cannot carry is named', async () => {
+    const g = new Galbe()
+    g.middleware(requestId({ trustHeader: false, generate: () => 'not a header value' }))
+    g.get('/x', () => 'ok')
+    await g.listen(7420)
+
+    const response = await fetch('http://localhost:7420/x')
+    expect(response.status).toBe(500)
+  })
+
   test('rejected requests carry the id too, which is the point of running first', async () => {
     const unauthorized = await get('/secure/x')
     expect(unauthorized.status).toBe(401)
@@ -78,7 +88,10 @@ describe('logger middleware', async () => {
 
   galbe.middleware(requestId())
   galbe.middleware(logger({ log: entry => entries.push(entry), skip: ctx => ctx.route?.path === '/health' }))
+  galbe.middleware('/secure/*', bearer({ token: 'letmein' }))
 
+  galbe.get('/secure/x', () => 'ok')
+  galbe.get('/strict', { headers: { 'x-need': $T.string() } }, () => 'ok')
   galbe.get('/ok', () => 'ok')
   galbe.get('/health', () => 'up')
   galbe.get('/created', ctx => {
@@ -145,15 +158,29 @@ describe('logger middleware', async () => {
     expect(entries.length).toBe(before)
   })
 
-  test('what never reaches the chain is never logged', async () => {
-    const before = entries.length
+  test('a request rejected before the chain is logged: it is the traffic an access log is for', async () => {
     const invalid = await fetch(`http://localhost:${port}/items`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ n: 'not an integer' }),
     })
     expect(invalid.status).toBe(400)
-    expect(entries.length).toBe(before)
+    expect(last().status).toBe(400)
+    expect(last().path).toBe('/items')
+    expect(last().error).toBeInstanceOf(RequestError)
+  })
+
+  test('an auth rejection is logged with the status it ended on', async () => {
+    const rejected = await get('/secure/x')
+    expect(rejected.status).toBe(401)
+    expect(last().status).toBe(401)
+    expect((last().error as any).status).toBe(401)
+    // and the id still makes it onto the line: requestId runs in the same slot
+    expect(last().requestId).toBe(rejected.headers.get('x-request-id')!)
+
+    const strict = await get('/strict')
+    expect(strict.status).toBe(400)
+    expect(last().status).toBe(400)
   })
 
   test('the default logger writes one console line per request', async () => {
@@ -195,6 +222,7 @@ describe('timing middleware', async () => {
   galbe.get('/plain/missing', () => {
     throw new NotFoundError()
   })
+  galbe.get('/plain/strict', { headers: { 'x-need': $T.string() } }, () => 'ok')
   galbe.get('/named/x', () => 'ok')
   galbe.get('/quiet/empty', ctx => {
     ctx.set.status = 204
@@ -223,6 +251,12 @@ describe('timing middleware', async () => {
   test('an error response is measured as well', async () => {
     const response = await get('/plain/missing')
     expect(response.status).toBe(404)
+    expect(response.headers.get('server-timing')).toMatch(/^total;dur=/)
+  })
+
+  test('a request rejected before the chain is measured too', async () => {
+    const response = await get('/plain/strict')
+    expect(response.status).toBe(400)
     expect(response.headers.get('server-timing')).toMatch(/^total;dur=/)
   })
 

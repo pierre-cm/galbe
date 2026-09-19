@@ -34,8 +34,12 @@ export class AuthError<C extends string = AuthErrorCode> extends Error {
 
 /**
  * Replaces the default rejection. Returning a `Response` answers the request,
- * returning nothing lets it through **unauthenticated** (optional auth), and
- * throwing takes the usual error handler path.
+ * returning nothing falls back to the default `401` (or `429` for
+ * `rateLimit`), and throwing takes the usual error handler path.
+ *
+ * Optional authentication is deliberately **not** expressible here: it is the
+ * `optional` option of each middleware, so no error handler can turn a
+ * rejection into an authenticated request by forgetting to return something.
  */
 export type AuthErrorHandler<E extends AuthError<any> = AuthError> = (
   error: E,
@@ -61,6 +65,25 @@ export const readCredential = (ctx: PreParseContext, where: CredentialIn, name: 
   if (!prefix) return value
   if (value.slice(0, prefix.length).toLowerCase() !== prefix.toLowerCase()) return undefined
   return value.slice(prefix.length).trim() || undefined
+}
+
+/**
+ * Reads a credential the middleware requires, or reports it missing — unless
+ * the instance is `optional`, in which case a request carrying no credential
+ * simply carries on unauthenticated. Only *absence* is forgiven: a credential
+ * that is present and unreadable is still a malformed one.
+ */
+export const readRequired = (
+  ctx: PreParseContext,
+  where: CredentialIn,
+  name: string,
+  prefix?: string,
+  optional?: boolean
+) => {
+  const value = readCredential(ctx, where, name, prefix)
+  if (value) return value
+  if (optional) return undefined
+  throw new AuthError('missing', `no ${name} ${where} in the request`)
 }
 
 const encoder = new TextEncoder()
@@ -120,7 +143,10 @@ export const authHook = (
       await authenticate(ctx)
     } catch (error) {
       if (!(error instanceof AuthError)) throw error
-      if (options.errorHandler) return options.errorHandler(error, ctx)
+      // an errorHandler answers, or says nothing and leaves the default 401 in
+      // place: returning nothing is never a way to authenticate a request
+      const handled = await options.errorHandler?.(error, ctx)
+      if (handled) return handled
       const challenge = options.challenge?.(error)
       throw new UnauthorizedError(undefined, challenge ? { 'www-authenticate': challenge } : undefined)
     }

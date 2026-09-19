@@ -23,6 +23,7 @@ import type {
   MiddlewareDef,
   MiddlewareSchema,
   PreParseHook,
+  ResponseHook,
 } from './types'
 
 import { existsSync, readdirSync, statSync } from 'fs'
@@ -129,6 +130,21 @@ const composePreParse = (hooks: PreParseHook[]): Route['composedPre'] => {
   }
 }
 
+// The post-parse slot is a transform, not an onion: by the time a Response
+// exists the hook chain has unwound, so a hook either returns a replacement
+// Response or keeps the one it was handed. Composed once at registration, and
+// undefined when the slot is empty so the request path can skip it outright.
+const composePost = (hooks: ResponseHook[]): Route['composedPost'] => {
+  if (!hooks.length) return undefined
+  return async (response, context, error) => {
+    for (const hook of hooks) {
+      const r = await hook(response, context, error)
+      if (r) response = r
+    }
+    return response
+  }
+}
+
 // group prefixes may contain ':params', middleware patterns may not: a param
 // segment matches like '*'
 const patternFromPath = (path: string) => path.replace(/:[^/]+/g, '*')
@@ -136,10 +152,10 @@ const patternFromPath = (path: string) => path.replace(/:[^/]+/g, '*')
 // a bare hook (or hook array) is sugar for { hooks }
 const toMiddlewareDef = (arg?: MaybeArray<Hook> | MiddlewareDef): Omit<GalbeMiddleware, 'pattern' | 'segments'> => {
   const def: MiddlewareDef = typeof arg === 'function' || Array.isArray(arg) ? { hooks: arg } : (arg ?? {})
-  if (def.afterHandle) console.warn("middleware: 'afterHandle' is a reserved slot name and is not run yet")
   return {
     beforeParse: def.beforeParse ? [def.beforeParse].flat() : [],
     hooks: def.hooks ? [def.hooks].flat() : [],
+    afterHandle: def.afterHandle ? [def.afterHandle].flat() : [],
     schema: def.schema,
     security: def.security,
     securitySchemes: def.securitySchemes,
@@ -265,6 +281,7 @@ export class Galbe {
     if (mergeMiddlewareSchema(route, matched)) compileRoute(route.schema)
     route.composed = composeHooks([...matched.flatMap(m => m.hooks), ...route.hooks], route.handler)
     route.composedPre = composePreParse(matched.flatMap(m => m.beforeParse))
+    route.composedPost = composePost(matched.flatMap(m => m.afterHandle))
   }
   async use(plugin: GalbePlugin) {
     this.plugins.push(plugin)
@@ -294,7 +311,15 @@ export class Galbe {
   middleware(arg1: string | MaybeArray<Hook> | MiddlewareDef, arg2?: MaybeArray<Hook> | MiddlewareDef): void {
     const pattern = typeof arg1 === 'string' ? arg1 : '*'
     const def = toMiddlewareDef(typeof arg1 === 'string' ? arg2 : arg1)
-    if (!def.hooks.length && !def.beforeParse.length && !def.schema && !def.security && !def.securitySchemes) return
+    if (
+      !def.hooks.length &&
+      !def.beforeParse.length &&
+      !def.afterHandle.length &&
+      !def.schema &&
+      !def.security &&
+      !def.securitySchemes
+    )
+      return
     const entry = { pattern, segments: parseMiddlewarePattern(pattern), ...def }
     this.middlewares.push(entry)
     // routes registered before this call: recompose the ones the new entry matches

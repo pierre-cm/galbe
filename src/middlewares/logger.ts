@@ -1,6 +1,5 @@
-import type { Context, Hook, MiddlewareDef } from '../types'
+import type { Context, MiddlewareDef, PreParseHook, ResponseHook } from '../types'
 
-import { RequestError } from '../types'
 import { METHOD_COLOR } from '../util'
 
 /** One finished request, as the logger saw it. */
@@ -9,7 +8,7 @@ export type LogEntry = {
   /** Request path, **without** the query string — see {@link LoggerConfig.log}. */
   path: string
   status: number
-  /** Milliseconds the hook chain took, handler included. */
+  /** Milliseconds from the pre-parse slot to the parsed response — body parsing and validation included. */
   duration: number
   /** Whatever `requestId` left on the state, when it is registered ahead of this. */
   requestId?: string
@@ -28,8 +27,8 @@ export type LoggerConfig = {
   log?: (entry: LogEntry, ctx: Context) => void
   /**
    * Leaves a request unlogged — health checks, asset routes. It runs once the
-   * request is done, so `ctx.set.status` is readable and a filter can keep only
-   * the failures.
+   * request is done, so the response status is readable and a filter can keep
+   * only the failures.
    */
   skip?: (ctx: Context) => boolean
 }
@@ -60,12 +59,16 @@ const pathOf = (url: string) => {
  * Logs one line per request — method, path, status and how long it took — or
  * hands the same fields to your own logger through `log`.
  *
- * It wraps the hook chain, so it reports the status the request actually ended
- * on, an error included. What it cannot see is a request that never reached the
- * chain: a `400` from validation, or a rejection from a
+ * It fills two slots: the
  * [`beforeParse`](https://galbe.dev/documentation/middleware#before-parsing)
- * middleware such as `jwt` or `rateLimit`, is answered earlier. A log of
- * *every* request, routed or not, belongs in a plugin's `onFetch`.
+ * one starts the clock, and the `afterHandle` one reports the request once a
+ * `Response` exists. That covers what a hook-chain log cannot see — a `400`
+ * from validation, a `401` from an auth middleware, a `500` — with the status
+ * the request actually ended on and the error it ended on.
+ *
+ * What no middleware can see is a request that matched **no route**: a `404`, a
+ * CORS preflight, or a request a plugin answered in `onFetch`. An access log
+ * covering those belongs in the plugin.
  *
  * ---
  * @example
@@ -85,39 +88,33 @@ const pathOf = (url: string) => {
  */
 export const logger = (config: LoggerConfig = {}): MiddlewareDef<{}> => {
   const write = config.log ?? consoleLog
+  // the clock lives beside the request rather than on `ctx.state`, which is a
+  // public `Record<string, any>`: an internal marker has no business in a dump
+  // of it, and two instances on one route keep their own
+  const starts = new WeakMap<object, number>()
 
-  const hooks: Hook = async (ctx, next) => {
-    const start = performance.now()
-    let status = 0
-    let error: unknown = undefined
-    try {
-      const response = await next()
-      // the same rule the chain settles the status by: a returned Response
-      // carries its own, anything else answers with ctx.set.status
-      status = response instanceof Response ? response.status : ctx.set.status || 200
-      return response
-    } catch (thrown) {
-      error = thrown
-      status = thrown instanceof RequestError ? thrown.status : 500
-      throw thrown
-    } finally {
-      const duration = performance.now() - start
-      if (!config.skip?.(ctx)) {
-        const id = ctx.state.requestId
-        write(
-          {
-            method: ctx.request.method,
-            path: pathOf(ctx.request.url),
-            status,
-            duration,
-            ...(typeof id === 'string' ? { requestId: id } : {}),
-            ...(error !== undefined ? { error } : {}),
-          },
-          ctx
-        )
-      }
-    }
+  const beforeParse: PreParseHook = ctx => {
+    starts.set(ctx, performance.now())
   }
 
-  return { hooks }
+  const afterHandle: ResponseHook = (response, ctx, error) => {
+    const start = starts.get(ctx)
+    // the post slot also runs for a request answered before the pre slot did —
+    // a plugin that threw while routing — where there is no clock to read
+    if (typeof start !== 'number' || config.skip?.(ctx)) return
+    const id = ctx.state.requestId
+    write(
+      {
+        method: ctx.request.method,
+        path: pathOf(ctx.request.url),
+        status: response.status,
+        duration: performance.now() - start,
+        ...(typeof id === 'string' ? { requestId: id } : {}),
+        ...(error !== undefined ? { error } : {}),
+      },
+      ctx
+    )
+  }
+
+  return { beforeParse, afterHandle }
 }

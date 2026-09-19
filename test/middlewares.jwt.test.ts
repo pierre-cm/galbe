@@ -48,7 +48,7 @@ describe('jwt middleware', async () => {
   const hs = await hsKey()
   const token = await sign(claims(), hs)
 
-  galbe.middleware('/hs/*', jwt({ publicKey: secret }))
+  galbe.middleware('/hs/*', jwt({ key: secret }))
   galbe.get('/hs/me', ctx => ctx.state.jwtPayload.sub)
   galbe.post('/hs/items', { body: { 'application/json': $T.object({ n: $T.integer() }) } }, ctx => ctx.body.n)
   galbe.get('/open', () => 'open')
@@ -98,7 +98,7 @@ describe('jwt middleware', async () => {
     expect((await get('/hs/me', auth(expired))).status).toBe(401)
 
     const tolerant = new Galbe()
-    tolerant.middleware('/*', jwt({ publicKey: secret, clockTolerance: 60 }))
+    tolerant.middleware('/*', jwt({ key: secret, clockTolerance: 60 }))
     tolerant.get('/me', ctx => ctx.state.jwtPayload.sub)
     await tolerant.listen(7383)
     expect((await fetch(`http://localhost:7383/me`, auth(expired))).status).toBe(200)
@@ -126,14 +126,11 @@ describe('jwt claim checks', async () => {
   const galbe = new Galbe()
   const hs = await hsKey()
 
-  galbe.middleware(
-    '/iss/*',
-    jwt({ publicKey: secret, issuer: ['https://auth.example.com', 'https://alt.example.com'] })
-  )
-  galbe.middleware('/aud/*', jwt({ publicKey: secret, audience: 'my-api' }))
-  galbe.middleware('/sub/*', jwt({ publicKey: secret, subject: 'user-1' }))
-  galbe.middleware('/validate/*', jwt({ publicKey: secret, validate: p => p.role === 'admin' }))
-  galbe.middleware('/holder/*', jwt({ publicKey: secret, stateHolder: 'user' }))
+  galbe.middleware('/iss/*', jwt({ key: secret, issuer: ['https://auth.example.com', 'https://alt.example.com'] }))
+  galbe.middleware('/aud/*', jwt({ key: secret, audience: 'my-api' }))
+  galbe.middleware('/sub/*', jwt({ key: secret, subject: 'user-1' }))
+  galbe.middleware('/validate/*', jwt({ key: secret, validate: p => p.role === 'admin' }))
+  galbe.middleware('/holder/*', jwt({ key: secret, stateHolder: 'user' }))
   for (const p of ['/iss/x', '/aud/x', '/sub/x', '/validate/x']) galbe.get(p, () => 'ok')
   galbe.get('/holder/x', ctx => ctx.state.user.sub)
 
@@ -183,12 +180,12 @@ describe('jwt algorithms and keys', async () => {
   const rsaPem = await pem(rsa.publicKey)
   const ecPem = await pem(ec.publicKey)
 
-  galbe.middleware('/hs/*', jwt({ publicKey: secret }))
-  galbe.middleware('/rs/*', jwt({ publicKey: rsaPem }))
-  galbe.middleware('/es/*', jwt({ publicKey: ecPem }))
-  galbe.middleware('/jwk/*', jwt({ publicKey: await crypto.subtle.exportKey('jwk', rsa.publicKey) }))
-  galbe.middleware('/cryptokey/*', jwt({ publicKey: ec.publicKey }))
-  galbe.middleware('/hs256only/*', jwt({ publicKey: secret, algorithms: ['HS256'] }))
+  galbe.middleware('/hs/*', jwt({ key: secret }))
+  galbe.middleware('/rs/*', jwt({ key: rsaPem }))
+  galbe.middleware('/es/*', jwt({ key: ecPem }))
+  galbe.middleware('/jwk/*', jwt({ key: await crypto.subtle.exportKey('jwk', rsa.publicKey) }))
+  galbe.middleware('/cryptokey/*', jwt({ key: ec.publicKey }))
+  galbe.middleware('/hs256only/*', jwt({ key: secret, algorithms: ['HS256'] }))
   for (const p of ['/hs/x', '/rs/x', '/es/x', '/jwk/x', '/cryptokey/x', '/hs256only/x']) galbe.get(p, () => 'ok')
 
   await galbe.listen(port)
@@ -230,8 +227,8 @@ describe('jwt algorithms and keys', async () => {
     const sha1 = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-1' }, false, [
       'verify',
     ])
-    g.middleware('/sha1/*', jwt({ publicKey: sha1 }))
-    g.middleware('/mismatch/*', jwt({ publicKey: secret, algorithms: ['RS256'] }))
+    g.middleware('/sha1/*', jwt({ key: sha1 }))
+    g.middleware('/mismatch/*', jwt({ key: secret, algorithms: ['RS256'] }))
     g.get('/sha1/x', () => 'ok')
     g.get('/mismatch/x', () => 'ok')
     await g.listen(7391)
@@ -257,7 +254,7 @@ describe('jwt algorithms and keys', async () => {
     rfc.middleware(
       '/*',
       jwt({
-        publicKey: {
+        key: {
           kty: 'oct',
           k: 'AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow',
         },
@@ -283,8 +280,8 @@ describe('jwt sources', async () => {
   const hs = await hsKey()
   const token = await sign(claims(), hs)
 
-  galbe.middleware('/cookie/*', jwt({ publicKey: secret, sources: ['cookie:session'] }))
-  galbe.middleware('/both/*', jwt({ publicKey: secret, sources: ['bearer', 'cookie:session'] }))
+  galbe.middleware('/cookie/*', jwt({ key: secret, sources: ['cookie:session'] }))
+  galbe.middleware('/both/*', jwt({ key: secret, sources: ['bearer', 'cookie:session'] }))
   galbe.get('/cookie/x', ctx => ctx.state.jwtPayload.sub)
   galbe.get('/both/x', ctx => ctx.state.jwtPayload.sub)
 
@@ -304,7 +301,7 @@ describe('jwt sources', async () => {
 
   test('cookie lookup does not reach through the prototype chain', async () => {
     const proto = new Galbe()
-    proto.middleware('/*', jwt({ publicKey: secret, sources: ['cookie:constructor'] }))
+    proto.middleware('/*', jwt({ key: secret, sources: ['cookie:constructor'] }))
     proto.get('/x', () => 'ok')
     await proto.listen(7388)
 
@@ -320,7 +317,7 @@ describe('jwt sources', async () => {
   })
 
   test('an invalid source is a registration-time error', () => {
-    expect(() => jwt({ publicKey: secret, sources: ['header:x-token' as 'bearer'] })).toThrow(SyntaxError)
+    expect(() => jwt({ key: secret, sources: ['header:x-token' as 'bearer'] })).toThrow(SyntaxError)
   })
 })
 
@@ -333,17 +330,20 @@ describe('jwt errorHandler', async () => {
   galbe.middleware(
     '/custom/*',
     jwt({
-      publicKey: secret,
+      key: secret,
       errorHandler: error => {
         seen.push(error.code)
         return new Response(JSON.stringify({ error: error.code }), { status: 419 })
       },
     })
   )
-  // returning nothing lets the request through: optional authentication
-  galbe.middleware('/optional/*', jwt({ publicKey: secret, errorHandler: () => {} }))
+  // optional authentication is declared, not implied by a handler
+  galbe.middleware('/optional/*', jwt({ key: secret, optional: true }))
+  // a handler that logs and returns nothing leaves the default 401 in place
+  galbe.middleware('/silent/*', jwt({ key: secret, errorHandler: () => {} }))
   galbe.get('/custom/x', () => 'ok')
   galbe.get('/optional/x', ctx => (ctx.state.jwtPayload ? 'auth' : 'anon'))
+  galbe.get('/silent/x', () => 'ok')
 
   await galbe.listen(port)
   const get = (path: string, headers?: Record<string, string>) => fetch(`http://localhost:${port}${path}`, { headers })
@@ -363,11 +363,21 @@ describe('jwt errorHandler', async () => {
     expect(seen).toEqual([])
   })
 
-  test('returning nothing lets the request through unauthenticated', async () => {
+  test('optional lets a request without a token through, and still rejects a bad one', async () => {
     expect(await (await get('/optional/x')).text()).toBe('anon')
     expect(await (await get('/optional/x', { authorization: `Bearer ${await sign(claims(), hs)}` })).text()).toBe(
       'auth'
     )
+    expect((await get('/optional/x', { authorization: 'Bearer a.b.c' })).status).toBe(401)
+    expect(
+      (await get('/optional/x', { authorization: `Bearer ${await sign({ ...claims(), exp: 1 }, hs)}` })).status
+    ).toBe(401)
+  })
+
+  test('an errorHandler returning nothing falls back to the default 401', async () => {
+    const response = await get('/silent/x')
+    expect(response.status).toBe(401)
+    expect(response.headers.get('www-authenticate')).toBe('Bearer')
   })
 
   test('an error thrown by validate() is not flattened into a 401', async () => {
@@ -375,7 +385,7 @@ describe('jwt errorHandler', async () => {
     boom.middleware(
       '/*',
       jwt({
-        publicKey: secret,
+        key: secret,
         validate: () => {
           throw new Error('boom')
         },
@@ -394,7 +404,7 @@ describe('jwt errorHandler', async () => {
 describe('jwt schema fragment and security metadata', async () => {
   test('matched routes gain an optional JWT authorization header', async () => {
     const g = new Galbe()
-    g.middleware('/api/*', jwt({ publicKey: secret }))
+    g.middleware('/api/*', jwt({ key: secret }))
     g.get('/api/x', () => 'x')
     g.get('/other', () => 'other')
 
@@ -405,7 +415,7 @@ describe('jwt schema fragment and security metadata', async () => {
 
   test('the bearer scheme is defined and required on matched operations', async () => {
     const g = new Galbe()
-    g.middleware('/api/*', jwt({ publicKey: secret }))
+    g.middleware('/api/*', jwt({ key: secret }))
     g.get('/api/x', () => 'x')
     g.get('/other', () => 'other')
 
@@ -421,8 +431,8 @@ describe('jwt schema fragment and security metadata', async () => {
 
   test('a cookie source documents as an apiKey scheme, and sources stack as alternatives', async () => {
     const g = new Galbe()
-    g.middleware('/c/*', jwt({ publicKey: secret, sources: ['cookie:session'] }))
-    g.middleware('/b/*', jwt({ publicKey: secret, sources: ['bearer', 'cookie:session'] }))
+    g.middleware('/c/*', jwt({ key: secret, sources: ['cookie:session'] }))
+    g.middleware('/b/*', jwt({ key: secret, sources: ['bearer', 'cookie:session'] }))
     g.get('/c/x', () => 'x')
     g.get('/b/x', () => 'x')
 
@@ -437,8 +447,8 @@ describe('jwt schema fragment and security metadata', async () => {
 
   test('securityScheme renames the scheme so two instances can coexist', async () => {
     const g = new Galbe()
-    g.middleware('/users/*', jwt({ publicKey: secret, securityScheme: 'userAuth' }))
-    g.middleware('/admin/*', jwt({ publicKey: secret, securityScheme: 'adminAuth' }))
+    g.middleware('/users/*', jwt({ key: secret, securityScheme: 'userAuth' }))
+    g.middleware('/admin/*', jwt({ key: secret, securityScheme: 'adminAuth' }))
     g.get('/users/x', () => 'x')
     g.get('/admin/x', () => 'x')
 
@@ -449,7 +459,7 @@ describe('jwt schema fragment and security metadata', async () => {
 
   test('securityScheme: false emits no security metadata', async () => {
     const g = new Galbe()
-    g.middleware('/api/*', jwt({ publicKey: secret, securityScheme: false }))
+    g.middleware('/api/*', jwt({ key: secret, securityScheme: false }))
     g.get('/api/x', () => 'x')
 
     const spec = await OpenAPISerializer(g)
@@ -461,7 +471,7 @@ describe('jwt schema fragment and security metadata', async () => {
 
   test('a group typed by the def reads the header from the fragment', async () => {
     const g = new Galbe()
-    g.group('/api', jwt({ publicKey: secret }), api => {
+    g.group('/api', jwt({ key: secret }), api => {
       api.get('/x', ctx => {
         const header: string | undefined = ctx.headers.authorization
         return header ?? ''
@@ -482,10 +492,10 @@ describe('signJwt', async () => {
     return `-----BEGIN PRIVATE KEY-----\n${body.match(/.{1,64}/g)?.join('\n')}\n-----END PRIVATE KEY-----\n`
   }
 
-  galbe.middleware('/hs/*', jwt({ publicKey: secret }))
-  galbe.middleware('/rs/*', jwt({ publicKey: rsaPem }))
-  galbe.middleware('/es/*', jwt({ publicKey: ec.publicKey }))
-  galbe.middleware('/strict/*', jwt({ publicKey: secret, issuer: 'https://auth.example.com', audience: 'my-api' }))
+  galbe.middleware('/hs/*', jwt({ key: secret }))
+  galbe.middleware('/rs/*', jwt({ key: rsaPem }))
+  galbe.middleware('/es/*', jwt({ key: ec.publicKey }))
+  galbe.middleware('/strict/*', jwt({ key: secret, issuer: 'https://auth.example.com', audience: 'my-api' }))
   for (const p of ['/hs/x', '/rs/x', '/es/x', '/strict/x']) galbe.get(p, ctx => ctx.state.jwtPayload.sub ?? 'ok')
 
   await galbe.listen(port)

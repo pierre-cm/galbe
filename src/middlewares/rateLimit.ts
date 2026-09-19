@@ -36,8 +36,9 @@ export type RateLimitConfig = {
   headers?: boolean
   /**
    * Replaces the default `429`. Return a `Response` to answer the request, or
-   * nothing to let it through anyway; throwing takes the usual error handler
-   * path. A `Response` of your own carries no `Retry-After` unless you set one.
+   * nothing to fall back to the default `429`; throwing takes the usual error
+   * handler path. A `Response` of your own carries no `Retry-After` unless you
+   * set one.
    */
   errorHandler?: (info: RateLimitInfo, ctx: PreParseContext) => MaybePromise<Response | void>
 }
@@ -130,7 +131,7 @@ export const rateLimit = (config: RateLimitConfig): MiddlewareDef<{}> => {
     return { allowed, tokens: bucket.tokens }
   }
 
-  const beforeParse: PreParseHook = ctx => {
+  const beforeParse: PreParseHook = async ctx => {
     const key = keyOf(ctx)
     if (!key) return
     const { allowed, tokens } = consume(key, seconds())
@@ -143,7 +144,8 @@ export const rateLimit = (config: RateLimitConfig): MiddlewareDef<{}> => {
     // a bucket below one token needs that fraction of a second back; HTTP
     // counts Retry-After in whole seconds, so it always asks for at least one
     const retryAfter = Math.ceil((1 - tokens) / rate)
-    if (config.errorHandler) return config.errorHandler({ key, limit, retryAfter }, ctx)
+    const handled = await config.errorHandler?.({ key, limit, retryAfter }, ctx)
+    if (handled) return handled
     throw new TooManyRequestsError(undefined, { 'retry-after': String(retryAfter) })
   }
 

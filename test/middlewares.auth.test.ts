@@ -31,12 +31,14 @@ describe('bearer middleware', async () => {
       },
     })
   )
-  galbe.middleware('/optional/*', bearer({ token: 'secret-token', errorHandler: () => {} }))
-  for (const p of ['/one/x', '/many/x', '/realm/x', '/custom/x']) galbe.get(p, () => 'ok')
+  galbe.middleware('/optional/*', bearer({ token: 'secret-token', optional: true }))
+  // returning nothing from a handler leaves the default rejection in place
+  galbe.middleware('/silent/*', bearer({ token: 'secret-token', errorHandler: () => {} }))
+  for (const p of ['/one/x', '/many/x', '/realm/x', '/custom/x', '/silent/x']) galbe.get(p, () => 'ok')
   galbe.get('/lookup/x', ctx => String(ctx.state.bearer.userId))
-  galbe.get('/plain/x', ctx => ctx.state.bearer)
+  galbe.get('/plain/x', ctx => String(ctx.state.bearer))
   galbe.get('/holder/x', ctx => ctx.state.client)
-  galbe.get('/optional/x', ctx => ctx.state.bearer ?? 'anon')
+  galbe.get('/optional/x', ctx => String(ctx.state.bearer ?? 'anon'))
   galbe.post('/one/items', { body: { 'application/json': $T.object({ n: $T.integer() }) } }, () => 'ok')
 
   await galbe.listen(port)
@@ -76,23 +78,32 @@ describe('bearer middleware', async () => {
   test('verify decides, and what it returns lands on ctx.state', async () => {
     expect(await (await get('/lookup/x', auth('live'))).text()).toBe('42')
     expect((await get('/lookup/x', auth('revoked'))).status).toBe(401)
-    // a bare `true` keeps the token itself as the identity
-    expect(await (await get('/plain/x', auth('ok-42'))).text()).toBe('ok-42')
+    // a constant token authenticates without carrying the secret: the state
+    // key is `true`, never the token itself
+    expect(await (await get('/plain/x', auth('ok-42'))).text()).toBe('true')
     expect((await get('/plain/x', auth('no'))).status).toBe(401)
   })
 
   test('stateHolder names the state key', async () => {
-    expect(await (await get('/holder/x', auth('secret-token'))).text()).toBe('secret-token')
+    expect(await (await get('/holder/x', auth('secret-token'))).text()).toBe('true')
   })
 
-  test('errorHandler replaces the rejection, and returning nothing means optional auth', async () => {
+  test('errorHandler replaces the rejection, and returning nothing keeps the default 401', async () => {
     const resp = await get('/custom/x', auth('wrong'))
     expect(resp.status).toBe(418)
     expect(await resp.text()).toBe('nope')
     expect(seen).toEqual(['invalid'])
 
+    // a handler that only observes must not be able to authenticate anyone
+    const silent = await get('/silent/x')
+    expect(silent.status).toBe(401)
+    expect(silent.headers.get('www-authenticate')).toBe('Bearer')
+  })
+
+  test('optional lets a request without a token through, and still rejects a bad one', async () => {
     expect(await (await get('/optional/x')).text()).toBe('anon')
-    expect(await (await get('/optional/x', auth('secret-token'))).text()).toBe('secret-token')
+    expect(await (await get('/optional/x', auth('secret-token'))).text()).toBe('true')
+    expect((await get('/optional/x', auth('wrong'))).status).toBe(401)
   })
 
   test('the body is never parsed: an unauthenticated malformed request is a 401, not a 400', async () => {
@@ -132,7 +143,8 @@ describe('apiKey middleware', async () => {
     expect((await get('/header/x', { 'x-api-key': 'secret-key' })).status).toBe(200)
     expect((await get('/header/x', { 'x-api-key': 'wrong' })).status).toBe(401)
     expect((await get('/header/x')).status).toBe(401)
-    expect(await (await get('/header/x', { 'x-api-key': 'secret-key' })).text()).toBe('secret-key')
+    // the key authenticates without being copied onto the state
+    expect(await (await get('/header/x', { 'x-api-key': 'secret-key' })).text()).toBe('true')
   })
 
   test('the header name is configurable, and header lookup is case-insensitive', async () => {
@@ -242,6 +254,8 @@ describe('basicAuth middleware', async () => {
 
   test('a configuration with nothing to check against is refused', () => {
     expect(() => basicAuth({})).toThrow(SyntaxError)
+    // an empty map is a failed environment lookup, not a policy
+    expect(() => basicAuth({ users: {} })).toThrow(SyntaxError)
   })
 })
 
@@ -278,6 +292,29 @@ describe('auth middlewares, shared behavior', async () => {
     await g.listen(7398)
 
     expect((await fetch('http://localhost:7398/x', { headers: { authorization: 'Bearer t' } })).status).toBe(500)
+  })
+
+  test('optional lets a credential-less request through, and still rejects a wrong credential', async () => {
+    const g = new Galbe()
+    g.middleware('/b/*', bearer({ token: 't', optional: true }))
+    g.middleware('/k/*', apiKey({ key: 'k', optional: true }))
+    g.middleware('/a/*', basicAuth({ users: { u: 'p' }, optional: true }))
+    const identity = (ctx: { state: Record<string, any> }) =>
+      String(ctx.state.bearer ?? ctx.state.apiKey ?? ctx.state.basicAuth ?? 'anon')
+    for (const p of ['/b/x', '/k/x', '/a/x']) g.get(p, ctx => identity(ctx))
+    await g.listen(7430)
+
+    const url = (p: string) => `http://localhost:7430${p}`
+    for (const p of ['/b/x', '/k/x', '/a/x']) {
+      const anonymous = await fetch(url(p))
+      expect(anonymous.status).toBe(200)
+      expect(await anonymous.text()).toBe('anon')
+    }
+    expect((await fetch(url('/b/x'), { headers: { authorization: 'Bearer wrong' } })).status).toBe(401)
+    expect((await fetch(url('/k/x'), { headers: { 'x-api-key': 'wrong' } })).status).toBe(401)
+    expect((await fetch(url('/a/x'), { headers: { authorization: basic('u', 'wrong') } })).status).toBe(401)
+
+    expect(await (await fetch(url('/k/x'), { headers: { 'x-api-key': 'k' } })).text()).toBe('true')
   })
 })
 

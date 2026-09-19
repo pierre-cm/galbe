@@ -1,4 +1,4 @@
-import type { Context, Hook, MiddlewareDef } from '../types'
+import type { Context, MiddlewareDef, PreParseHook, ResponseHook } from '../types'
 
 export type TimingConfig = {
   /** Name of the measurement, a `Server-Timing` token. Default `total`. */
@@ -10,8 +10,8 @@ export type TimingConfig = {
   /** Response header the measurement is appended to. Default `server-timing`. */
   header?: string
   /**
-   * Leaves a request unmeasured. It runs once the request is done, so
-   * `ctx.set.status` is readable and a filter can keep only the slow or the
+   * Leaves a request unmeasured. It runs once the request is done, so the
+   * response status is readable and a filter can keep only the slow or the
    * failing ones.
    */
   skip?: (ctx: Context) => boolean
@@ -28,9 +28,11 @@ const token = (name: string) => name.replace(/[^\w-]/g, '-')
  * caller cannot measure itself, since its own clock also counts the network.
  *
  * The entry is **appended**, so measurements a route added to the same header
- * survive alongside it. It covers the hook chain and the handler: a request
- * rejected before the chain — by validation, or by a `beforeParse` middleware
- * such as `jwt` or `rateLimit` — is not measured.
+ * survive alongside it. It measures the whole request: the clock starts in the
+ * `beforeParse` slot and the entry is written once a `Response` exists, so a
+ * request rejected before the hook chain — a `400` from validation, a `401`
+ * from an auth middleware — is measured too. A request that matched no route is
+ * not: a middleware runs per route, never for a `404`.
  *
  * The header is public, and so is what it says about your internals. Keep the
  * names generic on a public API, or restrict it to development with `skip`.
@@ -59,19 +61,26 @@ export const timing = (config: TimingConfig = {}): MiddlewareDef<{}> => {
   const name = token(config.name ?? 'total')
   const suffix = description ? `;desc="${description}"` : ''
 
-  const hooks: Hook = async (ctx, next) => {
-    const start = performance.now()
-    try {
-      return await next()
-    } finally {
-      if (!config.skip?.(ctx)) {
-        const entry = `${name};dur=${(performance.now() - start).toFixed(precision)}${suffix}`
-        const measured = ctx.set.headers[header]
-        if (Array.isArray(measured)) measured.push(entry)
-        else ctx.set.headers[header] = measured ? `${measured}, ${entry}` : entry
-      }
-    }
+  // the clock lives beside the request rather than on `ctx.state`, which is a
+  // public `Record<string, any>`: an internal marker has no business in a dump
+  // of it, and two instances on one route keep their own
+  const starts = new WeakMap<object, number>()
+
+  const beforeParse: PreParseHook = ctx => {
+    starts.set(ctx, performance.now())
   }
 
-  return { hooks }
+  const afterHandle: ResponseHook = (response, ctx) => {
+    const start = starts.get(ctx)
+    // the post slot also runs for a request answered before the pre slot did —
+    // a plugin that threw while routing — where there is no clock to read
+    if (typeof start !== 'number' || config.skip?.(ctx)) return
+    const entry = `${name};dur=${(performance.now() - start).toFixed(precision)}${suffix}`
+    // append to whatever the response already carries, so a measurement a route
+    // added to the same header survives alongside this one
+    const measured = response.headers.get(header)
+    response.headers.set(header, measured ? `${measured}, ${entry}` : entry)
+  }
+
+  return { beforeParse, afterHandle }
 }
