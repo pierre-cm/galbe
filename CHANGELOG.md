@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.16.0 — 2026-09-19
+
+### Fixes
+- make route discovery deterministic
+
 ## Unreleased
 
 ### Breaking changes
