@@ -142,8 +142,10 @@ describe('clientAddress in the request lifecycle', async () => {
   }
   const untrusting = echo(new Galbe())
   const trusting = echo(new Galbe({ trustProxy: 1 }))
-  await untrusting.listen(7402)
-  await trusting.listen(7403)
+  // explicit address: `localhost` may resolve to ::1 (CI, containers), which
+  // would bind the IPv6 loopback only and leave these fetches unreachable
+  await untrusting.listen(7402, '127.0.0.1')
+  await trusting.listen(7403, '127.0.0.1')
   const get = (port: number, path: string, forwarded?: string) =>
     fetch(`http://127.0.0.1:${port}${path}`, forwarded ? { headers: { 'x-forwarded-for': forwarded } } : undefined)
   const who = async (port: number, forwarded?: string) =>

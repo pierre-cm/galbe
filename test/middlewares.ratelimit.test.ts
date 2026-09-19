@@ -40,7 +40,9 @@ describe('rateLimit middleware', async () => {
   galbe.get('/outer/inner/x', () => 'ok')
   galbe.post('/burst/items', { body: { 'application/json': $T.object({ n: $T.integer() }) } }, () => 'ok')
 
-  await galbe.listen(port)
+  // bound to an explicit address: `localhost` resolves to ::1 first on some
+  // machines (CI runners, containers), and then 127.0.0.1 is nothing
+  await galbe.listen(port, '127.0.0.1')
   const get = (path: string, client: string) =>
     fetch(`http://127.0.0.1:${port}${path}`, { headers: { 'x-client': client } })
 
@@ -162,8 +164,8 @@ describe('rateLimit default key', async () => {
     galbe.middleware(rateLimit({ limit: 1, window: 60 }))
     galbe.get('/x', () => 'ok')
   }
-  await untrusting.listen(7405)
-  await trusting.listen(7406)
+  await untrusting.listen(7405, '127.0.0.1')
+  await trusting.listen(7406, '127.0.0.1')
   const get = (port: number, forwarded?: string) =>
     fetch(`http://127.0.0.1:${port}/x`, forwarded ? { headers: { 'x-forwarded-for': forwarded } } : undefined)
 

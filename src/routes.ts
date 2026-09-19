@@ -213,6 +213,13 @@ const prefixMeta = (meta: RoutesMeta, prefix: string): RoutesMeta =>
     ? meta
     : { ...meta, routes: Object.fromEntries(Object.entries(meta.routes).map(([p, m]) => [joinPath(prefix, p), m])) }
 
+// a directory scan returns entries in the filesystem's order, which differs from
+// machine to machine. Route registration order decides the emitted spec's `paths`
+// order, the printed route table and which param name a shared trie node keeps,
+// so discovery has to be sorted rather than trusted.
+const byDepthThenPath = (a: { file: string }, b: { file: string }) =>
+  a.file.split('/').length - b.file.split('/').length || a.file.localeCompare(b.file)
+
 const collectFiles = async (pattern: string): Promise<Array<{ file: string; base: string }>> => {
   const root = process.cwd()
   const base = resolve(root, globBase(pattern))
@@ -232,7 +239,7 @@ const collectFiles = async (pattern: string): Promise<Array<{ file: string; base
       for (const f of await readdir(path)) out.push({ file: `${path}/${f}`, base: path })
     } else out.push({ file: path, base })
   }
-  return out
+  return out.sort(byDepthThenPath)
 }
 
 /**
@@ -265,8 +272,8 @@ export const defineRoutes = async (
   if (mwConf !== false) {
     const mwPatterns = mwConf === undefined || mwConf === true ? [DEFAULT_MIDDLEWARE_PATTERN] : [mwConf].flat()
     const files = (await Promise.all(mwPatterns.map(collectFiles))).flat()
-    // deterministic order: directory depth (shallowest first), then path
-    files.sort((a, b) => a.file.split('/').length - b.file.split('/').length || a.file.localeCompare(b.file))
+    // each pattern came back sorted already: this re-sorts across patterns
+    files.sort(byDepthThenPath)
     for (const { file, base } of files) {
       const dirScope = dirPrefixOf(file, base)
       try {

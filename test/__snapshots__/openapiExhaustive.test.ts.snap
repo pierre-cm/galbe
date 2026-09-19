@@ -1627,6 +1627,209 @@ externalDocs:
   url: https://example.test/docs
   description: Full handbook
 paths: 
+  /composition: 
+    post: 
+      tags: 
+        - composition
+      summary: Composed schemas in and out.
+      description: "Exercises allOf, oneOf, anyOf, discriminators and deep nesting."
+      operationId: composeShapes
+      requestBody: 
+        required: true
+        content: 
+          application/json: 
+            schema: 
+              type: object
+              properties: 
+                intersected: 
+                  allOf: 
+                    - $ref: "#/components/schemas/Identified"
+                    - $ref: "#/components/schemas/Timestamped"
+                union: 
+                  oneOf: 
+                    - $ref: "#/components/schemas/Cat"
+                    - $ref: "#/components/schemas/Dog"
+                loose: 
+                  anyOf: 
+                    - type: string
+                    - type: integer
+                singleAllOf: 
+                  $ref: "#/components/schemas/Identified"
+                singleOneOf: 
+                  type: string
+                negated: 
+                  {}
+              required: 
+                - intersected
+                - union
+                - loose
+      responses: 
+        "200": 
+          description: The discriminated result.
+          content: 
+            application/json: 
+              schema: 
+                $ref: "#/components/schemas/Pet"
+        "422": 
+          $ref: "#/components/responses/ValidationError"
+  /composition/nested: 
+    get: 
+      tags: 
+        - composition
+      summary: Deeply nested objects and arrays.
+      operationId: getNested
+      responses: 
+        "200": 
+          description: A nested tree.
+          content: 
+            application/json: 
+              schema: 
+                $ref: "#/components/schemas/Nested"
+  /composition/nullable: 
+    get: 
+      tags: 
+        - composition
+      summary: Nullable in every position.
+      operationId: getNullable
+      responses: 
+        "200": 
+          description: Nulls everywhere.
+          content: 
+            application/json: 
+              schema: 
+                $ref: "#/components/schemas/NullableBag"
+  /formats: 
+    get: 
+      tags: 
+        - composition
+      summary: "String formats, free-form maps and read/write-only properties."
+      operationId: getFormats
+      responses: 
+        "200": 
+          description: The kitchen sink of schema annotations.
+          content: 
+            application/json: 
+              schema: 
+                type: object
+                properties: 
+                  formats: 
+                    $ref: "#/components/schemas/StringFormats"
+                  map: 
+                    $ref: "#/components/schemas/MapObject"
+                  readWrite: 
+                    $ref: "#/components/schemas/ReadWriteOnly"
+                required: 
+                  - formats
+  /params/shared: 
+    get: 
+      tags: 
+        - params
+      summary: "Reuses the same page parameters, so they get promoted."
+      operationId: getSharedParams
+      parameters: 
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses: 
+        "200": 
+          description: A page.
+          content: 
+            application/json: 
+              schema: 
+                type: array
+                items: 
+                  $ref: "#/components/schemas/Widget"
+  "/params/{group}/items/{itemId}": 
+    get: 
+      tags: 
+        - params
+      summary: "Path, query, header and cookie parameters together."
+      operationId: getParamMatrix
+      parameters: 
+        - name: group
+          in: path
+          required: true
+          schema: 
+            type: string
+        - name: itemId
+          in: path
+          required: true
+          schema: 
+            type: integer
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: sort
+          in: query
+          description: "Sort key, defaulted."
+          schema: 
+            type: string
+            enum: 
+              - name
+              - size
+              - createdAt
+            default: name
+        - name: expand
+          in: query
+          description: Repeated query parameter.
+          schema: 
+            type: array
+            items: 
+              type: string
+        - name: filter
+          in: query
+          description: An object parameter serialized as deepObject.
+          style: deepObject
+          explode: true
+          schema: 
+            type: object
+            properties: 
+              lat: 
+                type: number
+              lon: 
+                type: number
+        - name: pipes
+          in: query
+          description: A pipe-delimited array parameter.
+          style: pipeDelimited
+          schema: 
+            type: array
+            items: 
+              type: string
+        - name: legacy
+          in: query
+          description: On the way out.
+          deprecated: true
+          schema: 
+            type: string
+        - name: contentParam
+          in: query
+          description: "A parameter typed through \`content\` rather than \`schema\`."
+          style: deepObject
+          explode: true
+          schema: 
+            type: object
+            properties: 
+              lat: 
+                type: number
+              lon: 
+                type: number
+        - name: X-Tenant
+          in: header
+          description: Tenant selector.
+          required: true
+          schema: 
+            type: string
+        - name: session
+          in: cookie
+          description: Session cookie.
+          schema: 
+            type: string
+      responses: 
+        "200": 
+          description: Matrix echoed back.
+          content: 
+            application/json: 
+              schema: 
+                $ref: "#/components/schemas/Widget"
   /primitives: 
     get: 
       tags: 
@@ -1854,242 +2057,121 @@ paths:
           description: Exists.
         "404": 
           $ref: "#/components/responses/NotFound"
-  /formats: 
-    get: 
+  /bodies/json: 
+    post: 
       tags: 
-        - composition
-      summary: "String formats, free-form maps and read/write-only properties."
-      operationId: getFormats
+        - bodies
+      summary: A plain JSON body.
+      operationId: postJsonBody
+      requestBody: 
+        description: The widget to create.
+        required: true
+        content: 
+          application/json: 
+            schema: 
+              $ref: "#/components/schemas/Widget"
       responses: 
-        "200": 
-          description: The kitchen sink of schema annotations.
+        "201": 
+          description: Created.
           content: 
             application/json: 
               schema: 
-                type: object
-                properties: 
-                  formats: 
-                    $ref: "#/components/schemas/StringFormats"
-                  map: 
-                    $ref: "#/components/schemas/MapObject"
-                  readWrite: 
-                    $ref: "#/components/schemas/ReadWriteOnly"
-                required: 
-                  - formats
-  /composition: 
+                $ref: "#/components/schemas/Widget"
+  /bodies/multi: 
     post: 
       tags: 
-        - composition
-      summary: Composed schemas in and out.
-      description: "Exercises allOf, oneOf, anyOf, discriminators and deep nesting."
-      operationId: composeShapes
+        - bodies
+      summary: "One operation, many request media types."
+      operationId: postMultiBody
       requestBody: 
         required: true
         content: 
           application/json: 
             schema: 
+              $ref: "#/components/schemas/Widget"
+          application/x-www-form-urlencoded: 
+            schema: 
               type: object
               properties: 
-                intersected: 
-                  allOf: 
-                    - $ref: "#/components/schemas/Identified"
-                    - $ref: "#/components/schemas/Timestamped"
-                union: 
-                  oneOf: 
-                    - $ref: "#/components/schemas/Cat"
-                    - $ref: "#/components/schemas/Dog"
-                loose: 
-                  anyOf: 
-                    - type: string
-                    - type: integer
-                singleAllOf: 
-                  $ref: "#/components/schemas/Identified"
-                singleOneOf: 
+                name: 
                   type: string
-                negated: 
-                  {}
+                count: 
+                  type: integer
               required: 
-                - intersected
-                - union
-                - loose
-      responses: 
-        "200": 
-          description: The discriminated result.
-          content: 
-            application/json: 
-              schema: 
-                $ref: "#/components/schemas/Pet"
-        "422": 
-          $ref: "#/components/responses/ValidationError"
-  /composition/nested: 
-    get: 
-      tags: 
-        - composition
-      summary: Deeply nested objects and arrays.
-      operationId: getNested
-      responses: 
-        "200": 
-          description: A nested tree.
-          content: 
-            application/json: 
-              schema: 
-                $ref: "#/components/schemas/Nested"
-  /composition/nullable: 
-    get: 
-      tags: 
-        - composition
-      summary: Nullable in every position.
-      operationId: getNullable
-      responses: 
-        "200": 
-          description: Nulls everywhere.
-          content: 
-            application/json: 
-              schema: 
-                $ref: "#/components/schemas/NullableBag"
-  /params/shared: 
-    get: 
-      tags: 
-        - params
-      summary: "Reuses the same page parameters, so they get promoted."
-      operationId: getSharedParams
-      parameters: 
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/PageSize"
-      responses: 
-        "200": 
-          description: A page.
-          content: 
-            application/json: 
-              schema: 
-                type: array
-                items: 
-                  $ref: "#/components/schemas/Widget"
-  "/params/{group}/items/{itemId}": 
-    get: 
-      tags: 
-        - params
-      summary: "Path, query, header and cookie parameters together."
-      operationId: getParamMatrix
-      parameters: 
-        - name: group
-          in: path
-          required: true
-          schema: 
-            type: string
-        - name: itemId
-          in: path
-          required: true
-          schema: 
-            type: integer
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/PageSize"
-        - name: sort
-          in: query
-          description: "Sort key, defaulted."
-          schema: 
-            type: string
-            enum: 
-              - name
-              - size
-              - createdAt
-            default: name
-        - name: expand
-          in: query
-          description: Repeated query parameter.
-          schema: 
-            type: array
-            items: 
+                - name
+          multipart/form-data: 
+            schema: 
+              type: object
+              properties: 
+                file: 
+                  type: string
+                  format: binary
+                caption: 
+                  type: string
+                tags: 
+                  type: array
+                  items: 
+                    type: string
+              required: 
+                - file
+            encoding: 
+              file: 
+                contentType: application/octet-stream
+              tags: 
+                style: form
+                explode: true
+          text/plain: 
+            schema: 
               type: string
-        - name: filter
-          in: query
-          description: An object parameter serialized as deepObject.
-          style: deepObject
-          explode: true
-          schema: 
-            type: object
-            properties: 
-              lat: 
-                type: number
-              lon: 
-                type: number
-        - name: pipes
-          in: query
-          description: A pipe-delimited array parameter.
-          style: pipeDelimited
-          schema: 
-            type: array
-            items: 
+          application/octet-stream: 
+            schema: 
               type: string
-        - name: legacy
-          in: query
-          description: On the way out.
-          deprecated: true
-          schema: 
-            type: string
-        - name: contentParam
-          in: query
-          description: "A parameter typed through \`content\` rather than \`schema\`."
-          style: deepObject
-          explode: true
-          schema: 
-            type: object
-            properties: 
-              lat: 
-                type: number
-              lon: 
-                type: number
-        - name: X-Tenant
-          in: header
-          description: Tenant selector.
-          required: true
-          schema: 
-            type: string
-        - name: session
-          in: cookie
-          description: Session cookie.
-          schema: 
-            type: string
+              format: binary
+      responses: 
+        "202": 
+          description: Accepted.
+  /bodies/optional: 
+    post: 
+      tags: 
+        - bodies
+      summary: An optional request body.
+      operationId: postOptionalBody
+      requestBody: 
+        required: false
+        content: 
+          application/json: 
+            schema: 
+              type: object
+              properties: 
+                note: 
+                  type: string
       responses: 
         "200": 
-          description: Matrix echoed back.
+          description: Fine either way.
+  /bodies/ref: 
+    put: 
+      tags: 
+        - bodies
+      summary: A body declared through components.requestBodies.
+      operationId: putRefBody
+      requestBody: 
+        $ref: "#/components/requestBodies/WidgetBody"
+      responses: 
+        "200": 
+          description: Stored.
           content: 
             application/json: 
               schema: 
                 $ref: "#/components/schemas/Widget"
-  "/v2/admin/users/{userId}/sessions/{sessionId}": 
+  /meta/bare: 
     get: 
       tags: 
-        - admin
-      summary: "Deeply nested path, two path parameters."
-      operationId: getAdminSession
-      responses: 
-        "200": 
-          description: The session.
-          content: 
-            application/json: 
-              schema: 
-                $ref: "#/components/schemas/Session"
-        "403": 
-          description: Forbidden.
-          content: 
-            application/json: 
-              schema: 
-                $ref: "#/components/schemas/Error"
-      security: 
-        - bearerAuth: 
-            - admin
-    delete: 
-      tags: 
-        - admin
-      summary: Revoke a session.
-      operationId: deleteAdminSession
+        - meta
+      summary: "No parameters, no body, a single bodiless response."
+      operationId: getBare
       responses: 
         "204": 
-          description: Revoked.
-      security: 
-        - bearerAuth: 
-            - admin
+          description: Nothing to say.
   /meta/deprecated: 
     get: 
       tags: 
@@ -2109,15 +2191,6 @@ paths:
               schema: 
                 $ref: "#/components/schemas/Widget"
       deprecated: true
-  /meta/bare: 
-    get: 
-      tags: 
-        - meta
-      summary: "No parameters, no body, a single bodiless response."
-      operationId: getBare
-      responses: 
-        "204": 
-          description: Nothing to say.
   /meta/description-only: 
     get: 
       tags: 
@@ -2132,90 +2205,19 @@ paths:
             application/json: 
               schema: 
                 type: string
-  /security/bearer: 
+  /responses/default: 
     get: 
       tags: 
-        - security
-      summary: Bearer auth with scopes.
-      operationId: getBearerSecured
+        - responses
+      summary: Only a default response.
+      operationId: getDefaultResponse
       responses: 
-        "200": 
-          description: OK.
+        default: 
+          description: Anything at all.
           content: 
             application/json: 
               schema: 
-                $ref: "#/components/schemas/Widget"
-        "401": 
-          $ref: "#/components/responses/Unauthorized"
-      security: 
-        - bearerAuth: 
-            - read:widgets
-  /security/alternatives: 
-    get: 
-      tags: 
-        - security
-      summary: Either bearer or API key.
-      operationId: getAlternativeSecured
-      responses: 
-        "200": 
-          description: OK.
-          content: 
-            application/json: 
-              schema: 
-                $ref: "#/components/schemas/Widget"
-      security: 
-        - bearerAuth: 
-            []
-        - apiKeyAuth: 
-            []
-  /security/oauth: 
-    get: 
-      tags: 
-        - security
-      summary: OAuth2 with two scopes.
-      operationId: getOauthSecured
-      responses: 
-        "200": 
-          description: OK.
-          content: 
-            application/json: 
-              schema: 
-                $ref: "#/components/schemas/Widget"
-      security: 
-        - oauth2Auth: 
-            - read:widgets
-            - write:widgets
-  /security/public: 
-    get: 
-      tags: 
-        - security
-      summary: "Explicitly public, overriding the global requirement."
-      operationId: getPublic
-      responses: 
-        "200": 
-          description: OK.
-          content: 
-            application/json: 
-              schema: 
-                $ref: "#/components/schemas/Widget"
-      security: 
-        []
-  /security/apikey: 
-    get: 
-      tags: 
-        - security
-      summary: API key auth.
-      operationId: getApiKeySecured
-      responses: 
-        "200": 
-          description: OK.
-          content: 
-            application/json: 
-              schema: 
-                $ref: "#/components/schemas/Widget"
-      security: 
-        - apiKeyAuth: 
-            []
+                $ref: "#/components/schemas/Error"
   /responses/examples: 
     get: 
       tags: 
@@ -2286,19 +2288,6 @@ paths:
               description: Remaining calls in the current window.
               schema: 
                 type: integer
-  /responses/default: 
-    get: 
-      tags: 
-        - responses
-      summary: Only a default response.
-      operationId: getDefaultResponse
-      responses: 
-        default: 
-          description: Anything at all.
-          content: 
-            application/json: 
-              schema: 
-                $ref: "#/components/schemas/Error"
   /responses/links: 
     post: 
       tags: 
@@ -2402,112 +2391,123 @@ paths:
             application/json: 
               schema: 
                 $ref: "#/components/schemas/Error"
-  /bodies/optional: 
-    post: 
+  /security/alternatives: 
+    get: 
       tags: 
-        - bodies
-      summary: An optional request body.
-      operationId: postOptionalBody
-      requestBody: 
-        required: false
-        content: 
-          application/json: 
-            schema: 
-              type: object
-              properties: 
-                note: 
-                  type: string
+        - security
+      summary: Either bearer or API key.
+      operationId: getAlternativeSecured
       responses: 
         "200": 
-          description: Fine either way.
-  /bodies/multi: 
-    post: 
-      tags: 
-        - bodies
-      summary: "One operation, many request media types."
-      operationId: postMultiBody
-      requestBody: 
-        required: true
-        content: 
-          application/json: 
-            schema: 
-              $ref: "#/components/schemas/Widget"
-          application/x-www-form-urlencoded: 
-            schema: 
-              type: object
-              properties: 
-                name: 
-                  type: string
-                count: 
-                  type: integer
-              required: 
-                - name
-          multipart/form-data: 
-            schema: 
-              type: object
-              properties: 
-                file: 
-                  type: string
-                  format: binary
-                caption: 
-                  type: string
-                tags: 
-                  type: array
-                  items: 
-                    type: string
-              required: 
-                - file
-            encoding: 
-              file: 
-                contentType: application/octet-stream
-              tags: 
-                style: form
-                explode: true
-          text/plain: 
-            schema: 
-              type: string
-          application/octet-stream: 
-            schema: 
-              type: string
-              format: binary
-      responses: 
-        "202": 
-          description: Accepted.
-  /bodies/ref: 
-    put: 
-      tags: 
-        - bodies
-      summary: A body declared through components.requestBodies.
-      operationId: putRefBody
-      requestBody: 
-        $ref: "#/components/requestBodies/WidgetBody"
-      responses: 
-        "200": 
-          description: Stored.
+          description: OK.
           content: 
             application/json: 
               schema: 
                 $ref: "#/components/schemas/Widget"
-  /bodies/json: 
-    post: 
+      security: 
+        - bearerAuth: 
+            []
+        - apiKeyAuth: 
+            []
+  /security/apikey: 
+    get: 
       tags: 
-        - bodies
-      summary: A plain JSON body.
-      operationId: postJsonBody
-      requestBody: 
-        description: The widget to create.
-        required: true
-        content: 
-          application/json: 
-            schema: 
-              $ref: "#/components/schemas/Widget"
+        - security
+      summary: API key auth.
+      operationId: getApiKeySecured
       responses: 
-        "201": 
-          description: Created.
+        "200": 
+          description: OK.
           content: 
             application/json: 
               schema: 
                 $ref: "#/components/schemas/Widget"
+      security: 
+        - apiKeyAuth: 
+            []
+  /security/bearer: 
+    get: 
+      tags: 
+        - security
+      summary: Bearer auth with scopes.
+      operationId: getBearerSecured
+      responses: 
+        "200": 
+          description: OK.
+          content: 
+            application/json: 
+              schema: 
+                $ref: "#/components/schemas/Widget"
+        "401": 
+          $ref: "#/components/responses/Unauthorized"
+      security: 
+        - bearerAuth: 
+            - read:widgets
+  /security/oauth: 
+    get: 
+      tags: 
+        - security
+      summary: OAuth2 with two scopes.
+      operationId: getOauthSecured
+      responses: 
+        "200": 
+          description: OK.
+          content: 
+            application/json: 
+              schema: 
+                $ref: "#/components/schemas/Widget"
+      security: 
+        - oauth2Auth: 
+            - read:widgets
+            - write:widgets
+  /security/public: 
+    get: 
+      tags: 
+        - security
+      summary: "Explicitly public, overriding the global requirement."
+      operationId: getPublic
+      responses: 
+        "200": 
+          description: OK.
+          content: 
+            application/json: 
+              schema: 
+                $ref: "#/components/schemas/Widget"
+      security: 
+        []
+  "/v2/admin/users/{userId}/sessions/{sessionId}": 
+    get: 
+      tags: 
+        - admin
+      summary: "Deeply nested path, two path parameters."
+      operationId: getAdminSession
+      responses: 
+        "200": 
+          description: The session.
+          content: 
+            application/json: 
+              schema: 
+                $ref: "#/components/schemas/Session"
+        "403": 
+          description: Forbidden.
+          content: 
+            application/json: 
+              schema: 
+                $ref: "#/components/schemas/Error"
+      security: 
+        - bearerAuth: 
+            - admin
+    delete: 
+      tags: 
+        - admin
+      summary: Revoke a session.
+      operationId: deleteAdminSession
+      responses: 
+        "204": 
+          description: Revoked.
+      security: 
+        - bearerAuth: 
+            - admin
   "/{slug}": 
     get: 
       tags: 
@@ -2547,125 +2547,6 @@ components:
             read:widgets: Read widgets
             write:widgets: Write widgets
   schemas: 
-    PrimitiveBag: 
-      title: Primitive bag
-      description: One property per scalar shape.
-      type: object
-      properties: 
-        str: 
-          description: "A bounded, patterned string."
-          type: string
-          pattern: "^[A-Za-z0-9 ]+$"
-          minLength: 1
-          maxLength: 64
-        int: 
-          type: integer
-          format: int32
-          minimum: 0
-          maximum: 2147483647
-        num: 
-          type: number
-          format: float
-          minimum: 0
-          exclusiveMinimum: true
-        bool: 
-          type: boolean
-        list: 
-          type: array
-          items: 
-            type: string
-          minItems: 0
-          maxItems: 100
-          uniqueItems: true
-        obj: 
-          type: object
-          properties: 
-            key: 
-              type: string
-            value: 
-              type: string
-          required: 
-            - key
-        optionalStr: 
-          type: string
-        anything: 
-          {}
-        defaulted: 
-          type: string
-          default: none
-        exampled: 
-          type: string
-          example: sample-value
-      required: 
-        - str
-        - int
-        - num
-        - bool
-        - list
-        - obj
-    Error: 
-      type: object
-      properties: 
-        code: 
-          type: string
-        message: 
-          type: string
-        details: 
-          description: "Free-form, no type on purpose."
-      required: 
-        - code
-        - message
-    StringFormats: 
-      description: One property per OpenAPI string format.
-      type: object
-      properties: 
-        date: 
-          type: string
-          format: date
-        dateTime: 
-          type: string
-          format: date-time
-        password: 
-          type: string
-          format: password
-        byte: 
-          type: string
-          format: byte
-        binary: 
-          type: string
-          format: binary
-        email: 
-          type: string
-          format: email
-        uuid: 
-          type: string
-          format: uuid
-        uri: 
-          type: string
-          format: uri
-        hostname: 
-          type: string
-          format: hostname
-        ipv4: 
-          type: string
-          format: ipv4
-        ipv6: 
-          type: string
-          format: ipv6
-    MapObject: 
-      description: A free-form map declared through additionalProperties.
-      type: object
-      additionalProperties: 
-        type: string
-    ReadWriteOnly: 
-      type: object
-      properties: 
-        id: 
-          type: string
-          readOnly: true
-        password: 
-          type: string
-          writeOnly: true
     Identified: 
       type: object
       properties: 
@@ -2776,6 +2657,57 @@ components:
             nullable: true
       required: 
         - requiredNullable
+    StringFormats: 
+      description: One property per OpenAPI string format.
+      type: object
+      properties: 
+        date: 
+          type: string
+          format: date
+        dateTime: 
+          type: string
+          format: date-time
+        password: 
+          type: string
+          format: password
+        byte: 
+          type: string
+          format: byte
+        binary: 
+          type: string
+          format: binary
+        email: 
+          type: string
+          format: email
+        uuid: 
+          type: string
+          format: uuid
+        uri: 
+          type: string
+          format: uri
+        hostname: 
+          type: string
+          format: hostname
+        ipv4: 
+          type: string
+          format: ipv4
+        ipv6: 
+          type: string
+          format: ipv6
+    MapObject: 
+      description: A free-form map declared through additionalProperties.
+      type: object
+      additionalProperties: 
+        type: string
+    ReadWriteOnly: 
+      type: object
+      properties: 
+        id: 
+          type: string
+          readOnly: true
+        password: 
+          type: string
+          writeOnly: true
     Widget: 
       allOf: 
         - $ref: "#/components/schemas/Identified"
@@ -2802,6 +2734,74 @@ components:
           required: 
             - name
             - size
+    PrimitiveBag: 
+      title: Primitive bag
+      description: One property per scalar shape.
+      type: object
+      properties: 
+        str: 
+          description: "A bounded, patterned string."
+          type: string
+          pattern: "^[A-Za-z0-9 ]+$"
+          minLength: 1
+          maxLength: 64
+        int: 
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 2147483647
+        num: 
+          type: number
+          format: float
+          minimum: 0
+          exclusiveMinimum: true
+        bool: 
+          type: boolean
+        list: 
+          type: array
+          items: 
+            type: string
+          minItems: 0
+          maxItems: 100
+          uniqueItems: true
+        obj: 
+          type: object
+          properties: 
+            key: 
+              type: string
+            value: 
+              type: string
+          required: 
+            - key
+        optionalStr: 
+          type: string
+        anything: 
+          {}
+        defaulted: 
+          type: string
+          default: none
+        exampled: 
+          type: string
+          example: sample-value
+      required: 
+        - str
+        - int
+        - num
+        - bool
+        - list
+        - obj
+    Error: 
+      type: object
+      properties: 
+        code: 
+          type: string
+        message: 
+          type: string
+        details: 
+          description: "Free-form, no type on purpose."
+      required: 
+        - code
+        - message
     Session: 
       type: object
       properties: 
@@ -2821,21 +2821,6 @@ components:
         - userId
         - startedAt
   parameters: 
-    Id: 
-      name: id
-      in: path
-      description: "Path-item level parameter, inherited by every operation."
-      required: true
-      schema: 
-        type: string
-        format: uuid
-    XTraceId: 
-      name: X-Trace-Id
-      in: header
-      description: Client-supplied trace id.
-      schema: 
-        type: string
-        format: uuid
     Page: 
       name: page
       in: query
@@ -2853,6 +2838,21 @@ components:
         minimum: 1
         maximum: 100
         default: 25
+    Id: 
+      name: id
+      in: path
+      description: "Path-item level parameter, inherited by every operation."
+      required: true
+      schema: 
+        type: string
+        format: uuid
+    XTraceId: 
+      name: X-Trace-Id
+      in: header
+      description: Client-supplied trace id.
+      schema: 
+        type: string
+        format: uuid
   requestBodies: 
     WidgetBody: 
       description: "A widget payload, reused across operations."
@@ -2862,15 +2862,6 @@ components:
           schema: 
             $ref: "#/components/schemas/Widget"
   responses: 
-    NotFound: 
-      description: The resource does not exist.
-      content: 
-        application/json: 
-          schema: 
-            $ref: "#/components/schemas/Error"
-          example: 
-            code: not_found
-            message: no such widget
     ValidationError: 
       description: The request body did not validate.
       content: 
@@ -2895,6 +2886,15 @@ components:
             required: 
               - code
               - errors
+    NotFound: 
+      description: The resource does not exist.
+      content: 
+        application/json: 
+          schema: 
+            $ref: "#/components/schemas/Error"
+          example: 
+            code: not_found
+            message: no such widget
     Unauthorized: 
       description: Missing or invalid credentials.
       content: 
@@ -2995,6 +2995,338 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
     "description": "Full handbook"
   },
   "paths": {
+    "/composition": {
+      "post": {
+        "tags": [
+          "composition"
+        ],
+        "summary": "Composed schemas in and out.",
+        "description": "Exercises allOf, oneOf, anyOf, discriminators and deep nesting.",
+        "operationId": "composeShapes",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "intersected": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/Identified"
+                      },
+                      {
+                        "$ref": "#/components/schemas/Timestamped"
+                      }
+                    ]
+                  },
+                  "union": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/Cat"
+                      },
+                      {
+                        "$ref": "#/components/schemas/Dog"
+                      }
+                    ]
+                  },
+                  "loose": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "singleAllOf": {
+                    "$ref": "#/components/schemas/Identified"
+                  },
+                  "singleOneOf": {
+                    "type": "string"
+                  },
+                  "negated": {}
+                },
+                "required": [
+                  "intersected",
+                  "union",
+                  "loose"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The discriminated result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pet"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/composition/nested": {
+      "get": {
+        "tags": [
+          "composition"
+        ],
+        "summary": "Deeply nested objects and arrays.",
+        "operationId": "getNested",
+        "responses": {
+          "200": {
+            "description": "A nested tree.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Nested"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/composition/nullable": {
+      "get": {
+        "tags": [
+          "composition"
+        ],
+        "summary": "Nullable in every position.",
+        "operationId": "getNullable",
+        "responses": {
+          "200": {
+            "description": "Nulls everywhere.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullableBag"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/formats": {
+      "get": {
+        "tags": [
+          "composition"
+        ],
+        "summary": "String formats, free-form maps and read/write-only properties.",
+        "operationId": "getFormats",
+        "responses": {
+          "200": {
+            "description": "The kitchen sink of schema annotations.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "formats": {
+                      "$ref": "#/components/schemas/StringFormats"
+                    },
+                    "map": {
+                      "$ref": "#/components/schemas/MapObject"
+                    },
+                    "readWrite": {
+                      "$ref": "#/components/schemas/ReadWriteOnly"
+                    }
+                  },
+                  "required": [
+                    "formats"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/params/shared": {
+      "get": {
+        "tags": [
+          "params"
+        ],
+        "summary": "Reuses the same page parameters, so they get promoted.",
+        "operationId": "getSharedParams",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Widget"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/params/{group}/items/{itemId}": {
+      "get": {
+        "tags": [
+          "params"
+        ],
+        "summary": "Path, query, header and cookie parameters together.",
+        "operationId": "getParamMatrix",
+        "parameters": [
+          {
+            "name": "group",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort key, defaulted.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "name",
+                "size",
+                "createdAt"
+              ],
+              "default": "name"
+            }
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "description": "Repeated query parameter.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "description": "An object parameter serialized as deepObject.",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "lat": {
+                  "type": "number"
+                },
+                "lon": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          {
+            "name": "pipes",
+            "in": "query",
+            "description": "A pipe-delimited array parameter.",
+            "style": "pipeDelimited",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "legacy",
+            "in": "query",
+            "description": "On the way out.",
+            "deprecated": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contentParam",
+            "in": "query",
+            "description": "A parameter typed through \`content\` rather than \`schema\`.",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "lat": {
+                  "type": "number"
+                },
+                "lon": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          {
+            "name": "X-Tenant",
+            "in": "header",
+            "description": "Tenant selector.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "description": "Session cookie.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matrix echoed back.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Widget"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/primitives": {
       "get": {
         "tags": [
@@ -3356,327 +3688,27 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
         }
       }
     },
-    "/formats": {
-      "get": {
-        "tags": [
-          "composition"
-        ],
-        "summary": "String formats, free-form maps and read/write-only properties.",
-        "operationId": "getFormats",
-        "responses": {
-          "200": {
-            "description": "The kitchen sink of schema annotations.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "formats": {
-                      "$ref": "#/components/schemas/StringFormats"
-                    },
-                    "map": {
-                      "$ref": "#/components/schemas/MapObject"
-                    },
-                    "readWrite": {
-                      "$ref": "#/components/schemas/ReadWriteOnly"
-                    }
-                  },
-                  "required": [
-                    "formats"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/composition": {
+    "/bodies/json": {
       "post": {
         "tags": [
-          "composition"
+          "bodies"
         ],
-        "summary": "Composed schemas in and out.",
-        "description": "Exercises allOf, oneOf, anyOf, discriminators and deep nesting.",
-        "operationId": "composeShapes",
+        "summary": "A plain JSON body.",
+        "operationId": "postJsonBody",
         "requestBody": {
+          "description": "The widget to create.",
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "intersected": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/Identified"
-                      },
-                      {
-                        "$ref": "#/components/schemas/Timestamped"
-                      }
-                    ]
-                  },
-                  "union": {
-                    "oneOf": [
-                      {
-                        "$ref": "#/components/schemas/Cat"
-                      },
-                      {
-                        "$ref": "#/components/schemas/Dog"
-                      }
-                    ]
-                  },
-                  "loose": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "integer"
-                      }
-                    ]
-                  },
-                  "singleAllOf": {
-                    "$ref": "#/components/schemas/Identified"
-                  },
-                  "singleOneOf": {
-                    "type": "string"
-                  },
-                  "negated": {}
-                },
-                "required": [
-                  "intersected",
-                  "union",
-                  "loose"
-                ]
+                "$ref": "#/components/schemas/Widget"
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "The discriminated result.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Pet"
-                }
-              }
-            }
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          }
-        }
-      }
-    },
-    "/composition/nested": {
-      "get": {
-        "tags": [
-          "composition"
-        ],
-        "summary": "Deeply nested objects and arrays.",
-        "operationId": "getNested",
-        "responses": {
-          "200": {
-            "description": "A nested tree.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Nested"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/composition/nullable": {
-      "get": {
-        "tags": [
-          "composition"
-        ],
-        "summary": "Nullable in every position.",
-        "operationId": "getNullable",
-        "responses": {
-          "200": {
-            "description": "Nulls everywhere.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NullableBag"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/params/shared": {
-      "get": {
-        "tags": [
-          "params"
-        ],
-        "summary": "Reuses the same page parameters, so they get promoted.",
-        "operationId": "getSharedParams",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Page"
-          },
-          {
-            "$ref": "#/components/parameters/PageSize"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "A page.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Widget"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/params/{group}/items/{itemId}": {
-      "get": {
-        "tags": [
-          "params"
-        ],
-        "summary": "Path, query, header and cookie parameters together.",
-        "operationId": "getParamMatrix",
-        "parameters": [
-          {
-            "name": "group",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "itemId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/Page"
-          },
-          {
-            "$ref": "#/components/parameters/PageSize"
-          },
-          {
-            "name": "sort",
-            "in": "query",
-            "description": "Sort key, defaulted.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "name",
-                "size",
-                "createdAt"
-              ],
-              "default": "name"
-            }
-          },
-          {
-            "name": "expand",
-            "in": "query",
-            "description": "Repeated query parameter.",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
-            "name": "filter",
-            "in": "query",
-            "description": "An object parameter serialized as deepObject.",
-            "style": "deepObject",
-            "explode": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "lat": {
-                  "type": "number"
-                },
-                "lon": {
-                  "type": "number"
-                }
-              }
-            }
-          },
-          {
-            "name": "pipes",
-            "in": "query",
-            "description": "A pipe-delimited array parameter.",
-            "style": "pipeDelimited",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
-            "name": "legacy",
-            "in": "query",
-            "description": "On the way out.",
-            "deprecated": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "contentParam",
-            "in": "query",
-            "description": "A parameter typed through \`content\` rather than \`schema\`.",
-            "style": "deepObject",
-            "explode": true,
-            "schema": {
-              "type": "object",
-              "properties": {
-                "lat": {
-                  "type": "number"
-                },
-                "lon": {
-                  "type": "number"
-                }
-              }
-            }
-          },
-          {
-            "name": "X-Tenant",
-            "in": "header",
-            "description": "Tenant selector.",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "session",
-            "in": "cookie",
-            "description": "Session cookie.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Matrix echoed back.",
+          "201": {
+            "description": "Created.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3688,61 +3720,154 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
         }
       }
     },
-    "/v2/admin/users/{userId}/sessions/{sessionId}": {
-      "get": {
+    "/bodies/multi": {
+      "post": {
         "tags": [
-          "admin"
+          "bodies"
         ],
-        "summary": "Deeply nested path, two path parameters.",
-        "operationId": "getAdminSession",
+        "summary": "One operation, many request media types.",
+        "operationId": "postMultiBody",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Widget"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "count": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "caption": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              },
+              "encoding": {
+                "file": {
+                  "contentType": "application/octet-stream"
+                },
+                "tags": {
+                  "style": "form",
+                  "explode": true
+                }
+              }
+            },
+            "text/plain": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted."
+          }
+        }
+      }
+    },
+    "/bodies/optional": {
+      "post": {
+        "tags": [
+          "bodies"
+        ],
+        "summary": "An optional request body.",
+        "operationId": "postOptionalBody",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "The session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Session"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
+            "description": "Fine either way."
           }
-        },
-        "security": [
-          {
-            "bearerAuth": [
-              "admin"
-            ]
-          }
-        ]
-      },
-      "delete": {
+        }
+      }
+    },
+    "/bodies/ref": {
+      "put": {
         "tags": [
-          "admin"
+          "bodies"
         ],
-        "summary": "Revoke a session.",
-        "operationId": "deleteAdminSession",
+        "summary": "A body declared through components.requestBodies.",
+        "operationId": "putRefBody",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/WidgetBody"
+        },
+        "responses": {
+          "200": {
+            "description": "Stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Widget"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/meta/bare": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "No parameters, no body, a single bodiless response.",
+        "operationId": "getBare",
         "responses": {
           "204": {
-            "description": "Revoked."
+            "description": "Nothing to say."
           }
-        },
-        "security": [
-          {
-            "bearerAuth": [
-              "admin"
-            ]
-          }
-        ]
+        }
       }
     },
     "/meta/deprecated": {
@@ -3773,20 +3898,6 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
         "deprecated": true
       }
     },
-    "/meta/bare": {
-      "get": {
-        "tags": [
-          "meta"
-        ],
-        "summary": "No parameters, no body, a single bodiless response.",
-        "operationId": "getBare",
-        "responses": {
-          "204": {
-            "description": "Nothing to say."
-          }
-        }
-      }
-    },
     "/meta/description-only": {
       "get": {
         "tags": [
@@ -3809,141 +3920,25 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
         }
       }
     },
-    "/security/bearer": {
+    "/responses/default": {
       "get": {
         "tags": [
-          "security"
+          "responses"
         ],
-        "summary": "Bearer auth with scopes.",
-        "operationId": "getBearerSecured",
+        "summary": "Only a default response.",
+        "operationId": "getDefaultResponse",
         "responses": {
-          "200": {
-            "description": "OK.",
+          "default": {
+            "description": "Anything at all.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Widget"
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": [
-              "read:widgets"
-            ]
-          }
-        ]
-      }
-    },
-    "/security/alternatives": {
-      "get": {
-        "tags": [
-          "security"
-        ],
-        "summary": "Either bearer or API key.",
-        "operationId": "getAlternativeSecured",
-        "responses": {
-          "200": {
-            "description": "OK.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Widget"
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ]
-      }
-    },
-    "/security/oauth": {
-      "get": {
-        "tags": [
-          "security"
-        ],
-        "summary": "OAuth2 with two scopes.",
-        "operationId": "getOauthSecured",
-        "responses": {
-          "200": {
-            "description": "OK.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Widget"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "oauth2Auth": [
-              "read:widgets",
-              "write:widgets"
-            ]
-          }
-        ]
-      }
-    },
-    "/security/public": {
-      "get": {
-        "tags": [
-          "security"
-        ],
-        "summary": "Explicitly public, overriding the global requirement.",
-        "operationId": "getPublic",
-        "responses": {
-          "200": {
-            "description": "OK.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Widget"
-                }
-              }
-            }
-          }
-        },
-        "security": []
-      }
-    },
-    "/security/apikey": {
-      "get": {
-        "tags": [
-          "security"
-        ],
-        "summary": "API key auth.",
-        "operationId": "getApiKeySecured",
-        "responses": {
-          "200": {
-            "description": "OK.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Widget"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "apiKeyAuth": []
-          }
-        ]
+        }
       }
     },
     "/responses/examples": {
@@ -4046,27 +4041,6 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
                 "description": "Remaining calls in the current window.",
                 "schema": {
                   "type": "integer"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/responses/default": {
-      "get": {
-        "tags": [
-          "responses"
-        ],
-        "summary": "Only a default response.",
-        "operationId": "getDefaultResponse",
-        "responses": {
-          "default": {
-            "description": "Anything at all.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -4239,131 +4213,16 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
         }
       }
     },
-    "/bodies/optional": {
-      "post": {
+    "/security/alternatives": {
+      "get": {
         "tags": [
-          "bodies"
+          "security"
         ],
-        "summary": "An optional request body.",
-        "operationId": "postOptionalBody",
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "note": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
+        "summary": "Either bearer or API key.",
+        "operationId": "getAlternativeSecured",
         "responses": {
           "200": {
-            "description": "Fine either way."
-          }
-        }
-      }
-    },
-    "/bodies/multi": {
-      "post": {
-        "tags": [
-          "bodies"
-        ],
-        "summary": "One operation, many request media types.",
-        "operationId": "postMultiBody",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Widget"
-              }
-            },
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "count": {
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "name"
-                ]
-              }
-            },
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary"
-                  },
-                  "caption": {
-                    "type": "string"
-                  },
-                  "tags": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "required": [
-                  "file"
-                ]
-              },
-              "encoding": {
-                "file": {
-                  "contentType": "application/octet-stream"
-                },
-                "tags": {
-                  "style": "form",
-                  "explode": true
-                }
-              }
-            },
-            "text/plain": {
-              "schema": {
-                "type": "string"
-              }
-            },
-            "application/octet-stream": {
-              "schema": {
-                "type": "string",
-                "format": "binary"
-              }
-            }
-          }
-        },
-        "responses": {
-          "202": {
-            "description": "Accepted."
-          }
-        }
-      }
-    },
-    "/bodies/ref": {
-      "put": {
-        "tags": [
-          "bodies"
-        ],
-        "summary": "A body declared through components.requestBodies.",
-        "operationId": "putRefBody",
-        "requestBody": {
-          "$ref": "#/components/requestBodies/WidgetBody"
-        },
-        "responses": {
-          "200": {
-            "description": "Stored.",
+            "description": "OK.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4372,30 +4231,27 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
       }
     },
-    "/bodies/json": {
-      "post": {
+    "/security/apikey": {
+      "get": {
         "tags": [
-          "bodies"
+          "security"
         ],
-        "summary": "A plain JSON body.",
-        "operationId": "postJsonBody",
-        "requestBody": {
-          "description": "The widget to create.",
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Widget"
-              }
-            }
-          }
-        },
+        "summary": "API key auth.",
+        "operationId": "getApiKeySecured",
         "responses": {
-          "201": {
-            "description": "Created.",
+          "200": {
+            "description": "OK.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4404,7 +4260,151 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/security/bearer": {
+      "get": {
+        "tags": [
+          "security"
+        ],
+        "summary": "Bearer auth with scopes.",
+        "operationId": "getBearerSecured",
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Widget"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [
+              "read:widgets"
+            ]
+          }
+        ]
+      }
+    },
+    "/security/oauth": {
+      "get": {
+        "tags": [
+          "security"
+        ],
+        "summary": "OAuth2 with two scopes.",
+        "operationId": "getOauthSecured",
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Widget"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2Auth": [
+              "read:widgets",
+              "write:widgets"
+            ]
+          }
+        ]
+      }
+    },
+    "/security/public": {
+      "get": {
+        "tags": [
+          "security"
+        ],
+        "summary": "Explicitly public, overriding the global requirement.",
+        "operationId": "getPublic",
+        "responses": {
+          "200": {
+            "description": "OK.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Widget"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/v2/admin/users/{userId}/sessions/{sessionId}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Deeply nested path, two path parameters.",
+        "operationId": "getAdminSession",
+        "responses": {
+          "200": {
+            "description": "The session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [
+              "admin"
+            ]
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Revoke a session.",
+        "operationId": "deleteAdminSession",
+        "responses": {
+          "204": {
+            "description": "Revoked."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [
+              "admin"
+            ]
+          }
+        ]
       }
     },
     "/{slug}": {
@@ -4462,166 +4462,6 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
       }
     },
     "schemas": {
-      "PrimitiveBag": {
-        "title": "Primitive bag",
-        "description": "One property per scalar shape.",
-        "type": "object",
-        "properties": {
-          "str": {
-            "description": "A bounded, patterned string.",
-            "type": "string",
-            "pattern": "^[A-Za-z0-9 ]+$",
-            "minLength": 1,
-            "maxLength": 64
-          },
-          "int": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0,
-            "maximum": 2147483647
-          },
-          "num": {
-            "type": "number",
-            "format": "float",
-            "minimum": 0,
-            "exclusiveMinimum": true
-          },
-          "bool": {
-            "type": "boolean"
-          },
-          "list": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "minItems": 0,
-            "maxItems": 100,
-            "uniqueItems": true
-          },
-          "obj": {
-            "type": "object",
-            "properties": {
-              "key": {
-                "type": "string"
-              },
-              "value": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "key"
-            ]
-          },
-          "optionalStr": {
-            "type": "string"
-          },
-          "anything": {},
-          "defaulted": {
-            "type": "string",
-            "default": "none"
-          },
-          "exampled": {
-            "type": "string",
-            "example": "sample-value"
-          }
-        },
-        "required": [
-          "str",
-          "int",
-          "num",
-          "bool",
-          "list",
-          "obj"
-        ]
-      },
-      "Error": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "details": {
-            "description": "Free-form, no type on purpose."
-          }
-        },
-        "required": [
-          "code",
-          "message"
-        ]
-      },
-      "StringFormats": {
-        "description": "One property per OpenAPI string format.",
-        "type": "object",
-        "properties": {
-          "date": {
-            "type": "string",
-            "format": "date"
-          },
-          "dateTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "password": {
-            "type": "string",
-            "format": "password"
-          },
-          "byte": {
-            "type": "string",
-            "format": "byte"
-          },
-          "binary": {
-            "type": "string",
-            "format": "binary"
-          },
-          "email": {
-            "type": "string",
-            "format": "email"
-          },
-          "uuid": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "uri": {
-            "type": "string",
-            "format": "uri"
-          },
-          "hostname": {
-            "type": "string",
-            "format": "hostname"
-          },
-          "ipv4": {
-            "type": "string",
-            "format": "ipv4"
-          },
-          "ipv6": {
-            "type": "string",
-            "format": "ipv6"
-          }
-        }
-      },
-      "MapObject": {
-        "description": "A free-form map declared through additionalProperties.",
-        "type": "object",
-        "additionalProperties": {
-          "type": "string"
-        }
-      },
-      "ReadWriteOnly": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "readOnly": true
-          },
-          "password": {
-            "type": "string",
-            "writeOnly": true
-          }
-        }
-      },
       "Identified": {
         "type": "object",
         "properties": {
@@ -4800,6 +4640,76 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
           "requiredNullable"
         ]
       },
+      "StringFormats": {
+        "description": "One property per OpenAPI string format.",
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "dateTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          },
+          "byte": {
+            "type": "string",
+            "format": "byte"
+          },
+          "binary": {
+            "type": "string",
+            "format": "binary"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uri": {
+            "type": "string",
+            "format": "uri"
+          },
+          "hostname": {
+            "type": "string",
+            "format": "hostname"
+          },
+          "ipv4": {
+            "type": "string",
+            "format": "ipv4"
+          },
+          "ipv6": {
+            "type": "string",
+            "format": "ipv6"
+          }
+        }
+      },
+      "MapObject": {
+        "description": "A free-form map declared through additionalProperties.",
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "ReadWriteOnly": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "readOnly": true
+          },
+          "password": {
+            "type": "string",
+            "writeOnly": true
+          }
+        }
+      },
       "Widget": {
         "allOf": [
           {
@@ -4840,6 +4750,96 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
           }
         ]
       },
+      "PrimitiveBag": {
+        "title": "Primitive bag",
+        "description": "One property per scalar shape.",
+        "type": "object",
+        "properties": {
+          "str": {
+            "description": "A bounded, patterned string.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9 ]+$",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "int": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "num": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "exclusiveMinimum": true
+          },
+          "bool": {
+            "type": "boolean"
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 0,
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "obj": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "key"
+            ]
+          },
+          "optionalStr": {
+            "type": "string"
+          },
+          "anything": {},
+          "defaulted": {
+            "type": "string",
+            "default": "none"
+          },
+          "exampled": {
+            "type": "string",
+            "example": "sample-value"
+          }
+        },
+        "required": [
+          "str",
+          "int",
+          "num",
+          "bool",
+          "list",
+          "obj"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "description": "Free-form, no type on purpose."
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ]
+      },
       "Session": {
         "type": "object",
         "properties": {
@@ -4867,25 +4867,6 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
       }
     },
     "parameters": {
-      "Id": {
-        "name": "id",
-        "in": "path",
-        "description": "Path-item level parameter, inherited by every operation.",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "format": "uuid"
-        }
-      },
-      "XTraceId": {
-        "name": "X-Trace-Id",
-        "in": "header",
-        "description": "Client-supplied trace id.",
-        "schema": {
-          "type": "string",
-          "format": "uuid"
-        }
-      },
       "Page": {
         "name": "page",
         "in": "query",
@@ -4906,6 +4887,25 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
           "maximum": 100,
           "default": 25
         }
+      },
+      "Id": {
+        "name": "id",
+        "in": "path",
+        "description": "Path-item level parameter, inherited by every operation.",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "XTraceId": {
+        "name": "X-Trace-Id",
+        "in": "header",
+        "description": "Client-supplied trace id.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
       }
     },
     "requestBodies": {
@@ -4922,20 +4922,6 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
       }
     },
     "responses": {
-      "NotFound": {
-        "description": "The resource does not exist.",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/Error"
-            },
-            "example": {
-              "code": "not_found",
-              "message": "no such widget"
-            }
-          }
-        }
-      },
       "ValidationError": {
         "description": "The request body did not validate.",
         "content": {
@@ -4969,6 +4955,20 @@ exports[`openapi exhaustive: generate spec regenerated json spec matches the sna
                 "code",
                 "errors"
               ]
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "The resource does not exist.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "code": "not_found",
+              "message": "no such widget"
             }
           }
         }
