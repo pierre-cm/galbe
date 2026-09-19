@@ -42,3 +42,12 @@ export type { BasicAuthConfig, BasicAuthFragment } from './middlewares/basicAuth
 
 export { rateLimit } from './middlewares/rateLimit'
 export type { RateLimitConfig, RateLimitInfo } from './middlewares/rateLimit'
+
+export { requestId } from './middlewares/requestId'
+export type { RequestIdConfig, RequestIdFragment } from './middlewares/requestId'
+
+export { logger } from './middlewares/logger'
+export type { LogEntry, LoggerConfig } from './middlewares/logger'
+
+export { timing } from './middlewares/timing'
+export type { TimingConfig } from './middlewares/timing'

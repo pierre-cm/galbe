@@ -358,6 +358,104 @@ rateLimit({
 
 None of these is a reason to skip it — a limiter in the app is the one that knows about accounts and routes — but a public-facing service wants one at the edge as well.
 
+## Observability
+
+Three middlewares carry no policy of their own: [`requestId`](#requestid) names a request, [`logger`](#logger) reports it, [`timing`](#timing) says how long it took.
+
+Two of them wrap the hook chain, which is what lets them report the status a request ended on — and also bounds what they see. A request rejected **before** the chain — a `400` from [validation](../concepts/schemas.md), or a rejection from a [`beforeParse`](../concepts/middleware.md#before-parsing) middleware like [`jwt`](#jwt) or [`rateLimit`](#ratelimit) — is answered earlier, and a request matching no route never reaches a middleware at all. An access log covering _every_ request belongs in a [Plugin](../concepts/plugins.md)'s `onFetch`. `requestId` is the exception: it runs in the `beforeParse` slot precisely so that rejected requests are named too.
+
+## requestId
+
+Gives every request an id — the caller's when it sent a usable one, a fresh UUID otherwise — puts it on `ctx.state.requestId` and echoes it in the response header.
+
+```ts
+import { requestId } from 'galbe/middlewares'
+
+galbe.middleware(requestId())
+
+galbe.get('/orders', ctx => {
+  log.info({ id: ctx.state.requestId }, 'listing orders')
+  return orders()
+})
+```
+
+| Name          | Type           | Default             | Description                                     |
+| ------------- | -------------- | ------------------- | ----------------------------------------------- |
+| `header`      | `string`       | `'x-request-id'`    | Header the id travels in, inbound and outbound. |
+| `trustHeader` | `boolean`      | `true`              | Reuse a well-formed id sent by the caller.      |
+| `generate`    | `() => string` | `crypto.randomUUID` | Makes an id when there is none to reuse.        |
+| `stateHolder` | `string`       | `'requestId'`       | `ctx.state` key the id is stored under.         |
+
+- **Register it first.** It runs in the [`beforeParse`](../concepts/middleware.md#before-parsing) slot so the id exists before anything can reject the request: a `400` from validation, or a `401` from an auth middleware registered after it, carries the header too.
+- An **inbound id is reused only if it is one**: at most 128 characters of `[A-Za-z0-9_.:-]`, which covers UUIDs, ULIDs, nanoids and W3C trace ids. Anything else is replaced rather than rejected — a malformed trace header is not the caller's request failing, and nothing that could break a header or a log line is ever echoed back.
+- On a public API the id is the caller's to choose and yours to distrust: `trustHeader: false` ignores it and always generates.
+
+## logger
+
+Logs one line per request — method, path, status and duration — or hands the same fields to your own logger.
+
+```ts
+import { logger } from 'galbe/middlewares'
+
+// a line per request, on the console
+galbe.middleware(logger())
+
+// structured, and quiet about the health check
+galbe.middleware(logger({ log: entry => log.info(entry), skip: ctx => ctx.route?.path === '/health' }))
+```
+
+```
+GET /orders/42 200 1.4ms 8f14e45f-ceea-467a-9f1e-2b0a9c1d3e77
+```
+
+| Name   | Type                   | Default      | Description                                                  |
+| ------ | ---------------------- | ------------ | ------------------------------------------------------------ |
+| `log`  | `(entry, ctx) => void` | console line | Receives every finished request instead of the default line. |
+| `skip` | `ctx => boolean`       |              | Leaves a request unlogged. Runs once the request is done.    |
+
+The entry holds `method`, `path`, `status`, `duration` in milliseconds, the `requestId` when [`requestId`](#requestid) runs ahead of it, and `error` when the request ended on one.
+
+- **The status is the one the request ended on**, whether it came from the handler, from a hook returning a `Response`, or from a thrown error — a `RequestError` logs its own status, anything else logs `500`. The error still propagates to the [Error Handler](../concepts/error-handler.md); logging it changes nothing.
+- **`path` carries no query string**, since a query can hold an API key or a token. `ctx.request.url` has the whole thing when you want it.
+- `skip` runs after the request, so it can filter on `ctx.set.status` and keep only the failures.
+- The default line is colored only when the output is a terminal, so piped logs stay clean.
+
+## timing
+
+Reports how long the server spent on a request, in the [`Server-Timing`](https://developer.mozilla.org/docs/Web/HTTP/Headers/Server-Timing) header — the number a browser shows in its network panel, and the one a caller cannot measure itself, since its own clock also counts the network.
+
+```ts
+import { timing } from 'galbe/middlewares'
+
+galbe.middleware(timing())
+// → Server-Timing: total;dur=12.4
+
+galbe.middleware('/api/*', timing({ name: 'api', description: 'handler', precision: 2 }))
+// → Server-Timing: api;dur=12.41;desc="handler"
+```
+
+| Name          | Type             | Default           | Description                                                 |
+| ------------- | ---------------- | ----------------- | ----------------------------------------------------------- |
+| `name`        | `string`         | `'total'`         | Name of the measurement. Non-token characters become `-`.   |
+| `description` | `string`         |                   | Label shown next to it in a browser's network panel.        |
+| `precision`   | `number`         | `1`               | Decimal places kept in the duration. `0` to `6`.            |
+| `header`      | `string`         | `'server-timing'` | Response header the measurement is appended to.             |
+| `skip`        | `ctx => boolean` |                   | Leaves a request unmeasured. Runs once the request is done. |
+
+- The entry is **appended**, so measurements a route added to the same header survive alongside it:
+
+  ```ts
+  galbe.get('/orders', async ctx => {
+    const started = performance.now()
+    const orders = await db.orders()
+    ctx.set.headers['server-timing'] = `db;dur=${(performance.now() - started).toFixed(1)}`
+    return orders
+  })
+  // → Server-Timing: db;dur=8.2, total;dur=9.1
+  ```
+
+- The header is public, and so is what it says about your internals. Keep the names generic on a public API, or restrict it to development with `skip`.
+
 ## Not included
 
 Session management, CSRF and anything needing persistent storage are out of scope, as is [CORS](../concepts/plugins.md) — preflight requests never reach a middleware, since they match no route. Those belong in a plugin.

@@ -1,7 +1,7 @@
 import type { GalbeMiddleware, Method, Route, RouteNode } from '.'
 import type { RouteFileMeta, RouteMeta } from './routes'
 
-const METHOD_COLOR: Record<string, string> = {
+export const METHOD_COLOR: Record<string, string> = {
   get: '\x1b[32m',
   post: '\x1b[34m',
   put: '\x1b[36m',
